@@ -2,52 +2,50 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import { SHARED_VERSION } from '@aranya/shared';
-
+import cookieParser from 'cookie-parser';
 import { PrismaClient } from '@prisma/client';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { SHARED_VERSION } from '@aranya/shared';
+import authRoutes from './routes/auth.routes.js';
+import productRoutes from './routes/product.routes.js';
+import blogRoutes from './routes/blog.routes.js';
+import categoryRoutes from './routes/category.routes.js';
+
+const app = express();
+const PORT = process.env.PORT ?? 4000;
 
 // 1. Set up the connection pool for Neon
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
-        rejectUnauthorized: false // Bypasses local strict SSL connection drops
+        rejectUnauthorized: false
     }
 });
 
-// 2. Create the Prisma 7 Adapter
-const adapter = new PrismaPg(pool);
+// 2. Create the Prisma 7 Adapter for pg
+const adapter = new PrismaPg(pool as any);
 
-// 3. Initialize Prisma with BOTH the adapter and your logging preferences
 export const prisma = new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
 });
 
-// Verify DB connection on startup
-async function connectDB() {
-    try {
-        await prisma.$connect();
-        console.log('🗄️  Database connected');
-    } catch (error) {
-        console.error('❌ Database connection failed:', error);
-        process.exit(1); // Don't start the server with a broken DB connection
-    }
-}
-
-const app = express();
-const PORT = process.env.PORT ?? 4000;
-
-// --- Security middleware (applied before all routes) ---
-app.use(helmet());           // Sets 11 security headers automatically
+app.use(helmet());
 app.use(cors({
     origin: process.env.FRONTEND_URL ?? 'http://localhost:3000',
-    credentials: true,       // Required for HttpOnly cookie auth later
+    credentials: true,
 }));
-app.use(express.json({ limit: '10kb' })); // Body size limit — prevents large payload attacks
+app.use(express.json({ limit: '10kb' }));
+app.use(cookieParser());
 
-// --- Health check (used by Railway, CI, and uptime monitors) ---
+// --- Routes ---
+app.use('/auth', authRoutes);
+app.use('/products', productRoutes);
+app.use('/blog', blogRoutes);
+app.use('/categories', categoryRoutes);
+
+// --- Health check ---
 app.get('/health', async (_req, res) => {
     try {
         await prisma.$queryRaw`SELECT 1`;
@@ -63,11 +61,24 @@ app.get('/health', async (_req, res) => {
     }
 });
 
-// --- Global error handler (must be last, 4 params signature required by Express) ---
+app.use((_req, res) => {
+    res.status(404).json({ error: 'Route not found' });
+});
+
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error('[ERROR]', err.message);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Internal server error', details: err.message, stack: err.stack });
 });
+
+async function connectDB() {
+    try {
+        await prisma.$connect();
+        console.log('🗄️  Database connected');
+    } catch (error) {
+        console.error('❌ Database connection failed:', error);
+        process.exit(1);
+    }
+}
 
 connectDB().then(() => {
     app.listen(PORT, () => {
