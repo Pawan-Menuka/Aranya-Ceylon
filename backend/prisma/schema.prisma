@@ -1,0 +1,414 @@
+generator client {
+  provider        = "prisma-client-js"
+  engineType      = "library"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// ENUMS
+// Enums are enforced at the DB level — invalid values are
+// rejected before they reach your application code.
+// ============================================================
+
+enum Role {
+  CUSTOMER
+  ADMIN
+  SUPERADMIN
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum TokenType {
+  REFRESH
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum SubscriptionPlan {
+  MONTHLY
+  QUARTERLY
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+  PAST_DUE
+}
+
+enum WholesaleTier {
+  STANDARD
+  PREMIUM
+  ENTERPRISE
+}
+
+enum WholesaleStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum BlogStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+}
+
+// ============================================================
+// CORE MODELS
+// ============================================================
+
+model User {
+  id                 String    @id @default(cuid())
+  name               String
+  email              String    @unique
+  passwordHash       String
+  role               Role      @default(CUSTOMER)
+  verified           Boolean   @default(false)
+  twoFactorEnabled   Boolean   @default(false)
+  twoFactorSecret    String?   // Encrypted TOTP secret
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  // Relations
+  orders             Order[]
+  reviews            Review[]
+  wishlist           WishlistItem[]
+  addresses          Address[]
+  cart               Cart?
+  subscription       Subscription?
+  tokens             Token[]
+  auditLogs          AuditLog[]
+  wholesale          WholesaleAccount?
+
+  @@index([email])   // Fast lookup at login
+}
+
+model Category {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  slug     String    @unique
+  products Product[]
+}
+
+model Product {
+  id             String         @id @default(cuid())
+  name           String
+  slug           String         @unique
+  description    String         // MDX string — rendered on frontend
+  categoryId     String
+  category       Category       @relation(fields: [categoryId], references: [id])
+  certifications String[]       // e.g. ['ORGANIC', 'FAIR_TRADE', 'CEYLON_GI']
+  status         ProductStatus  @default(DRAFT)
+  featured       Boolean        @default(false)
+  // searchVector is a PostgreSQL tsvector column for full-text search.
+  // Prisma doesn't natively manage tsvector — we add it via a raw
+  // migration after the initial migrate (Step 2.6).
+  searchVector   Unsupported("tsvector")?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  // Relations
+  variants       Variant[]
+  images         ProductImage[]
+  reviews        Review[]
+  orderItems     OrderItem[]
+  wishlistItems  WishlistItem[]
+  cartItems      CartItem[]
+
+  @@index([slug])
+  @@index([featured])
+  // GIN index for FTS — added in raw migration (Step 2.6)
+}
+
+model ProductImage {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url        String   // Cloudinary CDN URL
+  altText    String?
+  position   Int      @default(0) // Display order
+  createdAt  DateTime @default(now())
+}
+
+model Variant {
+  id         String      @id @default(cuid())
+  productId  String
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  weight     Int         // grams — e.g. 50, 100, 250
+  price      Decimal     @db.Decimal(10, 2)
+  sku        String      @unique
+  stock      Int         @default(0)
+
+  orderItems OrderItem[]
+  cartItems  CartItem[]
+
+  @@index([productId])
+}
+
+// ============================================================
+// ORDER MODELS
+// Order + OrderItem use price snapshots (unitPrice) so that
+// changing a product's price never alters historical order data.
+// ============================================================
+
+model Order {
+  id               String       @id @default(cuid())
+  userId           String?      // null = guest order
+  user             User?        @relation(fields: [userId], references: [id])
+  guestEmail       String?
+  status           OrderStatus  @default(PENDING)
+  paymentIntentId  String?      @unique // Stripe PaymentIntent ID — unique prevents duplicates
+  total            Decimal      @db.Decimal(10, 2)
+  shippingCost     Decimal      @db.Decimal(10, 2)
+  discount         Decimal      @db.Decimal(10, 2) @default(0)
+  couponId         String?
+  coupon           Coupon?      @relation(fields: [couponId], references: [id])
+  shippingAddress  Json         // Address snapshot at order time
+  trackingNumber   String?
+  createdAt        DateTime     @default(now())
+
+  items            OrderItem[]
+  timeline         OrderEvent[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id         String   @id @default(cuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id])
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  variantId  String
+  variant    Variant  @relation(fields: [variantId], references: [id])
+  quantity   Int
+  unitPrice  Decimal  @db.Decimal(10, 2) // Price snapshot — never changes after order
+}
+
+model OrderEvent {
+  id        String      @id @default(cuid())
+  orderId   String
+  order     Order       @relation(fields: [orderId], references: [id])
+  status    OrderStatus
+  note      String?
+  createdAt DateTime    @default(now())
+}
+
+model Review {
+  id                String           @id @default(cuid())
+  productId         String
+  product           Product          @relation(fields: [productId], references: [id])
+  userId            String
+  user              User             @relation(fields: [userId], references: [id])
+  orderId           String           // Proof of purchase — must have bought it to review
+  rating            Int              // 1–5, enforced by CHECK constraint in raw migration
+  title             String
+  body              String
+  moderationStatus  ModerationStatus @default(PENDING)
+  helpfulCount      Int              @default(0)
+  createdAt         DateTime         @default(now())
+
+  // DB-level uniqueness: one review per user per product per order
+  @@unique([userId, productId, orderId])
+  @@index([productId, moderationStatus])
+}
+
+// ============================================================
+// COMMERCE MODELS
+// ============================================================
+
+model Cart {
+  id          String     @id @default(cuid())
+  userId      String?    @unique  // One cart per user
+  user        User?      @relation(fields: [userId], references: [id])
+  guestToken  String?    @unique  // Server-issued cuid, stored in HttpOnly cookie
+  couponId    String?
+  expiresAt   DateTime?  // Guest carts expire after 30 days
+  updatedAt   DateTime   @updatedAt
+
+  items       CartItem[]
+}
+
+model CartItem {
+  id         String   @id @default(cuid())
+  cartId     String
+  cart       Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  variantId  String
+  variant    Variant  @relation(fields: [variantId], references: [id])
+  quantity   Int
+
+  // Prevents the same variant appearing twice in one cart
+  @@unique([cartId, variantId])
+}
+
+model Coupon {
+  id             String       @id @default(cuid())
+  code           String       @unique
+  discountType   DiscountType
+  discountValue  Decimal      @db.Decimal(10, 2)
+  usageLimit     Int?         // null = unlimited
+  usageCount     Int          @default(0)
+  expiresAt      DateTime?
+
+  orders         Order[]
+
+  @@index([code])
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  user                 User               @relation(fields: [userId], references: [id])
+  stripeSubscriptionId String             @unique
+  stripeCustomerId     String
+  plan                 SubscriptionPlan
+  status               SubscriptionStatus
+  nextBillingDate      DateTime
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+}
+
+model WishlistItem {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  addedAt    DateTime @default(now())
+
+  @@unique([userId, productId]) // Can't wishlist same product twice
+}
+
+// ============================================================
+// AUTH & SECURITY MODELS
+// ============================================================
+
+model Token {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  tokenHash  String    @unique // SHA-256 of plaintext — plaintext only in email/cookie
+  type       TokenType
+  family     String?   // Refresh token family for rotation + reuse detection
+  expiresAt  DateTime
+  usedAt     DateTime? // Set on use — enforces single-use
+  createdAt  DateTime  @default(now())
+
+  @@index([tokenHash])
+  @@index([userId, type])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorId     String?  // null for system events
+  actor       User?    @relation(fields: [actorId], references: [id])
+  event       String   // e.g. 'ORDER_STATUS_UPDATE', 'USER_ROLE_CHANGE'
+  targetType  String   // e.g. 'Order', 'User', 'Product'
+  targetId    String
+  diff        Json?    // { before: {...}, after: {...} } for edit events
+  ip          String
+  userAgent   String
+  createdAt   DateTime @default(now())
+  // No updatedAt — immutable by design. No DELETE or UPDATE route exists.
+
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
+}
+
+// ============================================================
+// WHOLESALE, CONTENT & UTILITY MODELS
+// ============================================================
+
+model WholesaleAccount {
+  id            String          @id @default(cuid())
+  userId        String          @unique
+  user          User            @relation(fields: [userId], references: [id])
+  companyName   String
+  regNumber     String?
+  country       String
+  tier          WholesaleTier   @default(STANDARD)
+  status        WholesaleStatus @default(PENDING)
+  approvedById  String?
+  creditLimit   Decimal?        @db.Decimal(10, 2)
+  createdAt     DateTime        @default(now())
+}
+
+model Blog {
+  id          String     @id @default(cuid())
+  title       String
+  slug        String     @unique
+  content     String     // MDX string
+  authorId    String
+  tags        String[]
+  status      BlogStatus @default(DRAFT)
+  publishedAt DateTime?
+  scheduledAt DateTime?
+  viewCount   Int        @default(0)
+  seoTitle    String?
+  seoDesc     String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([status, publishedAt])
+}
+
+model Address {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  label      String?  // 'Home', 'Office'
+  line1      String
+  line2      String?
+  city       String
+  country    String
+  postalCode String
+  isDefault  Boolean  @default(false)
+
+  @@index([userId])
+}
+
+model Newsletter {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  confirmed         Boolean  @default(false)
+  confirmedAt       DateTime?
+  unsubscribeToken  String   @unique
+  source            String?  // e.g. 'homepage', 'checkout'
+  createdAt         DateTime @default(now())
+
+  @@index([email])
+}
