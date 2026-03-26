@@ -11,6 +11,12 @@ import authRoutes from './routes/auth.routes.js';
 import productRoutes from './routes/product.routes.js';
 import blogRoutes from './routes/blog.routes.js';
 import categoryRoutes from './routes/category.routes.js';
+import marketRoutes from './routes/market.routes.js';
+import cartRoutes from './routes/cart.routes.js';
+import checkoutRoutes from './routes/checkout.routes.js';
+import webhookRoutes from './routes/webhook.routes.js';
+import { resolveMarket } from './middleware/market.js';
+
 
 const app = express();
 const PORT = process.env.PORT ?? 4000;
@@ -31,6 +37,8 @@ export const prisma = new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
 });
 
+app.use('/webhooks', webhookRoutes);
+
 app.use(helmet());
 app.use(cors({
     origin: process.env.FRONTEND_URL ?? 'http://localhost:3000',
@@ -38,12 +46,16 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10kb' }));
 app.use(cookieParser());
+app.use(resolveMarket);
 
 // --- Routes ---
 app.use('/auth', authRoutes);
 app.use('/products', productRoutes);
 app.use('/blog', blogRoutes);
 app.use('/categories', categoryRoutes);
+app.use('/market', marketRoutes);
+app.use('/cart', cartRoutes);
+app.use('/checkout', checkoutRoutes);
 
 // --- Health check ---
 app.get('/health', async (_req, res) => {
