@@ -6,3 +6,4 @@ export const SHARED_VERSION = '0.0.1';
 export * from './schemas/auth.schema.js';
 export * from './schemas/common.schema.js';
 export * from './schemas/product.schema.js';
+export * from './schemas/cart.schema.js';
