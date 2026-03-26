@@ -2,27 +2,35 @@ import type { Request, Response } from 'express';
 import { productFilterSchema, createProductSchema, updateProductSchema } from '@aranya/shared';
 import * as productService from '../services/product.service.js';
 import { uploadImage } from '../services/cloudinary.service.js';
+import { prisma } from '../index.js';
+
+// ----------------------------------------------------------------
+// PUBLIC CONTROLLERS
+// All public endpoints read req.market (set by resolveMarket
+// middleware) and pass it into the service layer.
+// Market filtering happens at the Prisma query level — not here.
+// ----------------------------------------------------------------
 
 // --- List products (public) ---
 export async function listProducts(req: Request, res: Response) {
     const filters = productFilterSchema.parse(req.query);
-    const products = await productService.listProducts(filters);
+    const products = await productService.listProducts(filters, req.market!);
 
     // Cursor pagination: check if there's a next page
     const hasNextPage = products.length > filters.limit;
     const items = hasNextPage ? products.slice(0, -1) : products;
     const nextCursor = hasNextPage ? items[items.length - 1]?.id : null;
 
-    return res.json({ items, nextCursor, hasNextPage });
+    return res.json({ items, nextCursor, hasNextPage, market: req.market });
 }
 
-// --- Get single product (public) ---
+// --- Get single product by slug (public) ---
 export async function getProduct(req: Request, res: Response) {
     const { slug } = req.params;
-    const product = await productService.getProductBySlug(slug);
+    const product = await productService.getProductBySlug(slug, req.market!);
 
     if (!product) return res.status(404).json({ error: 'Product not found' });
-    return res.json({ product });
+    return res.json({ product, market: req.market });
 }
 
 // --- Search autocomplete (public) ---
@@ -30,19 +38,30 @@ export async function searchProducts(req: Request, res: Response) {
     const q = String(req.query.q ?? '').trim();
     if (q.length < 2) return res.json({ results: [] });
 
-    const results = await productService.searchAutocomplete(q);
-    return res.json({ results });
+    const results = await productService.searchAutocomplete(q, req.market!);
+    return res.json({ results, market: req.market });
 }
 
 // --- Featured products (public) ---
 export async function getFeatured(req: Request, res: Response) {
-    const products = await productService.getFeaturedProducts();
-    return res.json({ products });
+    const products = await productService.getFeaturedProducts(req.market!);
+    return res.json({ products, market: req.market });
 }
 
 // --- Bestsellers (public) ---
 export async function getBestsellers(req: Request, res: Response) {
-    const products = await productService.getBestsellers();
+    const products = await productService.getBestsellers(req.market!);
+    return res.json({ products, market: req.market });
+}
+
+// ----------------------------------------------------------------
+// ADMIN CONTROLLERS
+// No market filter — admins see all products across both markets.
+// ----------------------------------------------------------------
+
+// --- List all products (admin) ---
+export async function adminListProducts(_req: Request, res: Response) {
+    const products = await productService.adminListProducts();
     return res.json({ products });
 }
 
@@ -73,7 +92,7 @@ export async function uploadProductImages(req: Request, res: Response) {
     const uploads = await Promise.all(
         files.map((file, index) =>
             uploadImage(file.buffer, 'aranya-ceylon/products').then((result) =>
-                prisma_import.productImage.create({
+                prisma.productImage.create({
                     data: {
                         productId: id,
                         url: result.url,
@@ -93,6 +112,3 @@ export async function archiveProduct(req: Request, res: Response) {
     await productService.archiveProduct(id);
     return res.json({ message: 'Product archived' });
 }
-
-// Import prisma for image creation (avoids circular import)
-import { prisma as prisma_import } from '../index.js';
