@@ -18,6 +18,18 @@ enum Role {
   ADMIN
   SUPERADMIN
 }
+enum Market {
+  LOCAL
+  INTERNATIONAL
+  BOTH
+}
+
+enum Currency {
+  LKR
+  USD
+  EUR
+  GBP
+}
 
 enum ProductStatus {
   DRAFT
@@ -130,6 +142,8 @@ model Product {
   certifications String[]       // e.g. ['ORGANIC', 'FAIR_TRADE', 'CEYLON_GI']
   status         ProductStatus  @default(DRAFT)
   featured       Boolean        @default(false)
+  market  Market  @default(BOTH)
+  @@index([market, status])
   // searchVector is a PostgreSQL tsvector column for full-text search.
   // Prisma doesn't natively manage tsvector — we add it via a raw
   // migration after the initial migrate (Step 2.6).
@@ -168,6 +182,11 @@ model Variant {
   price      Decimal     @db.Decimal(10, 2)
   sku        String      @unique
   stock      Int         @default(0)
+  market        Market    @default(BOTH)  
+  currency      Currency  @default(LKR)   
+  packagingType String?                   
+  packagingDesc String?                   
+  @@index([productId, market])
 
   orderItems OrderItem[]
   cartItems  CartItem[]
@@ -196,6 +215,8 @@ model Order {
   shippingAddress  Json         // Address snapshot at order time
   trackingNumber   String?
   createdAt        DateTime     @default(now())
+  market    Market    
+  currency  Currency  
 
   items            OrderItem[]
   timeline         OrderEvent[]

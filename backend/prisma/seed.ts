@@ -16,8 +16,9 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
+
     console.log('🌱 Seeding database...');
-    // ... the rest of the file stays exactly the same
+
     // -- Categories --
     const spices = await prisma.category.upsert({
         where: { slug: 'spices' },
@@ -39,7 +40,15 @@ async function main() {
 
     console.log('✅ Categories created');
 
-    // -- Products --
+    // ----------------------------------------------------------------
+    // PRODUCTS
+    // Each product has:
+    //   - LOCAL variants   → LKR price, kraft/foil packaging
+    //   - INTERNATIONAL variants → USD price, glass jar/gift tin
+    // Stock is tracked at variant level but represents shared physical
+    // inventory — your fulfilment team decrements from the same pile.
+    // ----------------------------------------------------------------
+
     const cinnamon = await prisma.product.upsert({
         where: { slug: 'ceylon-true-cinnamon' },
         update: {},
@@ -51,16 +60,60 @@ async function main() {
             certifications: ['ORGANIC', 'CEYLON_GI', 'FAIR_TRADE'],
             status: ProductStatus.ACTIVE,
             featured: true,
+            market: 'BOTH',
             variants: {
                 create: [
-                    { weight: 50, price: 8.99, sku: 'CIN-50', stock: 120 },
-                    { weight: 100, price: 15.99, sku: 'CIN-100', stock: 85 },
-                    { weight: 250, price: 34.99, sku: 'CIN-250', stock: 40 },
+                    // LOCAL — LKR, kraft pouches
+                    {
+                        weight: 100,
+                        price: 650,
+                        sku: 'CIN-100-LK',
+                        stock: 85,
+                        market: 'LOCAL',
+                        currency: 'LKR',
+                        packagingType: 'kraft_pouch',
+                        packagingDesc: 'Quality kraft stand-up resealable pouch',
+                    },
+                    {
+                        weight: 250,
+                        price: 1400,
+                        sku: 'CIN-250-LK',
+                        stock: 40,
+                        market: 'LOCAL',
+                        currency: 'LKR',
+                        packagingType: 'foil_bag',
+                        packagingDesc: 'Large resealable foil bag — value pack',
+                    },
+                    // INTERNATIONAL — USD, premium packaging
+                    {
+                        weight: 100,
+                        price: 14.90,
+                        sku: 'CIN-100-INT',
+                        stock: 85,
+                        market: 'INTERNATIONAL',
+                        currency: 'USD',
+                        packagingType: 'glass_jar_premium',
+                        packagingDesc: 'Premium glass jar with embossed lid and wax seal',
+                    },
+                    {
+                        weight: 250,
+                        price: 32.00,
+                        sku: 'CIN-250-INT',
+                        stock: 40,
+                        market: 'INTERNATIONAL',
+                        currency: 'USD',
+                        packagingType: 'gift_tin',
+                        packagingDesc: 'Premium gift tin with ribbon and branded card',
+                    },
                 ],
             },
             images: {
                 create: [
-                    { url: 'https://res.cloudinary.com/demo/image/upload/cinnamon.jpg', altText: 'Ceylon cinnamon sticks', position: 0 },
+                    {
+                        url: 'https://res.cloudinary.com/demo/image/upload/cinnamon.jpg',
+                        altText: 'Ceylon cinnamon sticks',
+                        position: 0,
+                    },
                 ],
             },
         },
@@ -77,16 +130,80 @@ async function main() {
             certifications: ['ORGANIC', 'FAIR_TRADE'],
             status: ProductStatus.ACTIVE,
             featured: true,
+            market: 'BOTH',
             variants: {
                 create: [
-                    { weight: 50, price: 6.99, sku: 'BPP-50', stock: 200 },
-                    { weight: 100, price: 11.99, sku: 'BPP-100', stock: 150 },
-                    { weight: 250, price: 24.99, sku: 'BPP-250', stock: 60 },
+                    // LOCAL — LKR, kraft pouches
+                    {
+                        weight: 50,
+                        price: 320,
+                        sku: 'BPP-50-LK',
+                        stock: 200,
+                        market: 'LOCAL',
+                        currency: 'LKR',
+                        packagingType: 'kraft_pouch',
+                        packagingDesc: 'Quality kraft stand-up resealable pouch',
+                    },
+                    {
+                        weight: 100,
+                        price: 580,
+                        sku: 'BPP-100-LK',
+                        stock: 150,
+                        market: 'LOCAL',
+                        currency: 'LKR',
+                        packagingType: 'kraft_pouch',
+                        packagingDesc: 'Quality kraft stand-up resealable pouch',
+                    },
+                    {
+                        weight: 250,
+                        price: 1250,
+                        sku: 'BPP-250-LK',
+                        stock: 60,
+                        market: 'LOCAL',
+                        currency: 'LKR',
+                        packagingType: 'foil_bag',
+                        packagingDesc: 'Large resealable foil bag — value pack',
+                    },
+                    // INTERNATIONAL — USD, premium packaging
+                    {
+                        weight: 50,
+                        price: 6.99,
+                        sku: 'BPP-50-INT',
+                        stock: 200,
+                        market: 'INTERNATIONAL',
+                        currency: 'USD',
+                        packagingType: 'glass_jar_premium',
+                        packagingDesc: 'Premium glass jar with embossed lid and wax seal',
+                    },
+                    {
+                        weight: 100,
+                        price: 11.99,
+                        sku: 'BPP-100-INT',
+                        stock: 150,
+                        market: 'INTERNATIONAL',
+                        currency: 'USD',
+                        packagingType: 'glass_jar_premium',
+                        packagingDesc: 'Premium glass jar with embossed lid and wax seal',
+                    },
+                    {
+                        weight: 250,
+                        price: 24.99,
+                        sku: 'BPP-250-INT',
+                        stock: 60,
+                        market: 'INTERNATIONAL',
+                        currency: 'USD',
+                        packagingType: 'gift_tin',
+                        packagingDesc: 'Premium gift tin with ribbon and branded card',
+                    },
                 ],
             },
             images: {
                 create: [
-                    { url: 'https://res.cloudinary.com/demo/image/upload/pepper.jpg', altText: 'Malabar black pepper', position: 0 },
+                    {
+                        url: 'https://res.cloudinary.com/demo/image/upload/pepper.jpg',
+                        altText: 'Malabar black pepper',
+                        position: 0,
+                    },
                 ],
             },
         },
@@ -103,16 +220,80 @@ async function main() {
             certifications: ['ORGANIC', 'CEYLON_GI', 'HACCP'],
             status: ProductStatus.ACTIVE,
             featured: true,
+            market: 'BOTH',
             variants: {
                 create: [
-                    { weight: 50, price: 9.99, sku: 'TEA-50', stock: 95 },
-                    { weight: 100, price: 17.99, sku: 'TEA-100', stock: 70 },
-                    { weight: 250, price: 38.99, sku: 'TEA-250', stock: 25 },
+                    // LOCAL — LKR, kraft pouches
+                    {
+                        weight: 50,
+                        price: 450,
+                        sku: 'TEA-50-LK',
+                        stock: 95,
+                        market: 'LOCAL',
+                        currency: 'LKR',
+                        packagingType: 'kraft_pouch',
+                        packagingDesc: 'Quality kraft stand-up resealable pouch',
+                    },
+                    {
+                        weight: 100,
+                        price: 850,
+                        sku: 'TEA-100-LK',
+                        stock: 70,
+                        market: 'LOCAL',
+                        currency: 'LKR',
+                        packagingType: 'kraft_pouch',
+                        packagingDesc: 'Quality kraft stand-up resealable pouch',
+                    },
+                    {
+                        weight: 250,
+                        price: 1900,
+                        sku: 'TEA-250-LK',
+                        stock: 25,
+                        market: 'LOCAL',
+                        currency: 'LKR',
+                        packagingType: 'foil_bag',
+                        packagingDesc: 'Large resealable foil bag — value pack',
+                    },
+                    // INTERNATIONAL — USD, premium packaging
+                    {
+                        weight: 50,
+                        price: 9.99,
+                        sku: 'TEA-50-INT',
+                        stock: 95,
+                        market: 'INTERNATIONAL',
+                        currency: 'USD',
+                        packagingType: 'glass_jar_premium',
+                        packagingDesc: 'Premium glass jar with embossed lid and wax seal',
+                    },
+                    {
+                        weight: 100,
+                        price: 17.99,
+                        sku: 'TEA-100-INT',
+                        stock: 70,
+                        market: 'INTERNATIONAL',
+                        currency: 'USD',
+                        packagingType: 'glass_jar_premium',
+                        packagingDesc: 'Premium glass jar with embossed lid and wax seal',
+                    },
+                    {
+                        weight: 250,
+                        price: 38.99,
+                        sku: 'TEA-250-INT',
+                        stock: 25,
+                        market: 'INTERNATIONAL',
+                        currency: 'USD',
+                        packagingType: 'gift_tin',
+                        packagingDesc: 'Premium gift tin with ribbon and branded card',
+                    },
                 ],
             },
             images: {
                 create: [
-                    { url: 'https://res.cloudinary.com/demo/image/upload/tea.jpg', altText: 'Ceylon black tea', position: 0 },
+                    {
+                        url: 'https://res.cloudinary.com/demo/image/upload/tea.jpg',
+                        altText: 'Ceylon black tea',
+                        position: 0,
+                    },
                 ],
             },
         },
@@ -121,8 +302,8 @@ async function main() {
     console.log('✅ Products created:', cinnamon.name, blackPepper.name, ceylonTea.name);
 
     // -- Admin user --
-    const bcrypt = await import('bcryptjs');
-    const adminHash = await bcrypt.hash('Admin@123!', 12);
+    const { hash } = await import('@node-rs/bcrypt');
+    const adminHash = await hash('Admin@123!', 12);
 
     await prisma.user.upsert({
         where: { email: 'admin@aranyaceylon.com' },
@@ -157,6 +338,8 @@ async function main() {
 
     console.log('✅ Blog post created');
     console.log('\n🌿 Seed complete!');
+    console.log('   Local variants (LKR):         9 variants across 3 products');
+    console.log('   International variants (USD):  9 variants across 3 products');
 }
 
 main()
