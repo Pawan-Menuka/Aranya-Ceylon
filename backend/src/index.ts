@@ -16,6 +16,8 @@ import cartRoutes from './routes/cart.routes.js';
 import checkoutRoutes from './routes/checkout.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
 import { resolveMarket } from './middleware/market.js';
+import adminRoutes from './routes/admin.routes.js';
+import { startAllJobs } from './jobs/scheduler.js';
 
 
 const app = express();
@@ -38,7 +40,6 @@ export const prisma = new PrismaClient({
 });
 
 app.use('/webhooks', webhookRoutes);
-
 app.use(helmet());
 app.use(cors({
     origin: process.env.FRONTEND_URL ?? 'http://localhost:3000',
@@ -56,6 +57,7 @@ app.use('/categories', categoryRoutes);
 app.use('/market', marketRoutes);
 app.use('/cart', cartRoutes);
 app.use('/checkout', checkoutRoutes);
+app.use('/admin', adminRoutes);
 
 // --- Health check ---
 app.get('/health', async (_req, res) => {
@@ -95,5 +97,6 @@ async function connectDB() {
 connectDB().then(() => {
     app.listen(PORT, () => {
         console.log(`🌿 Aranya Ceylon API running on http://localhost:${PORT}`);
+        startAllJobs(); // Start after DB connection confirmed
     });
 });
