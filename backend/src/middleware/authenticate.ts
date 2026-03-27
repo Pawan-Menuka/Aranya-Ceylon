@@ -52,3 +52,21 @@ export function requireVerified(req: Request, res: Response, next: NextFunction)
     // not from JWT — JWT payload can be stale during the 15min window
     next();
 }
+
+// --- optionalAuth: silently populates req.user if a valid token is present ---
+// Falls through to next() regardless. Use on public routes that should also
+// work when authenticated (e.g. cart, product listings).
+export async function optionalAuth(req: Request, _res: Response, next: NextFunction) {
+    const authHeader = req.headers.authorization;
+
+    if (authHeader?.startsWith('Bearer ')) {
+        try {
+            const payload = await verifyAccessToken(authHeader.slice(7));
+            req.user = payload;
+        } catch {
+            // Invalid/expired token — just ignore it and continue as guest
+        }
+    }
+
+    next();
+}
