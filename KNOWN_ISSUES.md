@@ -14,7 +14,7 @@
 ## ✅ Resolution log
 
 Fixed on branch `claude/silly-ptolemy-149cfc` (2026-06-11), all gated by `pnpm typecheck`, `pnpm lint`
-(0 errors), and `pnpm test` (22 passing).
+(0 errors), and `pnpm test` (31 passing).
 
 | # | Issue | Status |
 |---|---|---|
@@ -31,6 +31,8 @@ Fixed on branch `claude/silly-ptolemy-149cfc` (2026-06-11), all gated by `pnpm t
 | #12 | Auth routes miss `asyncHandler` | ✅ Fixed |
 | #13 | Logout broken / over-aggressive | ✅ Fixed — cookie-based, single-session; new `/auth/logout-all` |
 | #14 | `sameSite: 'strict'` breaks PayHere redirect | ✅ Fixed — now `'lax'` (see cross-domain note in #14) |
+| #15 | PayHere webhook: no merchant/amount cross-check | ✅ Fixed — verifies merchant_id + amount + currency |
+| #16 | Stripe `payment_failed` cancels prematurely | ✅ Fixed — failures leave order PENDING; cron sweeps stale orders |
 | #18 | Register TOCTOU race on duplicate email | ✅ Fixed — relies on unique constraint + P2002 catch |
 | #26 | Dev CORS fails open | ✅ Fixed — fails closed; only `NODE_ENV=development` relaxes |
 | #27 | `/dev/seed-catalog` fails open | ✅ Fixed — requires `ENABLE_DEV_ROUTES=true` |
@@ -40,9 +42,13 @@ Fixed on branch `claude/silly-ptolemy-149cfc` (2026-06-11), all gated by `pnpm t
 auto-verified so login works immediately; in production `verified` stays `false` until the (not-yet-built)
 email-verification flow ships — login does not currently enforce `verified`, so users can still sign in.
 
-**Still open (next up):** #5 (coupons), #7 (float money math), #15 (PayHere amount cross-check),
-#16 (Stripe premature cancel), #17 (guest checkout), #19 (cart market re-validation), #20–#25 (low),
-F2–F7 (frontend port), plus the feature roadmap.
+**New behaviour to note (#16):** failed payments no longer cancel the order — it stays `PENDING` so the
+customer can retry the same PaymentIntent / PayHere order. A new hourly cron job
+(`startStaleOrderCancellationJob`) cancels orders left `PENDING` for more than 24h. Explicit
+cancellations (Stripe `payment_intent.canceled`, PayHere status `-1`) still cancel immediately.
+
+**Still open (next up):** #5 (coupons), #7 (float money math), #17 (guest checkout),
+#19 (cart market re-validation), #20–#25 (low), F2–F7 (frontend port), plus the feature roadmap.
 
 ---
 

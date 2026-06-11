@@ -96,9 +96,31 @@ export async function stripeWebhook(req: Request, res: Response) {
             break;
         }
         case 'payment_intent.payment_failed': {
+            // Do NOT cancel (#16): the same PaymentIntent can be retried with
+            // another card. Record the attempt and leave the order PENDING —
+            // the stale-order cron sweep is the real cancellation path.
+            const pi = event.data.object;
+            const reason = pi.last_payment_error?.message ?? 'unknown reason';
+            const order = await prisma.order.findUnique({
+                where: { paymentIntentId: pi.id },
+                select: { id: true },
+            });
+            if (order) {
+                await prisma.orderEvent.create({
+                    data: {
+                        orderId: order.id,
+                        status: 'PENDING',
+                        note: `Payment attempt failed via Stripe (${reason}). Order left open for retry.`,
+                    },
+                });
+            }
+            break;
+        }
+        case 'payment_intent.canceled': {
+            // Explicit cancellation (e.g. PI abandoned/expired) — cancel if open.
             const pi = event.data.object;
             await prisma.order.updateMany({
-                where: { paymentIntentId: pi.id },
+                where: { paymentIntentId: pi.id, status: 'PENDING' },
                 data: { status: 'CANCELLED' },
             });
             break;
@@ -141,6 +163,13 @@ export async function payHereWebhook(req: Request, res: Response) {
         return res.status(400).send('Invalid signature');
     }
 
+    // Defense-in-depth: confirm this notification targets OUR merchant
+    // account, not just a validly-signed message for someone else (#15).
+    if (merchant_id !== process.env.PAYHERE_MERCHANT_ID) {
+        console.error('❌ PayHere webhook: merchant_id mismatch', { order_id });
+        return res.status(400).send('Merchant mismatch');
+    }
+
     // PayHere status codes:
     // 2  = successful payment
     // 0  = pending
@@ -148,13 +177,49 @@ export async function payHereWebhook(req: Request, res: Response) {
     // -2 = failed
     // -3 = chargedback
     if (status_code === '2') {
+        const order = await prisma.order.findUnique({ where: { id: order_id } });
+        if (!order) {
+            // Ack so PayHere stops retrying — there's nothing for us to confirm.
+            console.error('❌ PayHere webhook: unknown order', { order_id });
+            return res.send('OK');
+        }
+
+        // Verify the amount + currency PayHere charged match what we recorded
+        // at checkout (#15). order.total is the grand total actually charged.
+        const expectedAmount = Number(order.total).toFixed(2);
+        if (payhere_amount !== expectedAmount || payhere_currency !== order.currency) {
+            console.error('❌ PayHere webhook: amount/currency mismatch', {
+                order_id,
+                expectedAmount, received: payhere_amount,
+                expectedCurrency: order.currency, receivedCurrency: payhere_currency,
+            });
+            return res.status(400).send('Amount mismatch');
+        }
+
         await confirmOrderPaid(order_id, payment_id, 'PayHere');
-    } else if (status_code === '-1' || status_code === '-2') {
+    } else if (status_code === '-1') {
+        // Customer explicitly cancelled — cancel the order if still open.
         await prisma.order.updateMany({
-            where: { id: order_id },
+            where: { id: order_id, status: 'PENDING' },
             data: { status: 'CANCELLED' },
         });
-        console.log(`❌ PayHere payment ${status_code === '-1' ? 'cancelled' : 'failed'} for order ${order_id}`);
+        console.log(`❌ PayHere payment cancelled for order ${order_id}`);
+    } else if (status_code === '-2') {
+        // Payment failed — leave PENDING so the customer can retry (#16).
+        const order = await prisma.order.findUnique({
+            where: { id: order_id },
+            select: { id: true },
+        });
+        if (order) {
+            await prisma.orderEvent.create({
+                data: {
+                    orderId: order.id,
+                    status: 'PENDING',
+                    note: 'Payment attempt failed via PayHere. Order left open for retry.',
+                },
+            });
+        }
+        console.log(`⚠ PayHere payment failed for order ${order_id} — left PENDING for retry`);
     }
 
     // PayHere REQUIRES plain text "OK" — not JSON
