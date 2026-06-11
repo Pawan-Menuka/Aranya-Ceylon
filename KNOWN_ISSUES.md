@@ -14,26 +14,35 @@
 ## ✅ Resolution log
 
 Fixed on branch `claude/silly-ptolemy-149cfc` (2026-06-11), all gated by `pnpm typecheck`, `pnpm lint`
-(0 errors), and `pnpm test` (19 passing).
+(0 errors), and `pnpm test` (22 passing).
 
 | # | Issue | Status |
 |---|---|---|
 | #0  | Frontend/backend uncommitted | ✅ Committed by user to `Develop` |
 | #1  | Refresh token flow broken | ✅ Fixed — opaque-token lookup by hash; dead JWT path removed |
-| #2  | Zero tests | ✅ Fixed — vitest suite (19 tests) wired into CI |
+| #2  | Zero tests | ✅ Fixed — vitest suite (22 tests) wired into CI |
 | #3  | Webhook idempotency race | ✅ Fixed — conditional `updateMany` claim inside the transaction |
 | #4  | No stock validation / negative stock | ✅ Fixed — checkout pre-check + atomic guarded decrement + DB CHECK constraint |
 | #6  | `Order.total` stored subtotal | ✅ Fixed — now stores the grand total charged |
 | #8  | Error handler leaks stack traces | ✅ Fixed — internals only in development |
+| #9  | Register enumerates emails | ✅ Fixed — identical neutral response, no token issued on signup |
 | #10 | No rate limiting | ✅ Fixed — `express-rate-limit` on auth routes + `trust proxy` |
+| #11 | DB TLS verification disabled | ✅ Fixed — `rejectUnauthorized: true` verifies Neon's cert |
 | #12 | Auth routes miss `asyncHandler` | ✅ Fixed |
 | #13 | Logout broken / over-aggressive | ✅ Fixed — cookie-based, single-session; new `/auth/logout-all` |
+| #14 | `sameSite: 'strict'` breaks PayHere redirect | ✅ Fixed — now `'lax'` (see cross-domain note in #14) |
+| #18 | Register TOCTOU race on duplicate email | ✅ Fixed — relies on unique constraint + P2002 catch |
 | #26 | Dev CORS fails open | ✅ Fixed — fails closed; only `NODE_ENV=development` relaxes |
 | #27 | `/dev/seed-catalog` fails open | ✅ Fixed — requires `ENABLE_DEV_ROUTES=true` |
 
-**Still open (next up):** #5 (coupons), #7 (float money math), #9 (email enumeration), #11 (DB TLS
-verification), #14 (`sameSite` vs PayHere redirect), #15–#19 (medium), #20–#25 (low), F2–F7 (frontend
-port), plus the feature roadmap.
+**Behaviour change to note (#9):** registration no longer logs the user in or returns a token. After
+`POST /auth/register` the client should send the user to sign in. In development, accounts are
+auto-verified so login works immediately; in production `verified` stays `false` until the (not-yet-built)
+email-verification flow ships — login does not currently enforce `verified`, so users can still sign in.
+
+**Still open (next up):** #5 (coupons), #7 (float money math), #15 (PayHere amount cross-check),
+#16 (Stripe premature cancel), #17 (guest checkout), #19 (cart market re-validation), #20–#25 (low),
+F2–F7 (frontend port), plus the feature roadmap.
 
 ---
 

@@ -31,10 +31,14 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // 1. Set up the connection pool for Neon
+// rejectUnauthorized: true verifies Neon's TLS certificate chain (#11).
+// Neon serves publicly-trusted certs, so this validates against Node's CA
+// store and prevents man-in-the-middle on the DB connection. The previous
+// `false` accepted ANY certificate — encrypted but unauthenticated.
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
-        rejectUnauthorized: false
+        rejectUnauthorized: true
     }
 });
 
