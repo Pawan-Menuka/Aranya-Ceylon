@@ -14,7 +14,7 @@
 ## ✅ Resolution log
 
 Fixed on branch `claude/silly-ptolemy-149cfc` (2026-06-11), all gated by `pnpm typecheck`, `pnpm lint`
-(0 errors), and `pnpm test` (42 passing).
+(0 errors), and `pnpm test` (46 passing).
 
 | # | Issue | Status |
 |---|---|---|
@@ -36,6 +36,7 @@ Fixed on branch `claude/silly-ptolemy-149cfc` (2026-06-11), all gated by `pnpm t
 | #15 | PayHere webhook: no merchant/amount cross-check | ✅ Fixed — verifies merchant_id + amount + currency |
 | #16 | Stripe `payment_failed` cancels prematurely | ✅ Fixed — failures leave order PENDING; cron sweeps stale orders |
 | #18 | Register TOCTOU race on duplicate email | ✅ Fixed — relies on unique constraint + P2002 catch |
+| #19 | Cart can check out cross-market/mixed-currency items | ✅ Fixed — checkout re-validates each line's market + currency (409) |
 | #26 | Dev CORS fails open | ✅ Fixed — fails closed; only `NODE_ENV=development` relaxes |
 | #27 | `/dev/seed-catalog` fails open | ✅ Fixed — requires `ENABLE_DEV_ROUTES=true` |
 
@@ -54,8 +55,8 @@ is checked at apply/checkout, so under heavy concurrent use of a tightly-limited
 redemptions could slip through before the count catches up. Acceptable for launch; a hard cap would
 need reservation logic. The math itself (#7) is exact.
 
-**Still open (next up):** #17 (guest checkout), #19 (cart market re-validation), #20–#25 (low),
-F2–F7 (frontend port), plus the feature roadmap.
+**Still open (next up):** #17 (guest checkout), #20–#25 (low), F2–F7 (frontend port), plus the
+feature roadmap.
 
 ---
 

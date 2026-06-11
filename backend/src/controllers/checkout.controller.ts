@@ -34,6 +34,26 @@ export async function createIntent(req: Request, res: Response) {
         return res.status(400).json({ error: 'Cart is empty' });
     }
 
+    // ── Market re-validation (#19) ─────────────────────────────────
+    // Market is checked at add-to-cart, but a variant's market/currency can
+    // change while the cart sits (e.g. admin switches BOTH → LOCAL). Re-check
+    // every line so we never charge a cross-market item or mix currencies in
+    // one order. Expected currency mirrors calculateCartTotal's mapping.
+    const expectedCurrency = market === 'LOCAL' ? 'LKR' : 'USD';
+    const wrongMarket = cart.items.filter((item) =>
+        (item.variant.market !== market && item.variant.market !== 'BOTH') ||
+        item.variant.currency !== expectedCurrency,
+    );
+    if (wrongMarket.length > 0) {
+        return res.status(409).json({
+            error: 'Some items in your cart are no longer available in this store. Please remove them and try again.',
+            items: wrongMarket.map((item) => ({
+                productId: item.productId,
+                variantId: item.variantId,
+            })),
+        });
+    }
+
     // ── Stock validation (#4) ──────────────────────────────────────
     // Stock was checked at add-to-cart, but a cart can sit for days.
     // Re-validate here so we never take payment for stock we don't have.
