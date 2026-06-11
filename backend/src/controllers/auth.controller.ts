@@ -1,8 +1,7 @@
 import type { Request, Response } from 'express';
 import { hash, verify } from '@node-rs/bcrypt';
-import { createId } from '@paralleldrive/cuid2';
 import { prisma } from '../index.js';
-import { issueTokenPair, rotateRefreshToken, revokeAllUserTokens } from '../services/token.service.js';
+import { issueTokenPair, rotateRefreshToken, revokeTokenFamily, revokeAllUserTokens } from '../services/token.service.js';
 import type { RegisterInput, LoginInput } from '@aranya/shared';
 
 const BCRYPT_ROUNDS = 12;
@@ -111,16 +110,25 @@ export async function refresh(req: Request, res: Response) {
     }
 }
 
-// --- Logout ---
+// --- Logout (this device only) ---
+// No auth required: possession of the refresh cookie is the proof, and an
+// expired access token must never prevent logging out.
 export async function logout(req: Request, res: Response) {
     const token = req.cookies?.[REFRESH_COOKIE_NAME];
 
-    if (token && req.user) {
-        await revokeAllUserTokens(req.user.userId);
+    if (token) {
+        await revokeTokenFamily(token);
     }
 
     res.clearCookie(REFRESH_COOKIE_NAME, { path: '/auth/refresh' });
     return res.json({ message: 'Logged out successfully' });
+}
+
+// --- Logout everywhere (all devices) ---
+export async function logoutAll(req: Request, res: Response) {
+    await revokeAllUserTokens(req.user!.userId);
+    res.clearCookie(REFRESH_COOKIE_NAME, { path: '/auth/refresh' });
+    return res.json({ message: 'Logged out on all devices' });
 }
 
 // --- Get current user (me) ---

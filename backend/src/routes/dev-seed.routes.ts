@@ -1,6 +1,6 @@
 /**
  * dev-seed.routes.ts — ONE-TIME dev endpoint to seed the 12 catalog products.
- * Only active when NODE_ENV !== 'production'.
+ * Only active when ENABLE_DEV_ROUTES=true (fail closed).
  * POST /dev/seed-catalog
  *
  * Uses a dynamic import() for `prisma` so the main app's warm, already-
@@ -11,10 +11,10 @@ import { Router } from 'express';
 
 const router = Router();
 
-if (process.env.NODE_ENV !== 'production') {
+if (process.env.ENABLE_DEV_ROUTES === 'true') {
 
-    const MULT: Record<number, number> = { 50: 0.6, 100: 1.0, 250: 2.3 };
     const WEIGHTS = [50, 100, 250] as const;
+    const MULT: Record<(typeof WEIGHTS)[number], number> = { 50: 0.6, 100: 1.0, 250: 2.3 };
 
     const CATALOG = [
         // ── Whole Spices ───────────────────────────────────────────────────────
@@ -92,7 +92,7 @@ if (process.env.NODE_ENV !== 'production') {
                 await prisma.product.create({
                     data: {
                         name: p.name, slug: p.slug, description: p.desc,
-                        categoryId: catMap[p.cat],
+                        categoryId: catMap[p.cat]!,
                         certifications: [...p.certs],
                         status: 'ACTIVE', featured: p.featured, market: 'BOTH',
                         latin: p.latin, originLabel: p.origin, color: p.color,

@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { type ZodSchema, ZodError } from 'zod';
+import { type ZodSchema } from 'zod';
 
 // Validates req.body against a Zod schema
 // Returns 400 with field-level errors if validation fails

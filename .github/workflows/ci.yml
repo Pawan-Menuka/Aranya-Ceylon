@@ -23,11 +23,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build shared package
+        run: pnpm --filter @aranya/shared build
+
+      - name: Generate Prisma client
+        run: pnpm --filter @aranya/backend exec prisma generate
+
       - name: Type check
         run: pnpm typecheck
 
       - name: Lint
         run: pnpm lint
+
+      - name: Test
+        run: pnpm test
 
       - name: Validate Prisma schema
         run: pnpm --filter @aranya/backend exec prisma validate

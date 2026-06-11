@@ -7,8 +7,9 @@
         "build": "tsc --project tsconfig.build.json",
         "start": "node dist/index.js",
         "typecheck": "tsc --noEmit",
-        "lint": "eslint src --ext .ts",
-    "seed:catalog": "tsx prisma/seed-catalog.ts"
+        "lint": "eslint src",
+        "test": "vitest run",
+        "seed:catalog": "tsx prisma/seed-catalog.ts"
     },
     "dependencies": {
         "@aranya/shared": "workspace:*",
@@ -36,6 +37,7 @@
         "seed": "tsx prisma/seed.ts"
     },
     "devDependencies": {
+        "@eslint/js": "^10.0.1",
         "@types/cookie-parser": "^1.4.10",
         "@types/cors": "^2.8.17",
         "@types/express": "^4.17.21",
@@ -48,6 +50,7 @@
         "eslint": "^10.1.0",
         "prisma": "^7.5.0",
         "tsx": "^4.15.0",
-        "typescript": "^5.5.0"
+        "typescript": "^5.5.0",
+        "vitest": "^4.1.1"
     }
 }

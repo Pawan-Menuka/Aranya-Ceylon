@@ -42,15 +42,16 @@ export const prisma = new PrismaClient({
 
 app.use('/webhooks', webhookRoutes);
 app.use(helmet());
+// Fail CLOSED: only NODE_ENV === 'development' relaxes CORS. An unset or
+// misspelled NODE_ENV must behave like production, never like development.
+const isDev = process.env.NODE_ENV === 'development';
 const _allowedOrigins = (process.env.FRONTEND_URL ?? 'http://localhost:3000').split(',').map(s => s.trim());
 app.use(cors({
     origin: (origin, cb) => {
-        // In development allow file:// (null origin) and any listed FRONTEND_URL
-        if (!origin || _allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
-            cb(null, true);
-        } else {
-            cb(new Error('CORS: origin not allowed'));
-        }
+        if (origin && _allowedOrigins.includes(origin)) return cb(null, true);
+        // Development only: allow any origin, incl. file:// pages (null origin)
+        if (isDev) return cb(null, true);
+        cb(new Error('CORS: origin not allowed'));
     },
     credentials: true,
 }));
@@ -67,7 +68,10 @@ app.use('/market', marketRoutes);
 app.use('/cart', cartRoutes);
 app.use('/checkout', checkoutRoutes);
 app.use('/admin', adminRoutes);
-app.use('/dev', devSeedRoutes);
+// Dev-only seed endpoint — requires explicit opt-in, never just NODE_ENV
+if (process.env.ENABLE_DEV_ROUTES === 'true') {
+    app.use('/dev', devSeedRoutes);
+}
 
 // --- Health check ---
 app.get('/health', async (_req, res) => {
@@ -90,8 +94,12 @@ app.use((_req, res) => {
 });
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    console.error('[ERROR]', err.message);
-    res.status(500).json({ error: 'Internal server error', details: err.message, stack: err.stack });
+    console.error('[ERROR]', err);
+    // Never leak internals (message/stack) outside development
+    res.status(500).json({
+        error: 'Internal server error',
+        ...(isDev && { details: err.message, stack: err.stack }),
+    });
 });
 
 async function connectDB() {
