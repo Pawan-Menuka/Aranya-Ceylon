@@ -15,6 +15,7 @@ const store = vi.hoisted(() => {
     interface OrderRow {
         id: string; status: string; userId: string | null;
         total: number; currency: string; paymentIntentId: string | null;
+        couponId?: string | null;
     }
     interface ItemRow { orderId: string; variantId: string; quantity: number; }
     interface VariantRow { id: string; stock: number; }
@@ -26,6 +27,7 @@ const store = vi.hoisted(() => {
         variants: [] as VariantRow[],
         events: [] as EventRow[],
         carts: [] as { id: string; userId: string | null }[],
+        coupons: [] as { id: string; usageCount: number }[],
         cartItemsDeleted: 0,
     };
 
@@ -59,6 +61,13 @@ const store = vi.hoisted(() => {
         },
         orderEvent: {
             create: async ({ data }: any) => { s.events.push(data); return data; },
+        },
+        coupon: {
+            update: async ({ where, data }: any) => {
+                const c = s.coupons.find((x) => x.id === where.id);
+                if (c && data.usageCount?.increment) c.usageCount += data.usageCount.increment;
+                return c;
+            },
         },
         cart: {
             findUnique: async ({ where }: any) => s.carts.find((c) => c.userId === where.userId) ?? null,
@@ -110,6 +119,7 @@ beforeEach(() => {
     s.variants = [{ id: 'var_a', stock: 10 }, { id: 'var_b', stock: 5 }];
     s.events = [];
     s.carts = [{ id: 'cart_1', userId: 'user_1' }];
+    s.coupons = [];
     s.cartItemsDeleted = 0;
     process.env.PAYHERE_MERCHANT_ID = 'MERCHANT_OK';
     vi.mocked(verifyPayHereNotification).mockReturnValue(true);
@@ -139,6 +149,26 @@ describe('confirmOrderPaid — #4 oversell handling', () => {
         expect(s.orders[0]!.status).toBe('PAID');
         expect(s.variants.find((v) => v.id === 'var_a')!.stock).toBe(1);
         expect(s.events.some((e) => e.note.includes('OVERSOLD'))).toBe(true);
+    });
+});
+
+describe('confirmOrderPaid — #5 coupon redemption', () => {
+    it('increments the coupon usage count once on payment', async () => {
+        s.orders[0]!.couponId = 'coupon_1';
+        s.coupons = [{ id: 'coupon_1', usageCount: 0 }];
+
+        await confirmOrderPaid('order_1', 'ref', 'Stripe');
+        expect(s.coupons[0]!.usageCount).toBe(1);
+
+        // Duplicate delivery must NOT double-count the redemption
+        await confirmOrderPaid('order_1', 'ref', 'Stripe');
+        expect(s.coupons[0]!.usageCount).toBe(1);
+    });
+
+    it('does not touch coupons for an order without one', async () => {
+        s.coupons = [{ id: 'coupon_1', usageCount: 0 }];
+        await confirmOrderPaid('order_1', 'ref', 'Stripe');
+        expect(s.coupons[0]!.usageCount).toBe(0);
     });
 });
 
