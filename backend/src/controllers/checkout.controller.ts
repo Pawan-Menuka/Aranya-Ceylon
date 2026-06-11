@@ -34,8 +34,26 @@ export async function createIntent(req: Request, res: Response) {
         return res.status(400).json({ error: 'Cart is empty' });
     }
 
+    // ── Stock validation (#4) ──────────────────────────────────────
+    // Stock was checked at add-to-cart, but a cart can sit for days.
+    // Re-validate here so we never take payment for stock we don't have.
+    // (The DB CHECK constraint + atomic decrement in the webhook are the
+    //  backstop for the small race window after this point.)
+    const outOfStock = cart.items.filter((item) => item.variant.stock < item.quantity);
+    if (outOfStock.length > 0) {
+        return res.status(409).json({
+            error: 'Some items are no longer available in the requested quantity.',
+            items: outOfStock.map((item) => ({
+                productId: item.productId,
+                variantId: item.variantId,
+                requested: item.quantity,
+                available: item.variant.stock,
+            })),
+        });
+    }
+
     // ── Calculate total server-side ────────────────────────────────
-    const { totalInCents, total, subtotal, shippingCost, currency }
+    const { totalInCents, total, shippingCost, currency }
         = await calculateCartTotal(cart.id, market, shippingMethod);
 
     // ── Create Order in PENDING state ─────────────────────────────
@@ -44,7 +62,9 @@ export async function createIntent(req: Request, res: Response) {
         data: {
             userId,
             status: 'PENDING',
-            total: subtotal,
+            // total = the grand total actually charged to the gateway (#6).
+            // subtotal is derivable as (total - shippingCost + discount).
+            total,
             shippingCost,
             shippingAddress, // JSON snapshot — never changes after order
             market,          // Permanently stamps which market this order belongs to

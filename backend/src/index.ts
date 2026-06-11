@@ -24,6 +24,12 @@ import { startAllJobs } from './jobs/scheduler.js';
 const app = express();
 const PORT = process.env.PORT ?? 4000;
 
+// Behind a reverse proxy (Render/Railway/Fly/Nginx) the client IP arrives in
+// X-Forwarded-For. Trust the first hop so rate limiting keys on the real IP.
+if (process.env.NODE_ENV === 'production') {
+    app.set('trust proxy', 1);
+}
+
 // 1. Set up the connection pool for Neon
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,

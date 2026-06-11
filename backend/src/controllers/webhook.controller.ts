@@ -5,35 +5,40 @@ import { prisma } from '../index.js';
 
 // ── Shared ACID transaction ────────────────────────────────────────
 // Called by both Stripe and PayHere handlers after payment is confirmed.
-// Wrapping in $transaction guarantees: if stock decrement fails,
-// the order does NOT get marked PAID. All or nothing.
-async function confirmOrderPaid(orderId: string, paymentRef: string, gateway: string) {
-    const order = await prisma.order.findUnique({
-        where: { id: orderId },
-        include: { items: true },
-    });
-
-    // Guard: order not found or already processed — idempotent
-    if (!order || order.status === 'PAID') return;
-
+// Idempotent and concurrency-safe: the PENDING→PAID flip is a conditional
+// updateMany INSIDE the transaction, so two concurrent webhook deliveries
+// (Stripe retries!) can never both decrement stock.
+export async function confirmOrderPaid(orderId: string, paymentRef: string, gateway: string) {
     await prisma.$transaction(async (tx) => {
-        // 1. Mark order PAID with market + currency already stamped at creation
-        await tx.order.update({
-            where: { id: orderId },
+        // 1. Claim the order atomically: only the delivery that flips
+        //    PENDING→PAID proceeds. A second/concurrent delivery sees
+        //    count === 0 and bails — true idempotency (#3).
+        const claimed = await tx.order.updateMany({
+            where: { id: orderId, status: 'PENDING' },
             data: { status: 'PAID' },
         });
+        if (claimed.count === 0) return; // already processed or unknown order
 
-        // 2. Decrement stock for each variant
-        // If any variant has 0 stock the update succeeds but goes negative —
-        // add a CHECK constraint in production or validate pre-checkout
-        await Promise.all(
-            order.items.map((item) =>
-                tx.variant.update({
-                    where: { id: item.variantId },
-                    data: { stock: { decrement: item.quantity } },
-                }),
-            ),
-        );
+        const order = await tx.order.findUnique({
+            where: { id: orderId },
+            include: { items: true },
+        });
+        if (!order) return;
+
+        // 2. Decrement stock with an atomic guard (#4): the `stock >= qty`
+        //    filter both checks and decrements in one statement, so stock
+        //    never goes negative even under concurrency, and the DB CHECK
+        //    constraint is a pure backstop. Items that can't be satisfied
+        //    are collected and flagged — the customer has already paid, so
+        //    the order stays PAID and ops handles the oversell.
+        const oversold: string[] = [];
+        for (const item of order.items) {
+            const dec = await tx.variant.updateMany({
+                where: { id: item.variantId, stock: { gte: item.quantity } },
+                data: { stock: { decrement: item.quantity } },
+            });
+            if (dec.count === 0) oversold.push(item.variantId);
+        }
 
         // 3. Log order event for the timeline shown in /account/orders
         await tx.orderEvent.create({
@@ -43,6 +48,18 @@ async function confirmOrderPaid(orderId: string, paymentRef: string, gateway: st
                 note: `Payment confirmed via ${gateway}. Ref: ${paymentRef}`,
             },
         });
+
+        // 3b. Flag any oversold lines for manual fulfilment review
+        if (oversold.length > 0) {
+            await tx.orderEvent.create({
+                data: {
+                    orderId,
+                    status: 'PAID',
+                    note: `⚠ OVERSOLD — insufficient stock for variant(s): ${oversold.join(', ')}. Needs manual review (backorder or refund).`,
+                },
+            });
+            console.error(`⚠ Order ${orderId} oversold variants: ${oversold.join(', ')}`);
+        }
 
         // 4. Clear the cart so the customer starts fresh
         if (order.userId) {
