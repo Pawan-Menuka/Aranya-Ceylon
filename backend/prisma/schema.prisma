@@ -121,8 +121,7 @@ model User {
   tokens             Token[]
   auditLogs          AuditLog[]
   wholesale          WholesaleAccount?
-
-  @@index([email])   // Fast lookup at login
+  // No @@index([email]) — @unique already creates an index used at login.
 }
 
 model Category {
@@ -189,12 +188,12 @@ model Variant {
   currency      Currency  @default(LKR)   
   packagingType String?                   
   packagingDesc String?                   
+  // Composite index also serves productId-only lookups (leftmost prefix),
+  // so no separate @@index([productId]) is needed.
   @@index([productId, market])
 
   orderItems OrderItem[]
   cartItems  CartItem[]
-
-  @@index([productId])
 }
 
 // ============================================================
