@@ -65,19 +65,34 @@ export async function updateItem(req: Request, res: Response) {
 }
 
 // --- Apply coupon ---
+const COUPON_ERROR_MESSAGES: Record<string, string> = {
+    COUPON_NOT_FOUND: 'That coupon code is not valid.',
+    COUPON_EXPIRED: 'That coupon has expired.',
+    COUPON_USAGE_LIMIT_REACHED: 'That coupon has reached its usage limit.',
+};
+
 export async function applyCoupon(req: Request, res: Response) {
     const userId = req.user?.userId;
     const guestToken = req.cookies?.[GUEST_TOKEN_COOKIE];
 
     const cart = await cartService.getOrCreateCart(userId, guestToken);
     const { code } = applyCouponSchema.parse(req.body);
-    const { subtotal } = await cartService.calculateCartTotal(cart.id, req.market!);
-    const couponResult = await cartService.validateCoupon(code, subtotal);
+    const { subtotalCents } = await cartService.calculateCartTotal(cart.id, req.market!);
 
-    await prisma.cart.update({
-        where: { id: cart.id },
-        data: { couponId: couponResult.couponId },
-    });
+    try {
+        const couponResult = await cartService.validateCoupon(code, subtotalCents);
 
-    return res.json({ discount: couponResult });
+        await prisma.cart.update({
+            where: { id: cart.id },
+            data: { couponId: couponResult.couponId },
+        });
+
+        return res.json({ discount: couponResult });
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : '';
+        if (message in COUPON_ERROR_MESSAGES) {
+            return res.status(400).json({ error: COUPON_ERROR_MESSAGES[message] });
+        }
+        throw err; // unexpected → asyncHandler / error middleware
+    }
 }

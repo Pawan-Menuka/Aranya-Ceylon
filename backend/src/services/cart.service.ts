@@ -1,18 +1,42 @@
 import { prisma } from '../index.js';
 import { createId } from '@paralleldrive/cuid2';
-import type { Market } from '@prisma/client';
+import type { Market, Prisma, Coupon } from '@prisma/client';
 import type { AddToCartInput, UpdateCartItemInput } from '@aranya/shared';
 
-const SHIPPING_RATES = {
-    STANDARD: { cost: 4.99, label: 'Standard (5–7 days)' },
-    EXPRESS: { cost: 12.99, label: 'Express (2–3 days)' },
+// All money math is done in INTEGER CENTS to avoid binary-float drift (#7).
+// Decimal(10,2) prices convert to cents exactly (×100 of a 2dp number is an
+// integer), so every downstream sum/clamp stays exact. We divide back to a
+// 2dp number only at the boundaries (DB storage, gateway amounts).
+
+// Shipping rates in the smallest currency unit (USD cents / LKR cents).
+const SHIPPING_RATES_CENTS = {
+    STANDARD: { cost: 499, label: 'Standard (5–7 days)' },
+    EXPRESS: { cost: 1299, label: 'Express (2–3 days)' },
 };
 
-// Local market flat shipping in LKR
-const LOCAL_SHIPPING_RATES = {
-    STANDARD: { cost: 350, label: 'Standard delivery (2–5 days)' },
-    EXPRESS: { cost: 650, label: 'Express delivery (1–2 days)' },
+// Local market flat shipping in LKR cents.
+const LOCAL_SHIPPING_RATES_CENTS = {
+    STANDARD: { cost: 35000, label: 'Standard delivery (2–5 days)' },
+    EXPRESS: { cost: 65000, label: 'Express delivery (1–2 days)' },
 };
+
+// Convert a Decimal/number money value to an exact integer number of cents.
+function toCents(value: Prisma.Decimal | number | string): number {
+    return Math.round(Number(value) * 100);
+}
+
+// Pure discount calculation (no DB). Throws if the coupon can't be applied.
+// subtotalCents in, discount in cents out (clamped so it can't exceed subtotal).
+function couponDiscountCents(coupon: Coupon, subtotalCents: number): number {
+    if (coupon.expiresAt && coupon.expiresAt < new Date()) throw new Error('COUPON_EXPIRED');
+    if (coupon.usageLimit !== null && coupon.usageCount >= coupon.usageLimit) {
+        throw new Error('COUPON_USAGE_LIMIT_REACHED');
+    }
+    const raw = coupon.discountType === 'PERCENTAGE'
+        ? Math.round((subtotalCents * Number(coupon.discountValue)) / 100)
+        : toCents(coupon.discountValue);
+    return Math.min(raw, subtotalCents); // never discount below zero
+}
 
 // --- Get or create cart ---
 export async function getOrCreateCart(userId?: string, guestToken?: string) {
@@ -147,7 +171,10 @@ export async function mergeGuestCart(guestToken: string, userId: string) {
     await prisma.cart.delete({ where: { id: guestCart.id } });
 }
 
-// --- Calculate cart total (market-aware currency) ---
+// --- Calculate cart total (market-aware currency, applies the cart's coupon) ---
+// Returns both integer cents (authoritative; used for gateway amounts) and 2dp
+// numbers (for display / Decimal storage). If the cart's stored coupon is no
+// longer valid, it's silently dropped (discount 0) rather than failing.
 export async function calculateCartTotal(
     cartId: string,
     market: Market,
@@ -160,46 +187,65 @@ export async function calculateCartTotal(
 
     if (!cart) throw new Error('CART_NOT_FOUND');
 
-    const subtotal = cart.items.reduce((sum, item) => {
-        return sum + Number(item.variant.price) * item.quantity;
-    }, 0);
+    const subtotalCents = cart.items.reduce(
+        (sum, item) => sum + toCents(item.variant.price) * item.quantity,
+        0,
+    );
 
     // Shipping cost is currency-aware
-    const rates = market === 'LOCAL' ? LOCAL_SHIPPING_RATES : SHIPPING_RATES;
+    const rates = market === 'LOCAL' ? LOCAL_SHIPPING_RATES_CENTS : SHIPPING_RATES_CENTS;
     const shipping = rates[shippingMethod];
-    const total = subtotal + shipping.cost;
     const currency = market === 'LOCAL' ? 'LKR' : 'USD';
 
+    // Apply the coupon stored on the cart (if any and still valid).
+    let discountCents = 0;
+    let appliedCouponId: string | null = null;
+    if (cart.couponId) {
+        const coupon = await prisma.coupon.findUnique({ where: { id: cart.couponId } });
+        if (coupon) {
+            try {
+                discountCents = couponDiscountCents(coupon, subtotalCents);
+                appliedCouponId = coupon.id;
+            } catch {
+                // Coupon expired / limit reached since it was applied — drop it.
+            }
+        }
+    }
+
+    const totalCents = Math.max(subtotalCents - discountCents, 0) + shipping.cost;
+
     return {
-        subtotal: Math.round(subtotal * 100) / 100,
-        shippingCost: shipping.cost,
+        // Authoritative integer-cents figures
+        subtotalCents,
+        shippingCents: shipping.cost,
+        discountCents,
+        totalCents,
+        totalInCents: totalCents, // Stripe/PayHere want integer smallest-units
+        // 2dp numbers for display / Decimal storage
+        subtotal: subtotalCents / 100,
+        shippingCost: shipping.cost / 100,
+        discount: discountCents / 100,
+        total: totalCents / 100,
         shippingLabel: shipping.label,
-        total: Math.round(total * 100) / 100,
-        // Stripe and PayHere both require integer smallest-unit amounts
-        totalInCents: Math.round(total * 100),
         currency,
+        couponId: appliedCouponId,
     };
 }
 
-// --- Validate and apply coupon ---
-export async function validateCoupon(code: string, subtotal: number) {
+// --- Validate a coupon code against a subtotal (in cents) ---
+// Used by the apply-coupon endpoint. Throws COUPON_* on invalid codes.
+export async function validateCoupon(code: string, subtotalCents: number) {
     const coupon = await prisma.coupon.findUnique({ where: { code } });
-
     if (!coupon) throw new Error('COUPON_NOT_FOUND');
-    if (coupon.expiresAt && coupon.expiresAt < new Date()) throw new Error('COUPON_EXPIRED');
-    if (coupon.usageLimit !== null && coupon.usageCount >= coupon.usageLimit) {
-        throw new Error('COUPON_USAGE_LIMIT_REACHED');
-    }
 
-    const discount = coupon.discountType === 'PERCENTAGE'
-        ? subtotal * (Number(coupon.discountValue) / 100)
-        : Number(coupon.discountValue);
+    const discountCents = couponDiscountCents(coupon, subtotalCents);
 
     return {
         couponId: coupon.id,
         discountType: coupon.discountType,
         discountValue: Number(coupon.discountValue),
-        discount: Math.round(discount * 100) / 100,
+        discountCents,
+        discount: discountCents / 100,
     };
 }
 
