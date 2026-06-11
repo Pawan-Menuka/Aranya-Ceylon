@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../index.js';
+import { Currency } from '@prisma/client';
 import { createPaymentIntent } from '../services/stripe.service.js';
 import { buildPayHerePayload } from '../services/payhere.service.js';
 import { calculateCartTotal } from '../services/cart.service.js';
@@ -47,7 +48,7 @@ export async function createIntent(req: Request, res: Response) {
             shippingCost,
             shippingAddress, // JSON snapshot — never changes after order
             market,          // Permanently stamps which market this order belongs to
-            currency,        // Permanently stamps the payment currency
+            currency: currency as Currency,        // Permanently stamps the payment currency
             items: {
                 create: cart.items.map((item) => ({
                     productId: item.productId,

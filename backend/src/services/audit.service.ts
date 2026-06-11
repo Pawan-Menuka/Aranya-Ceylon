@@ -25,7 +25,7 @@ export async function writeAuditLog(params: {
     event: AuditEvent;
     targetType: string;
     targetId: string;
-    diff?: { before: unknown; after: unknown };
+    diff?: { before: any; after: any };
 }) {
     const { req, event, targetType, targetId, diff } = params;
 

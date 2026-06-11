@@ -51,7 +51,11 @@ async function main() {
 
     const cinnamon = await prisma.product.upsert({
         where: { slug: 'ceylon-true-cinnamon' },
-        update: {},
+        update: {
+            latin: 'Cinnamomum verum',
+            originLabel: 'Matale Hills',
+            color: '#C58B58',
+        },
         create: {
             name: 'Ceylon True Cinnamon',
             slug: 'ceylon-true-cinnamon',
@@ -61,6 +65,9 @@ async function main() {
             status: ProductStatus.ACTIVE,
             featured: true,
             market: 'BOTH',
+            latin: 'Cinnamomum verum',
+            originLabel: 'Matale Hills',
+            color: '#C58B58',
             variants: {
                 create: [
                     // LOCAL — LKR, kraft pouches
@@ -121,7 +128,11 @@ async function main() {
 
     const blackPepper = await prisma.product.upsert({
         where: { slug: 'malabar-black-pepper' },
-        update: {},
+        update: {
+            latin: 'Piper nigrum',
+            originLabel: 'Malabar Coast',
+            color: '#2E2E2E',
+        },
         create: {
             name: 'Malabar Black Pepper',
             slug: 'malabar-black-pepper',
@@ -131,6 +142,9 @@ async function main() {
             status: ProductStatus.ACTIVE,
             featured: true,
             market: 'BOTH',
+            latin: 'Piper nigrum',
+            originLabel: 'Malabar Coast',
+            color: '#2E2E2E',
             variants: {
                 create: [
                     // LOCAL — LKR, kraft pouches
@@ -211,7 +225,11 @@ async function main() {
 
     const ceylonTea = await prisma.product.upsert({
         where: { slug: 'single-estate-ceylon-black-tea' },
-        update: {},
+        update: {
+            latin: 'Camellia sinensis',
+            originLabel: 'Uva Highlands',
+            color: '#7C3030',
+        },
         create: {
             name: 'Single Estate Ceylon Black Tea',
             slug: 'single-estate-ceylon-black-tea',
@@ -221,6 +239,9 @@ async function main() {
             status: ProductStatus.ACTIVE,
             featured: true,
             market: 'BOTH',
+            latin: 'Camellia sinensis',
+            originLabel: 'Uva Highlands',
+            color: '#7C3030',
             variants: {
                 create: [
                     // LOCAL — LKR, kraft pouches

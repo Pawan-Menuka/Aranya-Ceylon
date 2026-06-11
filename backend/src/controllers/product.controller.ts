@@ -26,7 +26,7 @@ export async function listProducts(req: Request, res: Response) {
 
 // --- Get single product by slug (public) ---
 export async function getProduct(req: Request, res: Response) {
-    const { slug } = req.params;
+    const slug = req.params.slug!;
     const product = await productService.getProductBySlug(slug, req.market!);
 
     if (!product) return res.status(404).json({ error: 'Product not found' });
@@ -74,7 +74,7 @@ export async function createProduct(req: Request, res: Response) {
 
 // --- Update product (admin) ---
 export async function updateProduct(req: Request, res: Response) {
-    const { id } = req.params;
+    const id = req.params.id!;
     const data = updateProductSchema.parse(req.body);
     const product = await productService.updateProduct(id, data);
     return res.json({ product });
@@ -82,7 +82,7 @@ export async function updateProduct(req: Request, res: Response) {
 
 // --- Upload product images (admin) ---
 export async function uploadProductImages(req: Request, res: Response) {
-    const { id } = req.params;
+    const id = req.params.id!;
     const files = req.files as Express.Multer.File[];
 
     if (!files?.length) {
@@ -108,7 +108,7 @@ export async function uploadProductImages(req: Request, res: Response) {
 
 // --- Archive product (admin) ---
 export async function archiveProduct(req: Request, res: Response) {
-    const { id } = req.params;
+    const id = req.params.id!;
     await productService.archiveProduct(id);
     return res.json({ message: 'Product archived' });
 }

@@ -59,7 +59,7 @@ export async function updateItem(req: Request, res: Response) {
 
     const cart = await cartService.getOrCreateCart(userId, guestToken);
     const data = updateCartItemSchema.parse(req.body);
-    const item = await cartService.updateCartItem(cart.id, req.params.itemId, data);
+    const item = await cartService.updateCartItem(cart.id, req.params.itemId!, data);
 
     return res.json({ item });
 }

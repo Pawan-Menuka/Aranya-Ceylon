@@ -143,6 +143,9 @@ model Product {
   status         ProductStatus  @default(DRAFT)
   featured       Boolean        @default(false)
   market  Market  @default(BOTH)
+  latin          String?
+  originLabel    String?
+  color          String?
   @@index([market, status])
   // searchVector is a PostgreSQL tsvector column for full-text search.
   // Prisma doesn't natively manage tsvector — we add it via a raw

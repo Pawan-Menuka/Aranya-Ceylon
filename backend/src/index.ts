@@ -17,6 +17,7 @@ import checkoutRoutes from './routes/checkout.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
 import { resolveMarket } from './middleware/market.js';
 import adminRoutes from './routes/admin.routes.js';
+import devSeedRoutes from './routes/dev-seed.routes.js';
 import { startAllJobs } from './jobs/scheduler.js';
 
 
@@ -41,8 +42,16 @@ export const prisma = new PrismaClient({
 
 app.use('/webhooks', webhookRoutes);
 app.use(helmet());
+const _allowedOrigins = (process.env.FRONTEND_URL ?? 'http://localhost:3000').split(',').map(s => s.trim());
 app.use(cors({
-    origin: process.env.FRONTEND_URL ?? 'http://localhost:3000',
+    origin: (origin, cb) => {
+        // In development allow file:// (null origin) and any listed FRONTEND_URL
+        if (!origin || _allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+            cb(null, true);
+        } else {
+            cb(new Error('CORS: origin not allowed'));
+        }
+    },
     credentials: true,
 }));
 app.use(express.json({ limit: '10kb' }));
@@ -58,6 +67,7 @@ app.use('/market', marketRoutes);
 app.use('/cart', cartRoutes);
 app.use('/checkout', checkoutRoutes);
 app.use('/admin', adminRoutes);
+app.use('/dev', devSeedRoutes);
 
 // --- Health check ---
 app.get('/health', async (_req, res) => {

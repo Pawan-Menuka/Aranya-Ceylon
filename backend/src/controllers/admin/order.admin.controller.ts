@@ -56,7 +56,7 @@ export async function getOrder(req: Request, res: Response) {
 
 // --- Update order status ---
 export async function updateOrderStatus(req: Request, res: Response) {
-    const { id } = req.params;
+    const id = req.params.id!;
     const { status, trackingNumber, note } = updateOrderSchema.parse(req.body);
 
     const before = await prisma.order.findUnique({ where: { id } });
@@ -104,7 +104,7 @@ export async function updateOrderStatus(req: Request, res: Response) {
 
 // --- Issue refund ---
 export async function refundOrder(req: Request, res: Response) {
-    const { id } = req.params;
+    const id = req.params.id!;
 
     const order = await prisma.order.findUnique({
         where: { id },

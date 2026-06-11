@@ -7,7 +7,8 @@
         "build": "tsc --project tsconfig.build.json",
         "start": "node dist/index.js",
         "typecheck": "tsc --noEmit",
-        "lint": "eslint src --ext .ts"
+        "lint": "eslint src --ext .ts",
+    "seed:catalog": "tsx prisma/seed-catalog.ts"
     },
     "dependencies": {
         "@aranya/shared": "workspace:*",
