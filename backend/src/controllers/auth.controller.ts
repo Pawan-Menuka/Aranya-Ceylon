@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { hash, verify } from '@node-rs/bcrypt';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../index.js';
 import { issueTokenPair, rotateRefreshToken, revokeTokenFamily, revokeAllUserTokens } from '../services/token.service.js';
 import type { RegisterInput, LoginInput } from '@aranya/shared';
@@ -7,54 +8,58 @@ import type { RegisterInput, LoginInput } from '@aranya/shared';
 const BCRYPT_ROUNDS = 12;
 const REFRESH_COOKIE_NAME = 'refreshToken';
 
-// Cookie options — HttpOnly prevents JS access, Secure enforces HTTPS
+// Identical response for both new and existing emails — see register().
+const NEUTRAL_REGISTER_MESSAGE = 'If this email is new, a verification link has been sent.';
+
+// Cookie options — HttpOnly prevents JS access, Secure enforces HTTPS.
+// sameSite: 'lax' (not 'strict') so the cookie survives the cross-site
+// top-level redirect back from PayHere/Stripe (#14). The refresh endpoint is
+// POST-only, and 'lax' still blocks cross-site POSTs, so CSRF protection is
+// preserved. NOTE: if the frontend and API end up on DIFFERENT registrable
+// domains, this must become `sameSite: 'none'` + `secure: true` for the
+// cookie to be sent on cross-site fetches at all.
 const refreshCookieOptions = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict' as const,
+    sameSite: 'lax' as const,
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
     path: '/auth/refresh', // Cookie only sent to the refresh endpoint
 };
 
 // --- Register ---
+// Returns the SAME neutral response whether or not the email already exists,
+// so an attacker can't enumerate registered accounts (#9). No token is issued
+// here — the user signs in via /login afterwards (and, once email verification
+// ships, after clicking the verification link). The unique-constraint catch
+// also closes the TOCTOU race two concurrent signups would otherwise hit (#18).
 export async function register(req: Request, res: Response) {
     const { name, email, password } = req.body as RegisterInput;
 
-    // Check if email already exists
-    // Return IDENTICAL response whether email exists or not — prevents enumeration
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) {
-        // Still hash to prevent timing attacks revealing whether email exists
-        await hash(password, BCRYPT_ROUNDS);
-        return res.status(201).json({
-            message: 'If this email is new, a verification link has been sent.',
-        });
-    }
-
+    // Hash unconditionally so response time doesn't reveal whether the email
+    // already existed (timing-based enumeration). Both branches also perform a
+    // DB write attempt, keeping the timing profiles close.
     const passwordHash = await hash(password, BCRYPT_ROUNDS);
 
-    const user = await prisma.user.create({
-        data: { name, email, passwordHash },
-    });
-
-    // TODO Step 4: Send verification email via Resend
-    // For now, auto-verify in development
-    if (process.env.NODE_ENV === 'development') {
-        await prisma.user.update({
-            where: { id: user.id },
-            data: { verified: true },
+    try {
+        await prisma.user.create({
+            data: {
+                name,
+                email,
+                passwordHash,
+                // Auto-verify in development so local testing can log in immediately
+                verified: process.env.NODE_ENV === 'development',
+            },
         });
+        // TODO (roadmap): send verification email via Resend here.
+    } catch (err) {
+        // P2002 = unique violation on email → already registered. Swallow it and
+        // return the identical neutral response. Re-throw anything else.
+        if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) {
+            throw err;
+        }
     }
 
-    const { accessToken, refreshTokenPlaintext } = await issueTokenPair(user);
-
-    res.cookie(REFRESH_COOKIE_NAME, refreshTokenPlaintext, refreshCookieOptions);
-
-    return res.status(201).json({
-        message: 'If this email is new, a verification link has been sent.',
-        accessToken,
-        user: { id: user.id, name: user.name, email: user.email, role: user.role },
-    });
+    return res.status(201).json({ message: NEUTRAL_REGISTER_MESSAGE });
 }
 
 // --- Login ---
