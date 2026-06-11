@@ -52,20 +52,23 @@ export async function createIntent(req: Request, res: Response) {
         });
     }
 
-    // ── Calculate total server-side ────────────────────────────────
-    const { totalInCents, total, shippingCost, currency }
+    // ── Calculate total server-side (applies the cart's coupon) ────
+    const { totalInCents, total, shippingCost, discount, couponId, currency }
         = await calculateCartTotal(cart.id, market, shippingMethod);
 
     // ── Create Order in PENDING state ─────────────────────────────
     // Order is stamped with market + currency permanently at creation.
+    // Decimal columns are written as 2dp strings to avoid any float coercion.
     const order = await prisma.order.create({
         data: {
             userId,
             status: 'PENDING',
-            // total = the grand total actually charged to the gateway (#6).
-            // subtotal is derivable as (total - shippingCost + discount).
-            total,
-            shippingCost,
+            // total = the grand total actually charged to the gateway (#6):
+            // subtotal − discount + shipping. subtotal is derivable from these.
+            total: total.toFixed(2),
+            shippingCost: shippingCost.toFixed(2),
+            discount: discount.toFixed(2),       // 0.00 when no coupon (#5)
+            couponId,                            // null when no coupon (#5)
             shippingAddress, // JSON snapshot — never changes after order
             market,          // Permanently stamps which market this order belongs to
             currency: currency as Currency,        // Permanently stamps the payment currency

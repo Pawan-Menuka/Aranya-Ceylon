@@ -61,7 +61,15 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
             console.error(`⚠ Order ${orderId} oversold variants: ${oversold.join(', ')}`);
         }
 
-        // 4. Clear the cart so the customer starts fresh
+        // 4. Count the coupon redemption now that payment succeeded (#5).
+        if (order.couponId) {
+            await tx.coupon.update({
+                where: { id: order.couponId },
+                data: { usageCount: { increment: 1 } },
+            });
+        }
+
+        // 5. Clear the cart so the customer starts fresh
         if (order.userId) {
             const cart = await tx.cart.findUnique({ where: { userId: order.userId } });
             if (cart) await tx.cartItem.deleteMany({ where: { cartId: cart.id } });

@@ -14,7 +14,7 @@
 ## ✅ Resolution log
 
 Fixed on branch `claude/silly-ptolemy-149cfc` (2026-06-11), all gated by `pnpm typecheck`, `pnpm lint`
-(0 errors), and `pnpm test` (31 passing).
+(0 errors), and `pnpm test` (42 passing).
 
 | # | Issue | Status |
 |---|---|---|
@@ -23,7 +23,9 @@ Fixed on branch `claude/silly-ptolemy-149cfc` (2026-06-11), all gated by `pnpm t
 | #2  | Zero tests | ✅ Fixed — vitest suite (22 tests) wired into CI |
 | #3  | Webhook idempotency race | ✅ Fixed — conditional `updateMany` claim inside the transaction |
 | #4  | No stock validation / negative stock | ✅ Fixed — checkout pre-check + atomic guarded decrement + DB CHECK constraint |
+| #5  | Coupons wired 0% into checkout | ✅ Fixed — cart coupon applied to total, persisted on order, usage counted on payment |
 | #6  | `Order.total` stored subtotal | ✅ Fixed — now stores the grand total charged |
+| #7  | Float money math | ✅ Fixed — all totals computed in integer cents |
 | #8  | Error handler leaks stack traces | ✅ Fixed — internals only in development |
 | #9  | Register enumerates emails | ✅ Fixed — identical neutral response, no token issued on signup |
 | #10 | No rate limiting | ✅ Fixed — `express-rate-limit` on auth routes + `trust proxy` |
@@ -47,8 +49,13 @@ customer can retry the same PaymentIntent / PayHere order. A new hourly cron job
 (`startStaleOrderCancellationJob`) cancels orders left `PENDING` for more than 24h. Explicit
 cancellations (Stripe `payment_intent.canceled`, PayHere status `-1`) still cancel immediately.
 
-**Still open (next up):** #5 (coupons), #7 (float money math), #17 (guest checkout),
-#19 (cart market re-validation), #20–#25 (low), F2–F7 (frontend port), plus the feature roadmap.
+**Coupon usage-limit caveat (#5):** redemptions are counted at payment time (`usageCount++`). The limit
+is checked at apply/checkout, so under heavy concurrent use of a tightly-limited coupon a few extra
+redemptions could slip through before the count catches up. Acceptable for launch; a hard cap would
+need reservation logic. The math itself (#7) is exact.
+
+**Still open (next up):** #17 (guest checkout), #19 (cart market re-validation), #20–#25 (low),
+F2–F7 (frontend port), plus the feature roadmap.
 
 ---
 
