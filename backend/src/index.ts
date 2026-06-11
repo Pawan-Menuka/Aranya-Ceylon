@@ -50,6 +50,13 @@ export const prisma = new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
 });
 
+// ⚠ ORDERING IS INTENTIONAL — do not move. Webhook routes are mounted BEFORE
+// express.json() because Stripe signature verification needs the raw request
+// body (the route applies its own express.raw()). A JSON parser running first
+// would consume/transform the body and break signature checks. The webhook
+// handlers verify their own gateway signatures, so they don't rely on CORS.
+// Browser-facing routes are mounted AFTER helmet()/cors() below — never add
+// one above this line.
 app.use('/webhooks', webhookRoutes);
 app.use(helmet());
 // Fail CLOSED: only NODE_ENV === 'development' relaxes CORS. An unset or
@@ -123,8 +130,40 @@ async function connectDB() {
 }
 
 connectDB().then(() => {
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
         console.log(`🌿 Aranya Ceylon API running on http://localhost:${PORT}`);
+        // NOTE: cron jobs run in EVERY instance. Safe at one instance; before
+        // scaling horizontally, gate startAllJobs() behind a leader-election
+        // flag (e.g. only run on instance 0) so jobs don't double-fire.
         startAllJobs(); // Start after DB connection confirmed
     });
+
+    // --- Graceful shutdown ---
+    // PaaS platforms send SIGTERM on rolling restarts/deploys. Stop accepting
+    // new connections, then release the DB pool so we don't leak connections.
+    let shuttingDown = false;
+    const shutdown = async (signal: string) => {
+        if (shuttingDown) return;
+        shuttingDown = true;
+        console.log(`\n${signal} received — shutting down gracefully…`);
+        server.close(async () => {
+            try {
+                await prisma.$disconnect();
+                await pool.end();
+                console.log('👋 Closed HTTP server and database pool');
+                process.exit(0);
+            } catch (err) {
+                console.error('Error during shutdown:', err);
+                process.exit(1);
+            }
+        });
+        // Failsafe: force-exit if connections don't drain in time.
+        setTimeout(() => {
+            console.error('Forced shutdown after timeout');
+            process.exit(1);
+        }, 10_000).unref();
+    };
+
+    process.on('SIGTERM', () => void shutdown('SIGTERM'));
+    process.on('SIGINT', () => void shutdown('SIGINT'));
 });

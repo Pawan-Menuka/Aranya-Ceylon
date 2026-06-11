@@ -37,6 +37,11 @@ Fixed on branch `claude/silly-ptolemy-149cfc` (2026-06-11), all gated by `pnpm t
 | #16 | Stripe `payment_failed` cancels prematurely | ✅ Fixed — failures leave order PENDING; cron sweeps stale orders |
 | #18 | Register TOCTOU race on duplicate email | ✅ Fixed — relies on unique constraint + P2002 catch |
 | #19 | Cart can check out cross-market/mixed-currency items | ✅ Fixed — checkout re-validates each line's market + currency (409) |
+| #20 | Duplicate email libraries | ✅ Fixed — removed unused `nodemailer` + `@types/nodemailer` (Resend kept) |
+| #21 | Placeholder README | ✅ Fixed — real README (stack, setup, env, scripts, migrations) |
+| #23 | No graceful shutdown | ✅ Fixed — SIGTERM/SIGINT close server + DB pool; cron-scaling caveat documented |
+| #24 | Middleware ordering undocumented | ✅ Fixed — comment explains webhook-before-helmet/json ordering |
+| #25 | Dead code / redundant indexes | ✅ Fixed — dropped `User_email_idx` + `Variant_productId_idx` (migration); dead imports already gone |
 | #26 | Dev CORS fails open | ✅ Fixed — fails closed; only `NODE_ENV=development` relaxes |
 | #27 | `/dev/seed-catalog` fails open | ✅ Fixed — requires `ENABLE_DEV_ROUTES=true` |
 
@@ -55,8 +60,9 @@ is checked at apply/checkout, so under heavy concurrent use of a tightly-limited
 redemptions could slip through before the count catches up. Acceptable for launch; a hard cap would
 need reservation logic. The math itself (#7) is exact.
 
-**Still open (next up):** #17 (guest checkout), #20–#25 (low), F2–F7 (frontend port), plus the
-feature roadmap.
+**Still open:** #17 (guest checkout — feature, only if accounts aren't required), F2–F7 (frontend
+Next.js port — the large remaining effort), plus the feature roadmap. Every high- and medium-severity
+backend issue from the original review is now resolved.
 
 ---
 
