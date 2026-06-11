@@ -13,7 +13,7 @@ export async function listBlogs(req: Request, res: Response) {
 }
 
 export async function getBlog(req: Request, res: Response) {
-    const blog = await blogService.getBlogBySlug(req.params.slug);
+    const blog = await blogService.getBlogBySlug(req.params.slug!);
     if (!blog) return res.status(404).json({ error: 'Blog post not found' });
     return res.json({ blog });
 }

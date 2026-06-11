@@ -20,6 +20,81 @@ function variantMarketFilter(market: Market): Prisma.VariantWhereInput {
     };
 }
 
+const KNOWN_SPICE_COLORS: Record<string, string> = {
+    'cinnamon': '#C58B58', // Warm Cinnamon
+    'pepper': '#2E2E2E',   // Charcoal Black
+    'tea': '#7C3030',      // Deep Amber/Terracotta
+    'turmeric': '#FFB000', // Golden Yellow
+    'cardamom': '#5F8575', // Sage Green
+    'clove': '#4A2F13',    // Clove Brown
+    'nutmeg': '#8A6240',   // Nutmeg Brown
+    'ginger': '#D2B48C',   // Ginger Sand
+};
+
+const BRAND_PALETTE = [
+    '#C58B58', // Warm Cinnamon
+    '#2E2E2E', // Charcoal Black
+    '#7C3030', // Deep Terracotta
+    '#5F8575', // Sage Green
+    '#FFB000', // Golden Yellow
+    '#4A2F13', // Clove Brown
+    '#8A6240', // Nutmeg Brown
+    '#D2B48C', // Ginger Sand
+    '#9B6A6C', // Muted Rose
+    '#4A6B82', // Slate Blue
+];
+
+function computeProductColor(name: string, slug: string): string {
+    const lowerName = name.toLowerCase();
+    const lowerSlug = slug.toLowerCase();
+
+    for (const [key, color] of Object.entries(KNOWN_SPICE_COLORS)) {
+        if (lowerName.includes(key) || lowerSlug.includes(key)) {
+            return color;
+        }
+    }
+
+    let hash = 0;
+    for (let i = 0; i < lowerSlug.length; i++) {
+        hash = lowerSlug.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % BRAND_PALETTE.length;
+    return BRAND_PALETTE[index]!;
+}
+
+async function enrichProductsWithRatingAvg<T extends { id: string }>(products: T[]): Promise<(T & { ratingAvg: number })[]> {
+    if (products.length === 0) return [];
+    const ids = products.map(p => p.id);
+    const stats = await prisma.review.groupBy({
+        by: ['productId'],
+        where: {
+            productId: { in: ids },
+            moderationStatus: 'APPROVED',
+        },
+        _avg: {
+            rating: true,
+        },
+    });
+
+    const avgMap = new Map<string, number>();
+    for (const stat of stats) {
+        if (stat._avg.rating !== null) {
+            avgMap.set(stat.productId, Math.round(Number(stat._avg.rating) * 10) / 10);
+        }
+    }
+
+    return products.map(p => ({
+        ...p,
+        ratingAvg: avgMap.get(p.id) ?? 0.0,
+    }));
+}
+
+async function enrichProductWithRatingAvg<T extends { id: string }>(product: T | null): Promise<(T & { ratingAvg: number }) | null> {
+    if (!product) return null;
+    const [enriched] = await enrichProductsWithRatingAvg([product]);
+    return enriched || null;
+}
+
 // ----------------------------------------------------------------
 // PRODUCT INCLUDES
 // Two versions: market-aware (public) and full (admin).
@@ -79,10 +154,11 @@ export async function listProducts(
         `;
         const ids = products.map((p) => p.id);
 
-        return prisma.product.findMany({
+        const items = await prisma.product.findMany({
             where: { id: { in: ids } },
             include: buildProductIncludes(market),
         });
+        return enrichProductsWithRatingAvg(items);
     }
 
     // Sort mapping
@@ -95,18 +171,19 @@ export async function listProducts(
         }
     })();
 
-    return prisma.product.findMany({
+    const items = await prisma.product.findMany({
         where,
         orderBy,
         take: limit + 1, // One extra to determine hasNextPage
         ...(cursor && { cursor: { id: cursor }, skip: 1 }),
         include: buildProductIncludes(market),
     });
+    return enrichProductsWithRatingAvg(items);
 }
 
 // --- Get single product by slug ---
 export async function getProductBySlug(slug: string, market: Market) {
-    return prisma.product.findFirst({
+    const product = await prisma.product.findFirst({
         where: {
             slug,
             status: 'ACTIVE',
@@ -122,11 +199,12 @@ export async function getProductBySlug(slug: string, market: Market) {
             },
         },
     });
+    return enrichProductWithRatingAvg(product);
 }
 
 // --- Featured products ---
 export async function getFeaturedProducts(market: Market, limit = 4) {
-    return prisma.product.findMany({
+    const products = await prisma.product.findMany({
         where: {
             featured: true,
             status: 'ACTIVE',
@@ -136,11 +214,12 @@ export async function getFeaturedProducts(market: Market, limit = 4) {
         orderBy: { orderItems: { _count: 'desc' } },
         take: limit,
     });
+    return enrichProductsWithRatingAvg(products);
 }
 
 // --- Bestsellers ---
 export async function getBestsellers(market: Market, limit = 8) {
-    return prisma.product.findMany({
+    const products = await prisma.product.findMany({
         where: {
             status: 'ACTIVE',
             ...marketFilter(market),
@@ -149,6 +228,7 @@ export async function getBestsellers(market: Market, limit = 8) {
         orderBy: { orderItems: { _count: 'desc' } },
         take: limit,
     });
+    return enrichProductsWithRatingAvg(products);
 }
 
 // --- Related products (same category, exclude current) ---
@@ -158,7 +238,7 @@ export async function getRelatedProducts(
     market: Market,
     limit = 6,
 ) {
-    return prisma.product.findMany({
+    const products = await prisma.product.findMany({
         where: {
             categoryId,
             id: { not: productId },
@@ -168,6 +248,7 @@ export async function getRelatedProducts(
         include: buildProductIncludes(market),
         take: limit,
     });
+    return enrichProductsWithRatingAvg(products);
 }
 
 // --- Autocomplete search (pg_trgm fuzzy matching) ---
@@ -197,19 +278,22 @@ export async function searchAutocomplete(
 // --- Create product (admin only) ---
 export async function createProduct(data: CreateProductInput) {
     const { variants, ...productData } = data;
+    const color = productData.color || computeProductColor(productData.name, productData.slug);
 
-    return prisma.product.create({
+    const product = await prisma.product.create({
         data: {
             ...productData,
+            color,
             variants: { create: variants },
         },
         include: adminProductIncludes,
     });
+    return enrichProductWithRatingAvg(product);
 }
 
 // --- Update product (admin only) ---
 export async function updateProduct(id: string, data: UpdateProductInput) {
-    return prisma.product.update({
+    const product = await prisma.product.update({
         where: { id },
         data: {
             ...(data.name && { name: data.name }),
@@ -217,9 +301,13 @@ export async function updateProduct(id: string, data: UpdateProductInput) {
             ...(data.categoryId && { categoryId: data.categoryId }),
             ...(data.featured !== undefined && { featured: data.featured }),
             ...(data.certifications && { certifications: data.certifications }),
+            ...(data.latin !== undefined && { latin: data.latin }),
+            ...(data.originLabel !== undefined && { originLabel: data.originLabel }),
+            ...(data.color !== undefined && { color: data.color }),
         },
         include: adminProductIncludes,
     });
+    return enrichProductWithRatingAvg(product);
 }
 
 // --- Soft delete (archive) product (admin only) ---
@@ -232,8 +320,9 @@ export async function archiveProduct(id: string) {
 
 // --- Admin: list ALL products across both markets ---
 export async function adminListProducts() {
-    return prisma.product.findMany({
+    const products = await prisma.product.findMany({
         include: adminProductIncludes,
         orderBy: { createdAt: 'desc' },
     });
+    return enrichProductsWithRatingAvg(products);
 }

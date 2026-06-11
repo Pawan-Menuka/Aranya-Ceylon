@@ -46,7 +46,7 @@ export async function createBlog(req: Request, res: Response) {
 }
 
 export async function updateBlog(req: Request, res: Response) {
-    const { id } = req.params;
+    const id = req.params.id!;
     const data = createBlogSchema.partial().parse(req.body);
 
     const before = await prisma.blog.findUnique({ where: { id } });
@@ -70,7 +70,7 @@ export async function updateBlog(req: Request, res: Response) {
 }
 
 export async function deleteBlog(req: Request, res: Response) {
-    const { id } = req.params;
+    const id = req.params.id!;
 
     const blog = await prisma.blog.findUnique({ where: { id } });
     if (!blog) return res.status(404).json({ error: 'Blog not found' });

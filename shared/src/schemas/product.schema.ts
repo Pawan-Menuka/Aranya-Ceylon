@@ -7,6 +7,9 @@ export const createProductSchema = z.object({
     categoryId: z.string().min(1),
     certifications: z.array(z.string()).default([]),
     featured: z.boolean().default(false),
+    latin: z.string().optional().nullable(),
+    originLabel: z.string().optional().nullable(),
+    color: z.string().optional().nullable(),
     variants: z.array(z.object({
         weight: z.number().int().positive(),
         price: z.number().positive(),

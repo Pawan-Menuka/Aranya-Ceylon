@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aranya Ceylon — Ceylon Cinnamon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Spectral:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="aranya.css" />
+<style>
+  html, body { margin: 0; background: var(--bg); }
+  /* clears the fixed navbar (utility strip 34 + bar 72) */
+  .pd-top { padding-top: 106px; }
+  .pd-hero { max-width: 1280px; margin: 0 auto; padding: 34px 40px 80px;
+    display: grid; grid-template-columns: minmax(0, 1.06fr) minmax(0, 1fr); gap: 64px; align-items: start; }
+  .pd-buybox { position: sticky; top: 130px; }
+  @media (max-width: 1040px) {
+    .pd-hero { grid-template-columns: 1fr; gap: 44px; }
+    .pd-buybox { position: static; }
+  }
+  /* floating market switcher (matches Products in Context) */
+  .mkt { position: fixed; right: 22px; bottom: 22px; z-index: 90; background: rgba(20,18,16,.88); backdrop-filter: blur(12px);
+    border: 1px solid rgba(253,250,245,.16); border-radius: 13px; padding: 8px; display: flex; gap: 6px; box-shadow: 0 12px 40px rgba(0,0,0,.4); }
+  .mkt b { font-family: var(--font-ui); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: rgba(253,250,245,.5); display: flex; align-items: center; padding: 0 10px; }
+  .mkt button { background: rgba(253,250,245,.06); color: rgba(253,250,245,.85); border: 1px solid rgba(253,250,245,.14); border-radius: 9px; padding: 9px 15px; cursor: pointer; font-family: var(--font-ui); font-size: 13px; font-weight: 700; }
+  .mkt button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .mkt button.on.local { background: var(--brand); border-color: var(--brand); }
+  /* floating product switcher (bottom-left) */
+  .prod-switch { position: fixed; left: 22px; bottom: 22px; z-index: 90; background: rgba(20,18,16,.88); backdrop-filter: blur(12px);
+    border: 1px solid rgba(253,250,245,.16); border-radius: 13px; padding: 10px 12px; box-shadow: 0 12px 40px rgba(0,0,0,.4); max-width: 280px; }
+  .prod-switch b { display: block; font-family: var(--font-ui); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: rgba(253,250,245,.5); margin-bottom: 9px; }
+  .prod-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .prod-switch button { display: inline-flex; align-items: center; gap: 7px; background: rgba(253,250,245,.06); color: rgba(253,250,245,.82);
+    border: 1px solid rgba(253,250,245,.14); border-radius: 999px; padding: 7px 12px; cursor: pointer; font-family: var(--font-ui); font-size: 12px; font-weight: 600; }
+  .prod-switch button.on { background: rgba(253,250,245,.96); color: #1A1A1A; border-color: transparent; font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="spice-data.js"></script>
+<script src="api.js"></script>
+<script src="cart-store.js"></script>
+<script type="text/babel" src="shared.jsx"></script>
+<script type="text/babel" src="cards.jsx"></script>
+<script type="text/babel" src="navbar.jsx"></script>
+<script type="text/babel" src="home-common.jsx"></script>
+<script type="text/babel" src="home-footer.jsx"></script>
+<script type="text/babel" src="cart-ui.jsx"></script>
+<script type="text/babel" src="product-detail.jsx"></script>
+<script type="text/babel" src="product-detail-2.jsx"></script>
+<style>
+  @keyframes pdShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  .pd-skel { background: linear-gradient(100deg, var(--surface) 30%, rgba(255,255,255,.6) 50%, var(--surface) 70%); background-size: 200% 100%; animation: pdShimmer 1.3s ease-in-out infinite; border-radius: 6px; }
+</style>
+<script type="text/babel">
+const { useState: usePdState, useEffect: usePdEffect } = React;
+
+/* derive a URL-safe slug from a spice object */
+function pdSlug(s) { return s.slug || s.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"); }
+
+/* read initial slug from ?product= param (may be a slug or a spice name) */
+function pdInitialSlug() {
+  try {
+    const q = new URLSearchParams(location.search).get("product");
+    if (q) return decodeURIComponent(q).trim().toLowerCase().replace(/\s+/g, "-");
+  } catch (e) {}
+  return pdSlug((window.SPICES || [])[0] || { name: "ceylon-cinnamon" });
+}
+
+/* async product hook — fetches from API, falls back to bundled SPICES */
+function useProductDetail(slug) {
+  const [state, setState] = usePdState({ spice: null, loading: true });
+  usePdEffect(() => {
+    if (!slug) return;
+    let alive = true;
+    setState((s) => ({ spice: s.spice, loading: true }));
+    window.AranyaAPI.getProduct(slug)
+      .then((r) => {
+        if (!alive) return;
+        if (r && r.product) { setState({ spice: r.product, loading: false }); return; }
+        const hit = (window.SPICES || []).find((s) => pdSlug(s) === slug) || (window.SPICES || [])[0];
+        setState({ spice: hit || null, loading: false });
+      })
+      .catch(() => {
+        if (!alive) return;
+        const hit = (window.SPICES || []).find((s) => pdSlug(s) === slug) || (window.SPICES || [])[0];
+        setState({ spice: hit || null, loading: false });
+      });
+    return () => { alive = false; };
+  }, [slug]);
+  return state;
+}
+
+function ProductDetailPage() {
+  const cart = useCart();
+  const [market, setMarket] = useMarket();
+  const [slug, setSlug] = usePdState(pdInitialSlug);
+  const [cartOpen, setCartOpen] = usePdState(false);
+  const [signInOpen, setSignInOpen] = usePdState(false);
+  const { spice, loading } = useProductDetail(slug);
+
+  usePdEffect(() => { window.__openCart = () => setCartOpen(true); return () => { delete window.__openCart; }; }, []);
+  usePdEffect(() => { if (!loading) window.scrollTo({ top: 0, behavior: "auto" }); }, [slug]);
+
+  const switchTo = (s) => {
+    const newSlug = pdSlug(s);
+    setSlug(newSlug);
+    try { history.replaceState(null, "", "Product Detail.html?product=" + encodeURIComponent(newSlug)); } catch (e) {}
+  };
+
+  return (
+    <div className="aranya">
+      <AranyaNavbar market={market} heroMode={false} cartCount={cart.count()} onCartClick={() => setCartOpen(true)} onAccountClick={() => setSignInOpen(true)} />
+
+      {loading ? (
+        <div className="pd-top" style={{ minHeight: "70vh" }}>
+          <div style={{ maxWidth: 1280, margin: "0 auto", padding: "34px 40px 80px", display: "grid", gridTemplateColumns: "minmax(0,1.06fr) minmax(0,1fr)", gap: 64 }}>
+            <div style={{ display: "flex", gap: 16 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, width: 78 }}>
+                {[0,1,2,3].map((k) => <div key={k} className="pd-skel" style={{ width: 78, height: 78 }} />)}
+              </div>
+              <div className="pd-skel" style={{ flex: 1, borderRadius: 8, minHeight: 480 }} />
+            </div>
+            <div style={{ paddingTop: 24 }}>
+              <div className="pd-skel" style={{ height: 13, width: "35%", marginBottom: 16 }} />
+              <div className="pd-skel" style={{ height: 56, width: "80%", marginBottom: 10 }} />
+              <div className="pd-skel" style={{ height: 18, width: "45%", marginBottom: 22 }} />
+              <div className="pd-skel" style={{ height: 48, width: "55%", marginBottom: 22 }} />
+              <div style={{ display: "flex", gap: 10 }}>
+                {["50g","100g","250g"].map((w) => <div key={w} className="pd-skel" style={{ flex: 1, height: 64, borderRadius: 7 }} />)}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : spice ? (
+        <React.Fragment>
+          <div className="pd-top">
+            <Breadcrumb spice={spice} />
+            <div className="pd-hero">
+              <Gallery spice={spice} />
+              <div className="pd-buybox">
+                <BuyBox spice={spice} market={market} />
+              </div>
+            </div>
+          </div>
+          <ForestStory spice={spice} />
+          <FlavourProfile spice={spice} />
+          <Pairings spice={spice} />
+          <ReviewsBlock spice={spice} />
+          <Related spice={spice} market={market} />
+        </React.Fragment>
+      ) : (
+        <div style={{ height: "60vh", display: "flex", alignItems: "center", justifyContent: "center", paddingTop: 106 }}>
+          <p style={{ fontFamily: "var(--font-ui)", fontSize: 16, color: "var(--muted)" }}>Product not found.</p>
+        </div>
+      )}
+
+      <Newsletter />
+      <Footer market={market} setMarket={setMarket} />
+
+      <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} />
+      <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
+
+      {/* floating product switcher — uses bundled SPICES for quick demo nav */}
+      <div className="prod-switch">
+        <b>Product</b>
+        <div className="prod-pills">
+          {(window.SPICES || []).map((s) => (
+            <button key={s.name} className={pdSlug(s) === slug ? "on" : ""} onClick={() => switchTo(s)} title={s.name}>
+              <span style={{ width: 8, height: 8, borderRadius: 9, background: s.color, flex: "0 0 auto" }} />
+              {s.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mkt">
+        <b>Market</b>
+        <button className={market === "intl" ? "on" : ""} onClick={() => setMarket("intl")}>USD · Intl</button>
+        <button className={"local " + (market === "local" ? "on" : "")} onClick={() => setMarket("local")}>LKR · Local</button>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<ProductDetailPage />);
+</script>
+</body>
+</html>
