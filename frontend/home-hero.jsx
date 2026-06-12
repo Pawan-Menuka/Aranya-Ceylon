@@ -1,11 +1,12 @@
-/* Aranya Ceylon — homepage hero: 300vh pinned canvas frame-sequence.
+/* Aranya Ceylon — homepage hero: 500vh pinned canvas frame-sequence.
    Frames at aranyaHero/hero_wm/desktop/frame_0001.jpg … frame_0192.jpg
    and       aranyaHero/hero_wm/mobile/frame_0001.jpg  … frame_0192.jpg  */
 
 const { useState: hhState, useEffect: hhEffect, useRef: hhRef } = React;
 
 const HH_TOTAL      = 192;
-const HH_SCROLL_MUL = 3;   // hero pins for 3× viewport height of scroll
+const HH_SCROLL_MUL = 5;     // was 3 — more scroll room, slower pace
+const HH_SMOOTHING  = 0.08;  // lower = smoother/floatier, higher = snappier
 
 function hhPad(n) { return String(n).padStart(4, "0"); }
 function hhPath(idx, mobile) {
@@ -33,7 +34,6 @@ function HomeHero() {
   const ctxRef          = hhRef(null);
   const imagesRef       = hhRef([]);      // preloaded Image objects
   const currentFrameRef = hhRef(0);       // last rendered frame index
-  const rafRef          = hhRef(null);    // rAF handle
 
   const [firstLoaded, setFirstLoaded] = hhState(false);
   const [isMobile,    setIsMobile]    = hhState(false);
@@ -109,27 +109,41 @@ function HomeHero() {
     };
   }, [isMobile]);
 
-  /* ── Scroll handler — updates frame + progress ────────────────────────── */
+  /* ── Scroll handler — eased frame + progress ──────────────────────────────
+     Scroll only sets a target; a rAF loop lerps the rendered frame toward it
+     for a smooth, premium glide (decoupled from scroll-event cadence). The
+     loop drives BOTH the canvas frame and the `p` progress state (so the
+     overlay/vignette fades ease too), and HALTS once settled so React isn't
+     re-rendered at 60fps forever — it restarts on the next scroll. */
   hhEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
 
-    const onScroll = () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = null;
-        const span = wrap.offsetHeight - window.innerHeight;
-        const prog = Math.min(1, Math.max(0, -wrap.getBoundingClientRect().top / Math.max(1, span)));
-        setP(prog);
+    let targetFrame   = 0;     // where scroll says we should be
+    let renderedFrame = 0;     // where we actually are (float)
+    let raf           = null;
+    let running       = false;
 
-        const frameIdx = Math.min(Math.floor(prog * (HH_TOTAL - 1)), HH_TOTAL - 1);
-        if (frameIdx === currentFrameRef.current) return;
+    const readScroll = () => {
+      const span = wrap.offsetHeight - window.innerHeight;
+      const prog = Math.min(1, Math.max(0, -wrap.getBoundingClientRect().top / Math.max(1, span)));
+      targetFrame = prog * (HH_TOTAL - 1);
+      if (!running) { running = true; raf = requestAnimationFrame(tick); }
+    };
+
+    const tick = () => {
+      renderedFrame += (targetFrame - renderedFrame) * HH_SMOOTHING;
+      if (Math.abs(targetFrame - renderedFrame) < 0.01) renderedFrame = targetFrame; // snap when close
+
+      // Progress (eased) drives the overlay/vignette/scroll-indicator fades
+      setP(renderedFrame / (HH_TOTAL - 1));
+
+      const frameIdx = Math.round(renderedFrame);
+      if (frameIdx !== currentFrameRef.current) {
         currentFrameRef.current = frameIdx;
-
         const img    = imagesRef.current[frameIdx];
         const canvas = canvasRef.current;
         const ctx    = ctxRef.current;
-
         if (img && img.complete && canvas && ctx) {
           hhDraw(img, canvas, ctx);
         } else if (canvas && ctx) {
@@ -139,14 +153,17 @@ function HomeHero() {
             if (fb && fb.complete) { hhDraw(fb, canvas, ctx); break; }
           }
         }
-      });
+      }
+
+      if (renderedFrame === targetFrame) { running = false; raf = null; return; } // settled → idle
+      raf = requestAnimationFrame(tick);
     };
 
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll(); // seed on mount
+    window.addEventListener("scroll", readScroll, { passive: true });
+    readScroll(); // seed + start on mount
     return () => {
-      window.removeEventListener("scroll", onScroll);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      window.removeEventListener("scroll", readScroll);
+      if (raf) cancelAnimationFrame(raf);
     };
   }, []);
 
