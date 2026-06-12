@@ -1,30 +1,28 @@
 /**
- * Tests for checkout market/currency re-validation (KNOWN_ISSUES #19).
- *
- * A variant's market/currency can change while a cart sits. Checkout must
- * reject cross-market or mismatched-currency lines (409) and only let a
- * clean, same-currency cart through to a payment intent.
+ * Tests for checkout: market re-validation (#19), guest checkout (#17), and
+ * stub vs live payment routing.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 const store = vi.hoisted(() => ({
     cart: null as any,
     createdOrder: { id: 'order_1' },
+    lastOrderData: null as any,
 }));
 
 vi.mock('../index.js', () => ({
     prisma: {
         cart: { findUnique: async () => store.cart },
         order: {
-            create: async () => store.createdOrder,
+            create: async (args: any) => { store.lastOrderData = args.data; return store.createdOrder; },
             update: async () => store.createdOrder,
+            findUnique: async () => store.createdOrder,
         },
         address: { create: async () => ({}) },
         user: { findUnique: async () => ({ name: 'Test', email: 't@e.com' }) },
     },
 }));
 
-// Stubbed services (the real Stripe service needs an API key at import).
 vi.mock('../services/stripe.service.js', () => ({
     createPaymentIntent: vi.fn(async () => ({ id: 'pi_1', client_secret: 'cs_1' })),
 }));
@@ -37,8 +35,10 @@ vi.mock('../services/cart.service.js', () => ({
         couponId: null, currency: 'USD',
     })),
 }));
+vi.mock('./webhook.controller.js', () => ({ confirmOrderPaid: vi.fn() }));
 
-import { createIntent } from './checkout.controller.js';
+import { createIntent, stubComplete } from './checkout.controller.js';
+import { confirmOrderPaid } from './webhook.controller.js';
 
 function mockRes() {
     const res: any = {};
@@ -49,12 +49,15 @@ function mockRes() {
     return res;
 }
 
-const reqBody = {
-    shippingAddress: { line1: '1 St', city: 'NYC', country: 'US', postalCode: '10001' },
-    shippingMethod: 'STANDARD',
-    saveAddress: false,
-};
-const req = () => ({ user: { userId: 'user_1' }, market: 'INTERNATIONAL', body: reqBody }) as any;
+const intlAddress = { line1: '1 St', city: 'NYC', country: 'US', postalCode: '10001' };
+const userReq = ({ body = {}, ...rest }: any = {}) =>
+    ({
+        user: { userId: 'user_1' },
+        market: 'INTERNATIONAL',
+        cookies: {},
+        ...rest,
+        body: { shippingAddress: intlAddress, shippingMethod: 'STANDARD', saveAddress: false, ...body },
+    }) as any;
 
 function cartWith(variant: { market: string; currency: string }) {
     return {
@@ -69,38 +72,100 @@ function cartWith(variant: { market: string; currency: string }) {
 
 beforeEach(() => {
     store.cart = cartWith({ market: 'INTERNATIONAL', currency: 'USD' });
+    store.lastOrderData = null;
+    vi.unstubAllEnvs(); // default → stub payments
+    vi.clearAllMocks();
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe('createIntent — #19 market re-validation', () => {
-    it('rejects a cross-market item (variant now LOCAL in an INTL session)', async () => {
+    it('rejects a cross-market item', async () => {
         store.cart = cartWith({ market: 'LOCAL', currency: 'LKR' });
         const res = mockRes();
-        await createIntent(req(), res);
+        await createIntent(userReq(), res);
         expect(res.statusCode).toBe(409);
         expect(res.body.items).toEqual([{ productId: 'p1', variantId: 'v1' }]);
     });
 
-    it('rejects a currency mismatch even when the market tag still fits', async () => {
-        // market BOTH passes the market check, but LKR currency in a USD store must not.
+    it('rejects a currency mismatch even when the market tag fits', async () => {
         store.cart = cartWith({ market: 'BOTH', currency: 'LKR' });
         const res = mockRes();
-        await createIntent(req(), res);
+        await createIntent(userReq(), res);
         expect(res.statusCode).toBe(409);
     });
 
-    it('lets a matching INTERNATIONAL/USD cart through to a Stripe intent', async () => {
-        store.cart = cartWith({ market: 'INTERNATIONAL', currency: 'USD' });
+    it('lets a matching INTERNATIONAL/USD cart through', async () => {
         const res = mockRes();
-        await createIntent(req(), res);
+        await createIntent(userReq(), res);
         expect(res.statusCode).toBe(200);
+        expect(res.body.orderId).toBe('order_1');
+    });
+});
+
+describe('createIntent — #17 guest checkout', () => {
+    const guestReq = (body: any = {}) =>
+        ({ user: undefined, market: 'INTERNATIONAL', cookies: { guestCartToken: 'g1' }, body: { shippingAddress: intlAddress, shippingMethod: 'STANDARD', ...body } }) as any;
+
+    it('rejects a guest with no email', async () => {
+        const res = mockRes();
+        await createIntent(guestReq(), res);
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toMatch(/email/i);
+    });
+
+    it('creates a guest order (userId null + guestEmail) when email is provided', async () => {
+        const res = mockRes();
+        await createIntent(guestReq({ guestEmail: 'guest@example.com' }), res);
+        expect(res.statusCode).toBe(200);
+        expect(store.lastOrderData.userId).toBeNull();
+        expect(store.lastOrderData.guestEmail).toBe('guest@example.com');
+    });
+
+    it('does not store guestEmail for an authenticated user', async () => {
+        const res = mockRes();
+        await createIntent(userReq({ body: { guestEmail: 'ignored@example.com' } }), res);
+        expect(store.lastOrderData.userId).toBe('user_1');
+        expect(store.lastOrderData.guestEmail).toBeNull();
+    });
+});
+
+describe('createIntent — payment mode routing', () => {
+    it('returns gateway "stub" by default (no PAYMENTS_MODE)', async () => {
+        const res = mockRes();
+        await createIntent(userReq(), res);
+        expect(res.body.gateway).toBe('stub');
+    });
+
+    it('routes INTERNATIONAL to Stripe in live mode', async () => {
+        vi.stubEnv('PAYMENTS_MODE', 'live');
+        const res = mockRes();
+        await createIntent(userReq(), res);
         expect(res.body.gateway).toBe('stripe');
         expect(res.body.clientSecret).toBe('cs_1');
     });
 
-    it('accepts a BOTH/USD variant in an INTERNATIONAL session', async () => {
-        store.cart = cartWith({ market: 'BOTH', currency: 'USD' });
+    it('routes LOCAL to PayHere in live mode', async () => {
+        vi.stubEnv('PAYMENTS_MODE', 'live');
+        store.cart = cartWith({ market: 'LOCAL', currency: 'LKR' });
         const res = mockRes();
-        await createIntent(req(), res);
+        await createIntent(userReq({ market: 'LOCAL', body: { shippingAddress: { ...intlAddress, country: 'LK' } } }), res);
+        expect(res.body.gateway).toBe('payhere');
+    });
+});
+
+describe('stubComplete', () => {
+    it('confirms the order via confirmOrderPaid in stub mode', async () => {
+        const res = mockRes();
+        await stubComplete({ body: { orderId: 'order_1' } } as any, res);
         expect(res.statusCode).toBe(200);
+        expect(confirmOrderPaid).toHaveBeenCalledWith('order_1', expect.stringContaining('STUB-'), 'Stub');
+    });
+
+    it('is disabled (404) in live mode', async () => {
+        vi.stubEnv('PAYMENTS_MODE', 'live');
+        const res = mockRes();
+        await stubComplete({ body: { orderId: 'order_1' } } as any, res);
+        expect(res.statusCode).toBe(404);
+        expect(confirmOrderPaid).not.toHaveBeenCalled();
     });
 });

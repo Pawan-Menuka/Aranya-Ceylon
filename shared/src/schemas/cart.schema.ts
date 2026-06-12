@@ -28,6 +28,9 @@ export const checkoutSchema = z.object({
     // PayHere needs customer name + phone for the payment page
     customerName: z.string().min(1).optional(),
     customerPhone: z.string().min(1).optional(),
+    // Required for guest checkout (no authenticated user) — where to send the
+    // order confirmation. The controller enforces its presence for guests.
+    guestEmail: z.string().email().optional(),
 });
 
 export type AddToCartInput = z.infer<typeof addToCartSchema>;
