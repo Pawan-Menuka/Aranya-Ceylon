@@ -1,9 +1,17 @@
+import { cache } from "react";
 import { apiFetch } from "./client";
 import { formatPrice } from "../format";
 import type { Market } from "../market";
 import { currencyForMarket } from "../market";
 import { DEMO_PRODUCTS } from "../demo-data";
-import type { ApiProduct, ApiVariant, ProductListResponse, ProductView } from "./types";
+import type {
+  ApiProduct,
+  ApiVariant,
+  ProductListResponse,
+  ProductView,
+  ProductDetailView,
+  SingleProductResponse,
+} from "./types";
 
 // Brand palette fallback for products with no `color` (ported from api.js).
 const PALETTE = ["#B5651D", "#7C9A5A", "#6B4226", "#A9683C", "#3C3A36", "#D99A1C"];
@@ -62,6 +70,68 @@ export interface CatalogResult {
   market: Market;
   live: boolean; // false = served from demo fallback
 }
+
+// Backend single Product → detail view. Variants are filtered to the active
+// currency and sorted by weight; reviews mapped for display.
+export function mapProductDetail(p: ApiProduct, market: Market): ProductDetailView {
+  const currency = currencyForMarket(market);
+  const variants = (p.variants ?? [])
+    .filter((v) => v.currency === currency)
+    .sort((a, b) => a.weight - b.weight)
+    .map((v) => ({
+      id: v.id,
+      weight: v.weight,
+      label: `${v.weight}g`,
+      price: formatPrice(v.price, currency),
+      priceAmount: Number(v.price),
+      stock: v.stock,
+      sku: v.sku,
+    }));
+
+  return {
+    id: p.id,
+    slug: p.slug,
+    name: p.name,
+    latin: p.latin ?? "",
+    origin: p.originLabel ?? "Ceylon, Sri Lanka",
+    description: p.description ?? "",
+    color: p.color ?? PALETTE[hashIdx(p.slug || p.name, PALETTE.length)]!,
+    category: p.category?.name ?? "Spices",
+    certifications: p.certifications ?? [],
+    badge: badgeFor(p),
+    rating: p.ratingAvg ?? 0,
+    reviewCount: p._count?.reviews ?? (p.reviews?.length ?? 0),
+    currency,
+    variants,
+    images: (p.images ?? []).map((img) => ({ url: img.url, alt: img.altText ?? p.name })),
+    reviews: (p.reviews ?? []).map((r) => ({
+      id: r.id,
+      author: r.user?.name ?? "Verified buyer",
+      rating: r.rating,
+      title: r.title,
+      body: r.body,
+      date: r.createdAt,
+    })),
+  };
+}
+
+// Wrapped in React cache() so generateMetadata and the page component share a
+// single fetch per request (apiFetch is no-store, so fetch-level dedup is off).
+export const getProductBySlug = cache(
+  async (slug: string): Promise<{ product: ProductDetailView; market: Market } | null> => {
+    try {
+      const res = await apiFetch(`/products/${encodeURIComponent(slug)}`);
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as SingleProductResponse;
+      if (!data.product) return null;
+      return { product: mapProductDetail(data.product, data.market), market: data.market };
+    } catch (err) {
+      console.warn(`[product ${slug}] fetch failed:`, (err as Error).message);
+      return null;
+    }
+  },
+);
 
 export async function getProducts(params: { limit?: number } = {}): Promise<CatalogResult> {
   const qs = params.limit ? `?limit=${params.limit}` : "";
