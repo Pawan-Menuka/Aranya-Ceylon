@@ -4,8 +4,9 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { PrismaClient } from '@prisma/client';
-import { Pool } from 'pg';
-import { PrismaPg } from '@prisma/adapter-pg';
+import { neonConfig } from '@neondatabase/serverless';
+import { PrismaNeon } from '@prisma/adapter-neon';
+import ws from 'ws';
 import { SHARED_VERSION } from '@aranya/shared';
 import authRoutes from './routes/auth.routes.js';
 import productRoutes from './routes/product.routes.js';
@@ -30,20 +31,17 @@ if (process.env.NODE_ENV === 'production') {
     app.set('trust proxy', 1);
 }
 
-// 1. Set up the connection pool for Neon
-// rejectUnauthorized: true verifies Neon's TLS certificate chain (#11).
-// Neon serves publicly-trusted certs, so this validates against Node's CA
-// store and prevents man-in-the-middle on the DB connection. The previous
-// `false` accepted ANY certificate — encrypted but unauthenticated.
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: true
-    }
-});
+// 1. Connect via Neon's serverless driver (#28). The previous node-postgres
+// persistent Pool against Neon's pooler dropped connections ("Server has
+// closed the connection" / P1017) — fine at boot, dead by the first query.
+// The serverless driver is built for Neon + serverless hosts (Vercel) and
+// recovers connections transparently. It always encrypts to Neon, so it also
+// covers the TLS-verification concern (#11). In Node we must supply a
+// WebSocket implementation (built-in on edge runtimes).
+neonConfig.webSocketConstructor = ws;
 
-// 2. Create the Prisma 7 Adapter for pg
-const adapter = new PrismaPg(pool as any);
+// 2. Prisma 7 Neon adapter — manages its own connection pool internally.
+const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL });
 
 export const prisma = new PrismaClient({
     adapter,
@@ -148,9 +146,8 @@ connectDB().then(() => {
         console.log(`\n${signal} received — shutting down gracefully…`);
         server.close(async () => {
             try {
-                await prisma.$disconnect();
-                await pool.end();
-                console.log('👋 Closed HTTP server and database pool');
+                await prisma.$disconnect(); // closes the Neon adapter's pool
+                console.log('👋 Closed HTTP server and database connection');
                 process.exit(0);
             } catch (err) {
                 console.error('Error during shutdown:', err);

@@ -1,3 +1,6 @@
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
 /** @type {import('next').NextConfig} */
 
 // Image hosts are allow-listed for next/image. Hero frames + product images
@@ -15,6 +18,9 @@ if (assetsHost) {
 const nextConfig = {
   reactStrictMode: true,
   images: { remotePatterns },
+  // Monorepo: point tracing at the repo root so Next picks the right lockfile
+  // and traces standalone output correctly (silences the multi-lockfile warning).
+  outputFileTracingRoot: path.join(path.dirname(fileURLToPath(import.meta.url)), ".."),
 };
 
 export default nextConfig;
