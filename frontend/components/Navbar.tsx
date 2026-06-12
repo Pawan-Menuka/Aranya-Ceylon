@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Market } from "@/lib/market";
 import { MarketSwitcher } from "./MarketSwitcher";
+import { CartButton } from "./CartButton";
 
 // Storefront navbar shell — solid forest bar (heroMode/auto-hide come later).
 // Light text, market switcher drives currency. See frontend-legacy/CLAUDE.md.
@@ -38,7 +39,10 @@ export function Navbar({ market }: { market: Market }) {
           <NavLink href="/about">About</NavLink>
         </div>
 
-        <MarketSwitcher current={market} />
+        <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+          <MarketSwitcher current={market} />
+          <CartButton />
+        </div>
       </nav>
     </header>
   );

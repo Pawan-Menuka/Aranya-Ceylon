@@ -108,7 +108,7 @@ export default async function ProductDetailPage({
           )}
 
           <div style={{ marginTop: 8 }}>
-            <VariantPicker variants={product.variants} market={market} />
+            <VariantPicker productId={product.id} variants={product.variants} market={market} />
           </div>
         </div>
       </div>
