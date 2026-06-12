@@ -65,6 +65,50 @@ export interface SingleProductResponse {
   market: Market;
 }
 
+// ── Cart (GET /cart response) ───────────────────────────────────────────
+export interface ApiCartItem {
+  id: string;
+  quantity: number;
+  productId: string;
+  variantId: string;
+  product: { name: string; slug: string; images: ApiImage[] };
+  variant: { id: string; weight: number; price: string; currency: Currency; market: VariantMarket };
+}
+
+export interface ApiCart {
+  id: string;
+  userId: string | null;
+  guestToken: string | null;
+  couponId: string | null;
+  items: ApiCartItem[];
+}
+
+export interface CartResponse {
+  cart: ApiCart;
+  market: Market;
+}
+
+// Client-facing cart view (adapter output, cents-correct).
+export interface CartItemView {
+  id: string;
+  name: string;
+  slug: string;
+  weight: number;
+  qty: number;
+  unitPrice: string; // formatted
+  lineTotal: string; // formatted
+  imageUrl: string | null;
+  color: string;
+}
+
+export interface CartView {
+  items: CartItemView[];
+  count: number; // total quantity
+  subtotal: string; // formatted
+  subtotalCents: number;
+  currency: "LKR" | "USD";
+}
+
 export interface ProductListResponse {
   items: ApiProduct[];
   nextCursor: string | null;
