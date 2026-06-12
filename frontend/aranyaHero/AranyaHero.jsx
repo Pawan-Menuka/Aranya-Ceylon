@@ -38,7 +38,6 @@ export default function AranyaHero() {
   const canvasRef = useRef(null);    // canvas element
   const imagesRef = useRef([]);      // preloaded Image objects
   const currentFrameRef = useRef(0); // last rendered frame index
-  const rafRef = useRef(null);       // requestAnimationFrame handle
   const ctxRef = useRef(null);       // canvas 2d context
 
   const [firstFrameLoaded, setFirstFrameLoaded] = useState(false);
