@@ -21,7 +21,8 @@ import { useEffect, useRef, useState } from "react";
 
 // ─── Config ────────────────────────────────────────────────────────────────
 const TOTAL_FRAMES = 192;
-const SCROLL_MULTIPLIER = 3; // hero pins for 3× viewport height of scroll
+const SCROLL_MULTIPLIER = 5;   // was 3 — more scroll room, slower pace
+const SMOOTHING = 0.08;        // lower = smoother/floatier, higher = snappier
 
 // Pad frame number to 4 digits: 1 → "0001"
 const pad = (n) => String(n).padStart(4, "0");
@@ -37,7 +38,6 @@ export default function AranyaHero() {
   const canvasRef = useRef(null);    // canvas element
   const imagesRef = useRef([]);      // preloaded Image objects
   const currentFrameRef = useRef(0); // last rendered frame index
-  const rafRef = useRef(null);       // requestAnimationFrame handle
   const ctxRef = useRef(null);       // canvas 2d context
 
   const [firstFrameLoaded, setFirstFrameLoaded] = useState(false);
@@ -140,44 +140,44 @@ export default function AranyaHero() {
     const section = sectionRef.current;
     if (!section) return;
 
+    let targetFrame = 0;    // where scroll says we should be
+    let renderedFrame = 0;  // where we actually are (float)
+    let running = true;
+
     const onScroll = () => {
       const rect = section.getBoundingClientRect();
       const sectionHeight = section.offsetHeight - window.innerHeight;
-      const scrolled = -rect.top;
-      const progress = Math.max(0, Math.min(1, scrolled / sectionHeight));
-      const frameIndex = Math.min(
-        Math.floor(progress * (TOTAL_FRAMES - 1)),
-        TOTAL_FRAMES - 1
-      );
+      const progress = Math.max(0, Math.min(1, -rect.top / sectionHeight));
+      targetFrame = progress * (TOTAL_FRAMES - 1);
+    };
 
-      if (frameIndex === currentFrameRef.current) return;
-      currentFrameRef.current = frameIndex;
+    // Continuous render loop — glides toward target instead of jumping
+    const tick = () => {
+      if (!running) return;
 
-      // rAF to avoid painting outside browser paint cycle
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(() => {
+      // Lerp: move a fraction of the remaining distance each frame
+      renderedFrame += (targetFrame - renderedFrame) * SMOOTHING;
+
+      const frameIndex = Math.round(renderedFrame);
+      if (frameIndex !== currentFrameRef.current) {
+        currentFrameRef.current = frameIndex;
         const img = imagesRef.current[frameIndex];
         const canvas = canvasRef.current;
         const ctx = ctxRef.current;
         if (img?.complete && canvas && ctx) {
           drawFrame(img, canvas, ctx);
-        } else if (img && canvas && ctx) {
-          // Frame not ready yet — find closest loaded frame
-          for (let offset = 1; offset < 10; offset++) {
-            const fallback = imagesRef.current[Math.max(0, frameIndex - offset)];
-            if (fallback?.complete) {
-              drawFrame(fallback, canvas, ctx);
-              break;
-            }
-          }
         }
-      });
+      }
+      requestAnimationFrame(tick);
     };
 
     window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    requestAnimationFrame(tick);
+
     return () => {
+      running = false;
       window.removeEventListener("scroll", onScroll);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
   }, []);
 

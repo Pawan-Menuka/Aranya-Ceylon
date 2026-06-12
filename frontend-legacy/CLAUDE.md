@@ -36,9 +36,22 @@ Option B styling (glassy forest overlay) + auto-hide behaviour.
   Photo-forward, name overlaid on image, slide-up actions. Use selectively, never for whole grids.
 
 ### Hero (homepage)
-Scroll-driven 300vh pinned frame-sequence (192 frames), dark #1A1A1A canvas,
+Scroll-driven pinned frame-sequence (192 frames), dark #1A1A1A canvas,
 ARANYA/CEYLON brand overlay + scroll indicator. Navbar uses heroMode. See `Hero Scroll Prototype.html`.
 (Frames are user-supplied; prototype simulates them with one frame + scroll transforms.)
+
+**Render motion (canonical):** scroll only sets a *target* frame; a continuous rAF loop **lerps** the
+rendered frame toward it (`renderedFrame += (target − rendered) × SMOOTHING`), decoupling render cadence
+from scroll-event firing for a smooth, premium glide. Tunables: `SCROLL_MULTIPLIER` (scroll room / pace)
+and `SMOOTHING` (lower = floatier).
+
+**Two implementations — both on the lerp loop (in sync):**
+- `aranyaHero/AranyaHero.jsx` — Next-ready standalone component (`"use client"`, `/hero/desktop|mobile`
+  paths). 5× scroll, lerp SMOOTHING 0.08.
+- `home-hero.jsx` → `HomeHero` — the component the current CDN prototype homepage renders
+  (`aranyaHero/hero_wm/...` paths). Now 5× + eased lerp loop too; its loop also drives the `p` progress
+  state (overlay/vignette/scroll-indicator fades) and self-halts when settled to avoid 60fps re-renders.
+  In the Next port, prefer consolidating onto a single `AranyaHero`.
 
 ## Key reference files
 - `Navbar.html` — canonical navbar on cream, both markets
@@ -58,7 +71,7 @@ Category (full-bleed editorial tiles, image-slots) → Story band (forest green,
 Newsletter (surface, no popup) → Footer (forest mega).
 - Background rhythm: cream home base, forest-green story + footer, near-black heritage, amber spark only.
 - `home-common.jsx`: Reveal (scroll-reveal, reduced-motion + in-view + 2.5s failsafe), Liyawel motif, Eyebrow.
-- `home-hero.jsx`: HomeHero (300vh frame-sequence; set USE_REAL_FRAMES + FRAME_SRC for real frames), MarketStrip.
+- `home-hero.jsx`: HomeHero (pinned frame-sequence; set USE_REAL_FRAMES + FRAME_SRC for real frames), MarketStrip. Now on the canonical 5× eased lerp loop (see Hero section above).
 - `home-sections.jsx`: CategoryTiles, StoryBand, Bestsellers. `home-footer.jsx`: Heritage, Newsletter, Footer.
 - Real photos drop into <image-slot> (image-slot.js): cat-cinnamon/whole/ground/cardamom/gift, story-sourcing.
 - KNOWN: glass nav + reveal sections render fine in real browsers; in-iframe pixel-capture drops

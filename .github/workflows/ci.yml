@@ -38,6 +38,9 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Build frontend
+        run: pnpm --filter @aranya/frontend build
+
       - name: Validate Prisma schema
         run: pnpm --filter @aranya/backend exec prisma validate
 

@@ -60,9 +60,10 @@ is checked at apply/checkout, so under heavy concurrent use of a tightly-limited
 redemptions could slip through before the count catches up. Acceptable for launch; a hard cap would
 need reservation logic. The math itself (#7) is exact.
 
-**Still open:** #17 (guest checkout — feature, only if accounts aren't required), F2–F7 (frontend
-Next.js port — the large remaining effort), plus the feature roadmap. Every high- and medium-severity
-backend issue from the original review is now resolved.
+**Still open:** #17 (guest checkout — feature, only if accounts aren't required), #28 (Neon stale
+connections — found during verification, needs an approach decision), F2–F7 (frontend Next.js port — the
+large remaining effort), plus the feature roadmap. Every high- and medium-severity issue from the
+original review is now resolved.
 
 ---
 
@@ -421,6 +422,28 @@ with `seed-catalog.ts` does the same job without an HTTP surface.
 *(For the record, the rest of the uncommitted backend work is solid: `latin`/`originLabel`/`color` on
 Product matching the frontend adapter, the `ratingAvg` enrichment via a single `groupBy`, deterministic
 brand-palette color fallback, and the dual-market seed catalog with per-market packaging. Keep all of it.)*
+
+---
+
+## 🟠 OPEN — #28: Stale DB connections against Neon serverless (found during verification)
+
+**Where:** `backend/src/index.ts` — the `pg` `Pool` + `@prisma/adapter-pg`.
+
+**What's observed:** the server boots and connects fine, but after Neon's compute auto-suspends on idle,
+the `pg` pool hands out **dead connections**. The next query (the `/health` `SELECT 1`, and the
+every-minute `blog.findMany` cron) fails with `P1017 / "Server has closed the connection" /
+ConnectionClosed`, so `/health` returns 503 and cron logs errors until traffic forces fresh connections.
+This is pre-existing infra behaviour — **not** caused by the TLS change (#11): the initial connect
+succeeded over verified TLS.
+
+**Why it matters:** on a real PaaS, low-traffic periods make the app look unhealthy and spam cron errors.
+
+**Fix options (needs an approach decision):**
+- Best: use Neon's driver (`@neondatabase/serverless`) instead of node-postgres for serverless-aware
+  connection handling.
+- Or tune the pool: low `idleTimeoutMillis` (close idle clients before Neon does) + `keepAlive`, and
+  make `/health` retry once on `P1017`.
+- Make cron jobs tolerant of cold starts (they already catch errors; consider a connectivity check).
 
 ---
 
