@@ -13,11 +13,11 @@
     },
     "dependencies": {
         "@aranya/shared": "workspace:*",
+        "@neondatabase/serverless": "^1.1.0",
         "@node-rs/bcrypt": "^1.10.7",
         "@paralleldrive/cuid2": "^3.3.0",
-        "@prisma/adapter-pg": "^7.5.0",
+        "@prisma/adapter-neon": "^7.8.0",
         "@prisma/client": "^7.5.0",
-        "@types/pg": "^8.20.0",
         "cloudinary": "^2.9.0",
         "cookie-parser": "^1.4.7",
         "cors": "^2.8.5",
@@ -28,9 +28,9 @@
         "jose": "^6.2.2",
         "multer": "^2.1.1",
         "node-cron": "^4.2.1",
-        "pg": "^8.20.0",
         "resend": "^6.9.4",
         "stripe": "^21.0.0",
+        "ws": "^8.21.0",
         "zod": "^3.23.8"
     },
     "prisma": {
@@ -44,6 +44,7 @@
         "@types/multer": "^2.1.0",
         "@types/node": "^20.14.0",
         "@types/node-cron": "^3.0.11",
+        "@types/ws": "^8.18.1",
         "@typescript-eslint/eslint-plugin": "^8.57.2",
         "@typescript-eslint/parser": "^8.57.2",
         "eslint": "^10.1.0",

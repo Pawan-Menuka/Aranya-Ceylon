@@ -44,6 +44,7 @@ Fixed on branch `claude/silly-ptolemy-149cfc` (2026-06-11), all gated by `pnpm t
 | #25 | Dead code / redundant indexes | ✅ Fixed — dropped `User_email_idx` + `Variant_productId_idx` (migration); dead imports already gone |
 | #26 | Dev CORS fails open | ✅ Fixed — fails closed; only `NODE_ENV=development` relaxes |
 | #27 | `/dev/seed-catalog` fails open | ✅ Fixed — requires `ENABLE_DEV_ROUTES=true` |
+| #28 | Stale DB connections vs Neon serverless | ✅ Fixed — switched to `@neondatabase/serverless` + `@prisma/adapter-neon`; verified live |
 
 **Behaviour change to note (#9):** registration no longer logs the user in or returns a token. After
 `POST /auth/register` the client should send the user to sign in. In development, accounts are
@@ -60,10 +61,9 @@ is checked at apply/checkout, so under heavy concurrent use of a tightly-limited
 redemptions could slip through before the count catches up. Acceptable for launch; a hard cap would
 need reservation logic. The math itself (#7) is exact.
 
-**Still open:** #17 (guest checkout — feature, only if accounts aren't required), #28 (Neon stale
-connections — found during verification, needs an approach decision), F2–F7 (frontend Next.js port — the
-large remaining effort), plus the feature roadmap. Every high- and medium-severity issue from the
-original review is now resolved.
+**Still open:** #17 (guest checkout — in scope for the frontend port's checkout phase), the remaining
+frontend port phases (Phase 0 done; product detail, cart/checkout, account, admin, content), plus the
+feature roadmap. Every high- and medium-severity issue from the original review is resolved.
 
 ---
 
@@ -425,7 +425,18 @@ brand-palette color fallback, and the dual-market seed catalog with per-market p
 
 ---
 
-## 🟠 OPEN — #28: Stale DB connections against Neon serverless (found during verification)
+## ✅ RESOLVED — #28: Stale DB connections against Neon serverless
+
+**Fixed 2026-06-12.** Replaced node-postgres (`pg` Pool + `@prisma/adapter-pg`) with Neon's serverless
+driver (`@neondatabase/serverless` + `@prisma/adapter-neon`, with `ws` for the Node WebSocket). The old
+persistent pool against Neon's pooler dropped connections — it failed on *every* query right after boot,
+not just after idle (`P1017 / "Server has closed the connection"`). The serverless driver is the
+Neon-recommended path for serverless hosts (Vercel) and recovers connections transparently; it also
+encrypts to Neon by default (covers the old #11 TLS concern). Removed the now-unused `pg`/`adapter-pg`/
+`@types/pg`. **Verified live:** `/products` + `/health` return 200 in ~0.3–0.5s across repeated calls
+with zero P1017s, and the full SSR catalog + market switch (USD↔LKR) work end-to-end against the backend.
+
+<details><summary>Original report</summary>
 
 **Where:** `backend/src/index.ts` — the `pg` `Pool` + `@prisma/adapter-pg`.
 
@@ -444,6 +455,8 @@ succeeded over verified TLS.
 - Or tune the pool: low `idleTimeoutMillis` (close idle clients before Neon does) + `keepAlive`, and
   make `/health` retry once on `P1017`.
 - Make cron jobs tolerant of cold starts (they already catch errors; consider a connectivity check).
+
+</details>
 
 ---
 
