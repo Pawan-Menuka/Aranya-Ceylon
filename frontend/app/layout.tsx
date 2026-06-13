@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Cormorant_Garamond, Plus_Jakarta_Sans, Spectral } from "next/font/google";
+import { SITE_URL } from "@/lib/env";
 import "./globals.css";
 
 // Three locked typography roles (see frontend-legacy/CLAUDE.md):
@@ -25,10 +26,29 @@ const read = Spectral({
   display: "swap",
 });
 
+const TITLE = "Aranya Ceylon — Spice, as the forest intended.";
+const DESCRIPTION =
+  "Premium single-origin Ceylon spices from the hill-country farms of Sri Lanka.";
+
+// metadataBase makes per-page OG/canonical URLs resolve to absolute links;
+// the OpenGraph/Twitter defaults below are inherited (and overridden) per page.
 export const metadata: Metadata = {
-  title: "Aranya Ceylon — Spice, as the forest intended.",
-  description:
-    "Premium single-origin Ceylon spices from the hill-country farms of Sri Lanka.",
+  metadataBase: new URL(SITE_URL),
+  // Pages set their own full title (suffixed "— Aranya Ceylon"), matching the
+  // existing product-page convention; this is the fallback for pages that don't.
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: {
+    type: "website",
+    siteName: "Aranya Ceylon",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -36,6 +36,7 @@ export function Navbar({ market }: { market: Market }) {
 
         <div style={{ display: "flex", alignItems: "center", gap: 28 }}>
           <NavLink href="/products">Shop</NavLink>
+          <NavLink href="/recipes">Recipes</NavLink>
           <NavLink href="/journal">Journal</NavLink>
           <NavLink href="/about">About</NavLink>
         </div>

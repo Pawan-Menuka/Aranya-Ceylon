@@ -178,6 +178,59 @@ export interface ProductDetailView {
   reviews: ReviewView[];
 }
 
+// ── Blog / Journal ──────────────────────────────────────────────────────
+// Mirrors the backend blog endpoints: GET /blog (list, selected fields) and
+// GET /blog/:slug (full post incl. MDX `content`). See blog.controller.ts.
+export interface ApiBlogListItem {
+  id: string;
+  title: string;
+  slug: string;
+  tags: string[];
+  publishedAt: string | null;
+  seoDesc: string | null;
+  viewCount: number;
+}
+
+export interface ApiBlogPost extends ApiBlogListItem {
+  content: string; // MDX string
+  seoTitle: string | null;
+  authorId: string;
+  scheduledAt: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BlogListResponse {
+  items: ApiBlogListItem[];
+  nextCursor: string | null;
+}
+
+export interface SingleBlogResponse {
+  blog: ApiBlogPost | null;
+}
+
+// Card view the journal index consumes (adapter output).
+export interface JournalCardView {
+  slug: string;
+  title: string;
+  dek: string;
+  category: string; // derived from first tag
+  tags: string[];
+  date: string; // formatted publishedAt
+  accent: string; // per-post spice colour (stripe/tint)
+  featured: boolean;
+}
+
+// Full article view (adapter output) — adds the MDX body + read time.
+export interface JournalPostView extends JournalCardView {
+  content: string; // MDX/markdown body
+  readTime: string; // e.g. "6 min"
+  publishedAt: string | null; // ISO, for JSON-LD / OG
+  seoTitle: string | null;
+  seoDesc: string | null;
+}
+
 // View model the cards/grid consume (adapter output).
 export interface ProductView {
   id: string;
