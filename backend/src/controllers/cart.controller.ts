@@ -52,6 +52,19 @@ export async function addItem(req: Request, res: Response) {
     }
 }
 
+// --- Merge the guest cart into the user's cart (called on login) ---
+export async function mergeCart(req: Request, res: Response) {
+    const userId = req.user!.userId;
+    const guestToken = req.cookies?.[GUEST_TOKEN_COOKIE];
+
+    if (guestToken) {
+        await cartService.mergeGuestCart(guestToken, userId);
+    }
+    // The guest cart (if any) is now merged + deleted; drop the stale cookie.
+    res.clearCookie(GUEST_TOKEN_COOKIE);
+    return res.json({ ok: true });
+}
+
 // --- Update item quantity ---
 export async function updateItem(req: Request, res: Response) {
     const userId = req.user?.userId;

@@ -1,10 +1,10 @@
 import { cookies } from "next/headers";
 import { apiUrl } from "../env";
+import { getValidAccessToken } from "./auth-proxy";
 
-// Cookies relayed to the backend on cart calls. x-market lets addToCart
-// validate the variant's market; guestCartToken identifies the guest cart;
-// refreshToken covers authenticated carts once auth lands.
-const FORWARD = ["x-market", "guestCartToken", "refreshToken"];
+// Cookies relayed to the backend on cart/checkout calls. x-market lets the
+// backend resolve the market; guestCartToken identifies a guest cart.
+const FORWARD = ["x-market", "guestCartToken"];
 
 // Server-only proxy for cart route handlers. Forwards the request to the
 // backend with cookie relay, and — crucially — re-emits any guestCartToken the
@@ -23,6 +23,10 @@ export async function proxyCart(
     .filter(Boolean)
     .join("; ");
 
+  // Attach the session's Bearer when signed in, so the backend (optionalAuth)
+  // operates on the USER cart/order rather than the guest cart.
+  const accessToken = await getValidAccessToken(store);
+
   let res: Response;
   try {
     res = await fetch(apiUrl(backendPath), {
@@ -31,6 +35,7 @@ export async function proxyCart(
         Accept: "application/json",
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
         ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
       cache: "no-store",

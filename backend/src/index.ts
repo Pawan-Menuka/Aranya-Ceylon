@@ -15,6 +15,7 @@ import categoryRoutes from './routes/category.routes.js';
 import marketRoutes from './routes/market.routes.js';
 import cartRoutes from './routes/cart.routes.js';
 import checkoutRoutes from './routes/checkout.routes.js';
+import orderRoutes from './routes/order.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
 import { resolveMarket } from './middleware/market.js';
 import adminRoutes from './routes/admin.routes.js';
@@ -82,6 +83,7 @@ app.use('/categories', categoryRoutes);
 app.use('/market', marketRoutes);
 app.use('/cart', cartRoutes);
 app.use('/checkout', checkoutRoutes);
+app.use('/orders', orderRoutes);
 app.use('/admin', adminRoutes);
 // Dev-only seed endpoint — requires explicit opt-in, never just NODE_ENV
 if (process.env.ENABLE_DEV_ROUTES === 'true') {

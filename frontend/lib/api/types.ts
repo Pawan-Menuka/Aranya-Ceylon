@@ -88,6 +88,29 @@ export interface CartResponse {
   market: Market;
 }
 
+// ── Orders (GET /orders response) ───────────────────────────────────────
+export interface ApiOrderItem {
+  quantity: number;
+  unitPrice: string;
+  product: { name: string; slug: string };
+  variant: { weight: number };
+}
+export interface ApiOrderEvent {
+  status: string;
+  note: string | null;
+  createdAt: string;
+}
+export interface ApiOrder {
+  id: string;
+  status: string;
+  total: string;
+  currency: "LKR" | "USD";
+  createdAt: string;
+  trackingNumber: string | null;
+  items: ApiOrderItem[];
+  timeline: ApiOrderEvent[];
+}
+
 // Client-facing cart view (adapter output, cents-correct).
 export interface CartItemView {
   id: string;
