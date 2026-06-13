@@ -15,6 +15,10 @@ export const createProductSchema = z.object({
         price: z.number().positive(),
         sku: z.string().min(1),
         stock: z.number().int().min(0).default(0),
+        // Optional — default BOTH/LKR preserves prior behaviour. Lets the admin
+        // author per-market variants (e.g. a USD variant for international).
+        market: z.enum(['LOCAL', 'INTERNATIONAL', 'BOTH']).default('BOTH'),
+        currency: z.enum(['LKR', 'USD', 'EUR', 'GBP']).default('LKR'),
     })).min(1, 'At least one variant is required'),
 });
 

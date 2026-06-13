@@ -97,3 +97,59 @@ export interface AdminBlogFull extends AdminBlogListItem {
   seoTitle: string | null;
   seoDesc: string | null;
 }
+
+// ── Products (admin) ──────────────────────────────────────────────────────
+export type ProductStatus = "DRAFT" | "ACTIVE" | "ARCHIVED";
+export type VariantMarket = "LOCAL" | "INTERNATIONAL" | "BOTH";
+export type VariantCurrency = "LKR" | "USD" | "EUR" | "GBP";
+
+export interface AdminProductVariant {
+  id: string;
+  weight: number;
+  price: string; // Decimal → string
+  sku: string;
+  stock: number;
+  market: VariantMarket;
+  currency: VariantCurrency;
+}
+
+export interface AdminProductImage {
+  id: string;
+  url: string;
+  position: number;
+}
+
+export interface AdminProduct {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  status: ProductStatus;
+  featured: boolean;
+  certifications: string[];
+  latin: string | null;
+  originLabel: string | null;
+  color: string | null;
+  categoryId: string | null;
+  category: { id: string; name: string; slug: string } | null;
+  variants: AdminProductVariant[];
+  images: AdminProductImage[];
+  createdAt: string;
+}
+
+export interface AdminCategory {
+  id: string;
+  name: string;
+  slug: string;
+  _count?: { products: number };
+}
+
+// Payload for create (variants only on create; PATCH omits them).
+export interface ProductVariantInput {
+  weight: number;
+  price: number;
+  sku: string;
+  stock: number;
+  market: VariantMarket;
+  currency: VariantCurrency;
+}
