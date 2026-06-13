@@ -65,19 +65,35 @@ export async function adminListProducts(_req: Request, res: Response) {
     return res.json({ products });
 }
 
+// A duplicate variant SKU trips the @unique constraint (Prisma P2002).
+function isDuplicateSku(err: unknown): boolean {
+    return (err as { code?: string }).code === 'P2002';
+}
+const SKU_CONFLICT = 'A variant SKU already exists — SKUs must be unique.';
+
 // --- Create product (admin) ---
 export async function createProduct(req: Request, res: Response) {
     const data = createProductSchema.parse(req.body);
-    const product = await productService.createProduct(data);
-    return res.status(201).json({ product });
+    try {
+        const product = await productService.createProduct(data);
+        return res.status(201).json({ product });
+    } catch (err) {
+        if (isDuplicateSku(err)) return res.status(409).json({ error: SKU_CONFLICT });
+        throw err;
+    }
 }
 
 // --- Update product (admin) ---
 export async function updateProduct(req: Request, res: Response) {
     const id = req.params.id!;
     const data = updateProductSchema.parse(req.body);
-    const product = await productService.updateProduct(id, data);
-    return res.json({ product });
+    try {
+        const product = await productService.updateProduct(id, data);
+        return res.json({ product });
+    } catch (err) {
+        if (isDuplicateSku(err)) return res.status(409).json({ error: SKU_CONFLICT });
+        throw err;
+    }
 }
 
 // --- Upload product images (admin) ---
