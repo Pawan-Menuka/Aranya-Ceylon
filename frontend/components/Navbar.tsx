@@ -1,12 +1,15 @@
 import Link from "next/link";
 import type { Market } from "@/lib/market";
+import type { Locale } from "@/lib/i18n/config";
+import type { Dictionary } from "@/lib/i18n/dictionaries";
 import { MarketSwitcher } from "./MarketSwitcher";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 import { CartButton } from "./CartButton";
 import { AccountButton } from "./AccountButton";
 
 // Storefront navbar shell — solid forest bar (heroMode/auto-hide come later).
 // Light text, market switcher drives currency. See frontend-legacy/CLAUDE.md.
-export function Navbar({ market }: { market: Market }) {
+export function Navbar({ market, dict, locale }: { market: Market; dict: Dictionary; locale: Locale }) {
   return (
     <header
       style={{
@@ -35,13 +38,14 @@ export function Navbar({ market }: { market: Market }) {
         </Link>
 
         <div style={{ display: "flex", alignItems: "center", gap: 28 }}>
-          <NavLink href="/products">Shop</NavLink>
-          <NavLink href="/recipes">Recipes</NavLink>
-          <NavLink href="/journal">Journal</NavLink>
-          <NavLink href="/about">About</NavLink>
+          <NavLink href="/products">{dict.nav.shop}</NavLink>
+          <NavLink href="/recipes">{dict.nav.recipes}</NavLink>
+          <NavLink href="/journal">{dict.nav.journal}</NavLink>
+          <NavLink href="/about">{dict.nav.about}</NavLink>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <LanguageSwitcher current={locale} />
           <MarketSwitcher current={market} />
           <AccountButton />
           <CartButton />
