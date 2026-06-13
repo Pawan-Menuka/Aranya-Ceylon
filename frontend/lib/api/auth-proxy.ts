@@ -73,27 +73,50 @@ async function tryRefresh(store: CookieStore): Promise<string | null> {
   return data.accessToken;
 }
 
-// Authenticated backend call with refresh-on-401. Reads the access cookie,
-// sends Bearer; on 401 refreshes once and retries. Used by route handlers
-// (which can set cookies). Returns the backend Response.
+// Is the access JWT expired (or within 5s of it)? Decodes the payload without
+// verifying — display/timing only; the backend always verifies the signature.
+function isExpired(jwt: string): boolean {
+  try {
+    const seg = jwt.split(".")[1] ?? "";
+    const json = Buffer.from(seg.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+    const { exp } = JSON.parse(json) as { exp?: number };
+    return typeof exp === "number" ? exp * 1000 < Date.now() + 5000 : false;
+  } catch {
+    return false;
+  }
+}
+
+// Returns a non-expired access token, proactively refreshing if the current one
+// has expired (needed because cart/checkout use optionalAuth — an expired token
+// there silently degrades to a guest session rather than returning 401).
+export async function getValidAccessToken(store: CookieStore): Promise<string | undefined> {
+  const access = store.get(ACCESS)?.value;
+  if (access && !isExpired(access)) return access;
+  if (!store.get(REFRESH)?.value) return access ?? undefined; // no session to refresh
+  const refreshed = await tryRefresh(store);
+  return refreshed ?? access ?? undefined;
+}
+
+// Authenticated backend call. Sends a (proactively refreshed) Bearer, and still
+// retries once on a 401. Used by route handlers (which can set cookies).
 export async function authedFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const store = await cookies();
-  const access = store.get(ACCESS)?.value;
+  const token = await getValidAccessToken(store);
 
-  const call = (token: string | undefined) =>
+  const call = (t: string | undefined) =>
     fetch(apiUrl(path), {
       ...init,
       headers: {
         Accept: "application/json",
         ...(init.body !== undefined ? { "Content-Type": "application/json" } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(t ? { Authorization: `Bearer ${t}` } : {}),
         ...(init.headers ?? {}),
       },
       cache: "no-store",
       signal: AbortSignal.timeout(8000),
     });
 
-  let res = await call(access);
+  let res = await call(token);
   if (res.status === 401) {
     const refreshed = await tryRefresh(store);
     if (refreshed) res = await call(refreshed);

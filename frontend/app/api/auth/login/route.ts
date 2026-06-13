@@ -30,6 +30,24 @@ export async function POST(req: Request) {
     return Response.json({ error: data.error ?? "Invalid email or password" }, { status: res.status || 401 });
   }
 
-  persistSession(await cookies(), data.accessToken, res);
+  const store = await cookies();
+  persistSession(store, data.accessToken, res); // set access + refresh cookies
+
+  // Merge any guest cart into the user's cart (best-effort).
+  const guestToken = store.get("guestCartToken")?.value;
+  if (guestToken) {
+    try {
+      await fetch(apiUrl("/cart/merge"), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${data.accessToken}`, Cookie: `guestCartToken=${guestToken}` },
+        cache: "no-store",
+        signal: AbortSignal.timeout(8000),
+      });
+    } catch {
+      // non-fatal — the user can still use their cart
+    }
+    store.delete("guestCartToken"); // merged + deleted server-side; drop the stale cookie
+  }
+
   return Response.json({ user: data.user });
 }
