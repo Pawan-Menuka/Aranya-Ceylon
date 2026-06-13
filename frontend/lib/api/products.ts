@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { apiFetch } from "./client";
+import { apiUrl } from "../env";
 import { formatPrice } from "../format";
 import type { Market } from "../market";
 import { currencyForMarket } from "../market";
@@ -132,6 +133,51 @@ export const getProductBySlug = cache(
     }
   },
 );
+
+// ── Spice → product resolution (for recipe "shop the spices" links) ───────
+// Cookie-free + revalidate-cached so callers (the static recipe pages) stay
+// statically renderable — names/slugs are market-independent, so no x-market
+// forwarding is needed.
+const CATALOG_REVALIDATE = 600;
+function norm(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+export const getProductNameSlugs = cache(async (): Promise<{ name: string; slug: string }[]> => {
+  try {
+    const res = await fetch(apiUrl("/products?limit=200"), {
+      headers: { Accept: "application/json" },
+      next: { revalidate: CATALOG_REVALIDATE },
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = (await res.json()) as ProductListResponse;
+    return (data.items ?? []).map((p) => ({ name: p.name, slug: p.slug }));
+  } catch (err) {
+    console.warn("[catalog slug map] fetch failed:", (err as Error).message);
+    return [];
+  }
+});
+
+// Best-effort resolve a recipe's spice name to a real product slug. Exact
+// normalized match first, then the longest substring match either direction;
+// null when nothing in the live catalog matches (caller falls back to /products).
+export async function resolveSpiceSlug(spiceName: string): Promise<string | null> {
+  const products = await getProductNameSlugs();
+  if (!products.length) return null;
+  const target = norm(spiceName);
+  const exact = products.find((p) => norm(p.name) === target);
+  if (exact) return exact.slug;
+  let best: { slug: string; len: number } | null = null;
+  for (const p of products) {
+    const n = norm(p.name);
+    if (n.length < 4) continue; // avoid matching trivially short names
+    if ((target.includes(n) || n.includes(target)) && (!best || n.length > best.len)) {
+      best = { slug: p.slug, len: n.length };
+    }
+  }
+  return best?.slug ?? null;
+}
 
 export async function getProducts(params: { limit?: number } = {}): Promise<CatalogResult> {
   const qs = params.limit ? `?limit=${params.limit}` : "";
