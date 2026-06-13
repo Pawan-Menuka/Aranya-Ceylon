@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatPrice } from "@/lib/format";
 import type {
   AdminProduct,
   AdminCategory,
@@ -17,6 +16,7 @@ function slugify(s: string): string {
 }
 
 type VariantRow = {
+  id?: string; // present = existing variant (updated); absent = new (created)
   weight: string;
   price: string;
   sku: string;
@@ -26,6 +26,16 @@ type VariantRow = {
 };
 
 const blankVariant = (): VariantRow => ({ weight: "", price: "", sku: "", stock: "0", market: "BOTH", currency: "LKR" });
+
+const rowFromVariant = (v: AdminProduct["variants"][number]): VariantRow => ({
+  id: v.id,
+  weight: String(v.weight),
+  price: String(v.price),
+  sku: v.sku,
+  stock: String(v.stock),
+  market: v.market,
+  currency: v.currency,
+});
 
 export function ProductForm({ initial }: { initial?: AdminProduct }) {
   const router = useRouter();
@@ -42,7 +52,9 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
   const [latin, setLatin] = useState(initial?.latin ?? "");
   const [originLabel, setOriginLabel] = useState(initial?.originLabel ?? "");
   const [color, setColor] = useState(initial?.color ?? "");
-  const [variants, setVariants] = useState<VariantRow[]>(editing ? [] : [blankVariant()]);
+  const [variants, setVariants] = useState<VariantRow[]>(
+    initial?.variants?.length ? initial.variants.map(rowFromVariant) : [blankVariant()],
+  );
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,21 +104,20 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
       color: color || null,
     };
 
-    let payload: Record<string, unknown> = base;
-    if (!editing) {
-      const parsed: ProductVariantInput[] = [];
-      for (const v of variants) {
-        const weight = Number(v.weight);
-        const price = Number(v.price);
-        const stock = Number(v.stock);
-        if (!weight || weight <= 0) return setError("Each variant needs a positive weight (grams).");
-        if (!price || price <= 0) return setError("Each variant needs a positive price.");
-        if (!v.sku.trim()) return setError("Each variant needs a SKU.");
-        parsed.push({ weight, price, sku: v.sku.trim(), stock: Number.isFinite(stock) ? stock : 0, market: v.market, currency: v.currency });
-      }
-      if (!parsed.length) return setError("Add at least one variant.");
-      payload = { ...base, variants: parsed };
+    // Variants are authored in both modes; on edit, existing rows carry an id
+    // so the backend updates them (and drops removed, unreferenced ones).
+    const parsed: (ProductVariantInput & { id?: string })[] = [];
+    for (const v of variants) {
+      const weight = Number(v.weight);
+      const price = Number(v.price);
+      const stock = Number(v.stock);
+      if (!weight || weight <= 0) return setError("Each variant needs a positive weight (grams).");
+      if (!price || price <= 0) return setError("Each variant needs a positive price.");
+      if (!v.sku.trim()) return setError("Each variant needs a SKU.");
+      parsed.push({ ...(v.id ? { id: v.id } : {}), weight, price, sku: v.sku.trim(), stock: Number.isFinite(stock) ? stock : 0, market: v.market, currency: v.currency });
     }
+    if (!parsed.length) return setError("Add at least one variant.");
+    const payload: Record<string, unknown> = { ...base, variants: parsed };
 
     setSaving(true);
     try {
@@ -192,20 +203,13 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
 
       {/* Variants */}
       <h2 className="disp" style={{ fontSize: 22, margin: "28px 0 12px", color: "var(--ink)" }}>Variants</h2>
-      {editing ? (
-        <div style={{ border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: "14px 16px", background: "var(--surface)" }}>
-          <p style={{ fontSize: 13, color: "var(--muted)", margin: "0 0 10px" }}>
-            Variants and stock aren’t editable here yet (the update endpoint changes product details only). Listed for reference.
-          </p>
-          {(initial?.variants ?? []).map((v) => (
-            <div key={v.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 14, padding: "6px 0", borderTop: "1px solid var(--line)" }}>
-              <span>{v.weight}g · {v.sku} · <span style={{ color: "var(--muted)" }}>{v.market} / {v.currency}</span></span>
-              <span>{formatPrice(v.price, v.currency)} · {v.stock} in stock</span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {editing && (
+        <p style={{ fontSize: 13, color: "var(--muted)", margin: "0 0 12px" }}>
+          Edit prices and stock inline, or add new variants. A variant used on a past order can’t be removed —
+          delete one that’s in order history and it’ll reappear after saving.
+        </p>
+      )}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {variants.map((v, i) => (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "0.7fr 0.8fr 1fr 0.7fr 1fr 0.8fr auto", gap: 8, alignItems: "center" }}>
               <input value={v.weight} onChange={(e) => setVariant(i, { weight: e.target.value })} placeholder="100" inputMode="numeric" style={vInput} aria-label="Weight (g)" />
@@ -247,7 +251,6 @@ export function ProductForm({ initial }: { initial?: AdminProduct }) {
             + Add variant
           </button>
         </div>
-      )}
 
       {/* Images (edit only — needs a saved product id) */}
       {editing && <ProductImages productId={initial!.id} images={images} onChange={setImages} />}
