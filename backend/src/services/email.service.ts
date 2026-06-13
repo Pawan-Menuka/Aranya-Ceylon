@@ -26,7 +26,7 @@ export async function sendOrderConfirmation(params: {
                 ? 'Your order will be dispatched within 1–2 business days.'
                 : 'Your order will be dispatched within 2–3 business days via DHL or FedEx.'
             }</p>
-            <p>Track your order at <a href="${process.env.FRONTEND_URL}/account/orders/${orderId}">aranyaceylon.com</a></p>
+            <p>Track your order at <a href="${process.env.FRONTEND_URL}/account/orders">aranyaceylon.com</a></p>
         `,
     });
 }

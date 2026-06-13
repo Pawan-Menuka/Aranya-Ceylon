@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { constructWebhookEvent } from '../services/stripe.service.js';
 import { verifyPayHereNotification } from '../services/payhere.service.js';
+import { sendOrderConfirmation } from '../services/email.service.js';
 import { prisma } from '../index.js';
 
 // ── Shared ACID transaction ────────────────────────────────────────
@@ -9,7 +10,11 @@ import { prisma } from '../index.js';
 // updateMany INSIDE the transaction, so two concurrent webhook deliveries
 // (Stripe retries!) can never both decrement stock.
 export async function confirmOrderPaid(orderId: string, paymentRef: string, gateway: string) {
-    await prisma.$transaction(async (tx) => {
+    // The transaction returns the data needed for the confirmation email — but
+    // ONLY when this delivery is the one that flipped PENDING→PAID, so retries
+    // don't re-send. Email is dispatched AFTER commit (a side effect must never
+    // hold a DB transaction open or roll it back).
+    const confirmation = await prisma.$transaction(async (tx) => {
         // 1. Claim the order atomically: only the delivery that flips
         //    PENDING→PAID proceeds. A second/concurrent delivery sees
         //    count === 0 and bails — true idempotency (#3).
@@ -17,13 +22,13 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
             where: { id: orderId, status: 'PENDING' },
             data: { status: 'PAID' },
         });
-        if (claimed.count === 0) return; // already processed or unknown order
+        if (claimed.count === 0) return null; // already processed or unknown order
 
         const order = await tx.order.findUnique({
             where: { id: orderId },
-            include: { items: true },
+            include: { items: true, user: { select: { email: true } } },
         });
-        if (!order) return;
+        if (!order) return null;
 
         // 2. Decrement stock with an atomic guard (#4): the `stock >= qty`
         //    filter both checks and decrements in one statement, so stock
@@ -74,9 +79,32 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
         if (order.cartId) {
             await tx.cartItem.deleteMany({ where: { cartId: order.cartId } });
         }
+
+        // 6. Hand back what the confirmation email needs. Recipient is the
+        //    account email, or the guest email for guest checkout (#17).
+        return {
+            to: order.user?.email ?? order.guestEmail ?? null,
+            total: Number(order.total),
+            currency: order.currency as string,
+            market: order.market as string,
+        };
     });
 
     console.log(`✅ Order ${orderId} marked PAID via ${gateway}`);
+
+    // Order confirmation — sent once (first PAID flip only) and after commit,
+    // so a slow/failed send never blocks the webhook ack or rolls back payment.
+    if (confirmation?.to) {
+        await sendOrderConfirmation({
+            to: confirmation.to,
+            orderId,
+            total: confirmation.total,
+            currency: confirmation.currency,
+            market: confirmation.market,
+        }).catch((err) =>
+            console.error(`✉ Order confirmation email failed for ${orderId}:`, err),
+        );
+    }
 }
 
 // ── Stripe webhook ─────────────────────────────────────────────────

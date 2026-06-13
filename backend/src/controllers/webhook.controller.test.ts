@@ -16,6 +16,7 @@ const store = vi.hoisted(() => {
         id: string; status: string; userId: string | null;
         total: number; currency: string; paymentIntentId: string | null;
         couponId?: string | null; cartId?: string | null;
+        market?: string; userEmail?: string | null; guestEmail?: string | null;
     }
     interface ItemRow { orderId: string; variantId: string; quantity: number; }
     interface VariantRow { id: string; stock: number; }
@@ -47,7 +48,10 @@ const store = vi.hoisted(() => {
             findUnique: async ({ where, include }: any) => {
                 const o = s.orders.find((x) => matchOrder(x, where));
                 if (!o) return null;
-                return include?.items ? { ...o, items: s.items.filter((i) => i.orderId === o.id) } : { ...o };
+                const row: any = { ...o };
+                if (include?.items) row.items = s.items.filter((i) => i.orderId === o.id);
+                if (include?.user) row.user = o.userId ? { email: o.userEmail ?? null } : null;
+                return row;
             },
         },
         variant: {
@@ -83,16 +87,20 @@ const store = vi.hoisted(() => {
 vi.mock('../index.js', () => ({
     prisma: {
         ...store.db,
-        $transaction: async (fn: (tx: typeof store.db) => Promise<void>) => { await fn(store.db); },
+        // Returns the callback's value so confirmOrderPaid can hand back the
+        // email payload from inside the transaction.
+        $transaction: async (fn: (tx: typeof store.db) => Promise<unknown>) => fn(store.db),
     },
 }));
 
 vi.mock('../services/stripe.service.js', () => ({ constructWebhookEvent: vi.fn() }));
 vi.mock('../services/payhere.service.js', () => ({ verifyPayHereNotification: vi.fn() }));
+vi.mock('../services/email.service.js', () => ({ sendOrderConfirmation: vi.fn().mockResolvedValue(undefined) }));
 
 import { confirmOrderPaid, stripeWebhook, payHereWebhook } from './webhook.controller.js';
 import { constructWebhookEvent } from '../services/stripe.service.js';
 import { verifyPayHereNotification } from '../services/payhere.service.js';
+import { sendOrderConfirmation } from '../services/email.service.js';
 
 const { s } = store;
 
@@ -108,9 +116,11 @@ function mockRes() {
 }
 
 beforeEach(() => {
+    vi.clearAllMocks();
     s.orders = [{
         id: 'order_1', status: 'PENDING', userId: 'user_1', cartId: 'cart_1',
         total: 2500, currency: 'LKR', paymentIntentId: 'pi_123',
+        market: 'LOCAL', userEmail: 'buyer@example.com',
     }];
     s.items = [
         { orderId: 'order_1', variantId: 'var_a', quantity: 2 },
@@ -176,6 +186,33 @@ describe('confirmOrderPaid — #5 coupon redemption', () => {
         s.coupons = [{ id: 'coupon_1', usageCount: 0 }];
         await confirmOrderPaid('order_1', 'ref', 'Stripe');
         expect(s.coupons[0]!.usageCount).toBe(0);
+    });
+});
+
+describe('confirmOrderPaid — order confirmation email', () => {
+    it('sends one confirmation on the first PAID flip and none on a duplicate', async () => {
+        await confirmOrderPaid('order_1', 'ref', 'Stripe');
+        await confirmOrderPaid('order_1', 'ref', 'Stripe');
+        expect(sendOrderConfirmation).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(sendOrderConfirmation).mock.calls[0]![0]).toMatchObject({
+            to: 'buyer@example.com', orderId: 'order_1', currency: 'LKR', market: 'LOCAL',
+        });
+    });
+
+    it('emails the guest address when the order has no user', async () => {
+        s.orders[0]!.userId = null;
+        s.orders[0]!.guestEmail = 'guest@example.com';
+        await confirmOrderPaid('order_1', 'ref', 'Stub');
+        expect(sendOrderConfirmation).toHaveBeenCalledWith(
+            expect.objectContaining({ to: 'guest@example.com' }),
+        );
+    });
+
+    it('does not send when neither a user nor a guest email is present', async () => {
+        s.orders[0]!.userId = null;
+        s.orders[0]!.guestEmail = null;
+        await confirmOrderPaid('order_1', 'ref', 'Stub');
+        expect(sendOrderConfirmation).not.toHaveBeenCalled();
     });
 });
 
