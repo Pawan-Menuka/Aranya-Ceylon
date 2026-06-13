@@ -244,6 +244,7 @@ export interface ProductView {
   price: string; // formatted for the active market
   currency: "LKR" | "USD";
   weights: string[]; // e.g. ["50g","100g","250g"]
+  variants?: VariantView[]; // in-currency variants for the card's weight picker + add-to-cart (absent in demo fallback)
   category: string;
   featured: boolean;
   imageUrl: string | null;
