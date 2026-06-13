@@ -69,10 +69,10 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
             });
         }
 
-        // 5. Clear the cart so the customer starts fresh
-        if (order.userId) {
-            const cart = await tx.cart.findUnique({ where: { userId: order.userId } });
-            if (cart) await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+        // 5. Clear the source cart so the customer starts fresh. Keyed by the
+        //    order's cartId so it works for guest carts too, not just users.
+        if (order.cartId) {
+            await tx.cartItem.deleteMany({ where: { cartId: order.cartId } });
         }
     });
 

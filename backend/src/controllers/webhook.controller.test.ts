@@ -15,7 +15,7 @@ const store = vi.hoisted(() => {
     interface OrderRow {
         id: string; status: string; userId: string | null;
         total: number; currency: string; paymentIntentId: string | null;
-        couponId?: string | null;
+        couponId?: string | null; cartId?: string | null;
     }
     interface ItemRow { orderId: string; variantId: string; quantity: number; }
     interface VariantRow { id: string; stock: number; }
@@ -109,7 +109,7 @@ function mockRes() {
 
 beforeEach(() => {
     s.orders = [{
-        id: 'order_1', status: 'PENDING', userId: 'user_1',
+        id: 'order_1', status: 'PENDING', userId: 'user_1', cartId: 'cart_1',
         total: 2500, currency: 'LKR', paymentIntentId: 'pi_123',
     }];
     s.items = [
@@ -139,6 +139,13 @@ describe('confirmOrderPaid — #3 idempotency', () => {
         await confirmOrderPaid('order_1', 'ref', 'Stripe');
         expect(s.variants.find((v) => v.id === 'var_a')!.stock).toBe(8); // not 6
         expect(s.events.filter((e) => e.note.includes('Payment confirmed'))).toHaveLength(1);
+    });
+
+    it('clears the source cart for a GUEST order (userId null, cartId set)', async () => {
+        s.orders[0]!.userId = null; // guest order
+        await confirmOrderPaid('order_1', 'ref', 'Stub');
+        expect(s.orders[0]!.status).toBe('PAID');
+        expect(s.cartItemsDeleted).toBe(1); // cleared via cartId, not userId
     });
 });
 

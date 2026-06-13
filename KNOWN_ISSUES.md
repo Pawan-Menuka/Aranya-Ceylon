@@ -35,6 +35,7 @@ Fixed on branch `claude/silly-ptolemy-149cfc` (2026-06-11), all gated by `pnpm t
 | #14 | `sameSite: 'strict'` breaks PayHere redirect | ✅ Fixed — now `'lax'` (see cross-domain note in #14) |
 | #15 | PayHere webhook: no merchant/amount cross-check | ✅ Fixed — verifies merchant_id + amount + currency |
 | #16 | Stripe `payment_failed` cancels prematurely | ✅ Fixed — failures leave order PENDING; cron sweeps stale orders |
+| #17 | Guest checkout impossible | ✅ Fixed — `optionalAuth`, cart-by-guest-token, `guestEmail`; order→cart link clears guest carts on payment |
 | #18 | Register TOCTOU race on duplicate email | ✅ Fixed — relies on unique constraint + P2002 catch |
 | #19 | Cart can check out cross-market/mixed-currency items | ✅ Fixed — checkout re-validates each line's market + currency (409) |
 | #20 | Duplicate email libraries | ✅ Fixed — removed unused `nodemailer` + `@types/nodemailer` (Resend kept) |
@@ -61,7 +62,7 @@ is checked at apply/checkout, so under heavy concurrent use of a tightly-limited
 redemptions could slip through before the count catches up. Acceptable for launch; a hard cap would
 need reservation logic. The math itself (#7) is exact.
 
-**Still open:** #17 (guest checkout — in scope for the frontend port's checkout phase), the remaining
+**Still open:** the remaining
 frontend port phases (Phase 0 done; product detail, cart/checkout, account, admin, content), plus the
 feature roadmap. Every high- and medium-severity issue from the original review is resolved.
 
