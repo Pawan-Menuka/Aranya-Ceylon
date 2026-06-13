@@ -102,6 +102,7 @@ export async function createIntent(req: Request, res: Response) {
         data: {
             userId,                              // null for guests (#17)
             guestEmail: userId ? null : guestEmail, // where to send confirmation (#17)
+            cartId: cart.id,                     // cleared on payment (guest + user)
             status: 'PENDING',
             // total = the grand total actually charged to the gateway (#6):
             // subtotal − discount + shipping. subtotal is derivable from these.
