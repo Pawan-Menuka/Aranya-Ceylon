@@ -22,6 +22,7 @@ router.post('/orders/:id/refund', asyncHandler(orderAdmin.refundOrder));
 
 // --- Blog ---
 router.get('/blogs', asyncHandler(blogAdmin.listBlogs));
+router.get('/blogs/:id', asyncHandler(blogAdmin.getBlog));
 router.post('/blogs', asyncHandler(blogAdmin.createBlog));
 router.patch('/blogs/:id', asyncHandler(blogAdmin.updateBlog));
 router.delete('/blogs/:id', asyncHandler(blogAdmin.deleteBlog));
