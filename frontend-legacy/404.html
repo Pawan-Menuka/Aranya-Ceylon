@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aranya Ceylon — Page not found</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,400;1,500;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Spectral:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="aranya.css" />
+<style>
+  html, body { margin: 0; background: var(--bg); }
+  body { overflow-x: hidden; }
+
+  .nf-wrap { position: relative; min-height: 100vh; display: flex; flex-direction: column; }
+  .nf-main { flex: 1; display: grid; place-items: center; padding: 150px 24px 90px; position: relative; overflow: hidden; }
+  .nf-bignum { font-family: var(--font-display); font-weight: 600; color: var(--brand);
+    font-size: clamp(120px, 22vw, 280px); line-height: .85; letter-spacing: .01em; }
+
+  .mkt { position: fixed; right: 22px; bottom: 22px; z-index: 90; background: rgba(20,18,16,.88); backdrop-filter: blur(12px);
+    border: 1px solid rgba(253,250,245,.16); border-radius: 13px; padding: 8px; display: flex; gap: 6px; box-shadow: 0 12px 40px rgba(0,0,0,.4); }
+  .mkt b { font-family: var(--font-ui); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: rgba(253,250,245,.5); display: flex; align-items: center; padding: 0 10px; }
+  .mkt button { background: rgba(253,250,245,.06); color: rgba(253,250,245,.85); border: 1px solid rgba(253,250,245,.14); border-radius: 9px; padding: 9px 15px; cursor: pointer; font-family: var(--font-ui); font-size: 13px; font-weight: 700; }
+  .mkt button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .mkt button.on.local { background: var(--brand); border-color: var(--brand); }
+
+  @media (max-width: 520px) {
+    .nf-main { padding-left: 18px !important; padding-right: 18px !important; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="image-slot.js"></script>
+<script src="spice-data.js"></script>
+<script src="cart-store.js"></script>
+<script type="text/babel" src="shared.jsx"></script>
+<script type="text/babel" src="navbar.jsx"></script>
+<script type="text/babel" src="home-common.jsx"></script>
+<script type="text/babel" src="home-footer.jsx"></script>
+<script type="text/babel" src="cart-ui.jsx"></script>
+<script type="text/babel">
+const { useState: nfState, useEffect: nfEffect } = React;
+
+const QUICK = [
+  ["Shop all spices", "Catalog.html"],
+  ["Browse categories", "Categories.html"],
+  ["Gift sets", "Gifts.html"],
+  ["Recipes", "Recipes.html"],
+  ["The Journal", "Journal.html"],
+];
+
+function NotFound({ market }) {
+  const btn = market === "local" ? "btn btn-local" : "btn btn-intl";
+  return (
+    <main className="nf-main">
+      {/* soft radial wash */}
+      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(60% 50% at 50% 32%, rgba(15,110,86,.06), transparent 70%)", pointerEvents: "none" }} />
+      <div style={{ position: "relative", maxWidth: 620, textAlign: "center" }}>
+        <Reveal><Liyawel width={210} style={{ marginBottom: 28 }} /></Reveal>
+        <Reveal delay={60}>
+          <div className="eyebrow" style={{ color: "var(--accent)", justifyContent: "center", display: "flex", gap: 11, alignItems: "center", marginBottom: 10 }}>
+            <span style={{ width: 22, height: 1, background: "var(--accent)" }} />Error 404<span style={{ width: 22, height: 1, background: "var(--accent)" }} />
+          </div>
+        </Reveal>
+        <Reveal delay={90}><div className="nf-bignum">404</div></Reveal>
+        <Reveal delay={140}>
+          <h1 className="disp" style={{ fontSize: "clamp(30px,4vw,46px)", color: "var(--ink)", margin: "10px 0 0", lineHeight: 1.06, fontWeight: 600 }}>
+            This trail has gone cold.
+          </h1>
+        </Reveal>
+        <Reveal delay={180}>
+          <p className="prose" style={{ fontSize: "clamp(16px,1.5vw,18px)", color: "var(--muted)", margin: "16px auto 0", maxWidth: 460 }}>
+            The page you're after has moved, sold out, or never existed. Let's get you back to the good stuff — try a search or one of these.
+          </p>
+        </Reveal>
+
+        {/* search */}
+        <Reveal delay={220}>
+          <form onSubmit={(e) => { e.preventDefault(); const q = e.currentTarget.q.value.trim(); window.location.href = "Search.html" + (q ? "?q=" + encodeURIComponent(q) : ""); }}
+            style={{ display: "flex", alignItems: "center", gap: 10, background: "#fff", border: "1px solid var(--line)", borderRadius: 999, padding: "8px 8px 8px 18px", maxWidth: 440, margin: "30px auto 0", boxShadow: "var(--shadow-sm)" }}>
+            <Icon name="search" size={19} stroke="var(--muted)" />
+            <input name="q" placeholder="Search spices, recipes, origins…" style={{ flex: 1, background: "transparent", border: 0, outline: 0, color: "var(--ink)", fontFamily: "var(--font-ui)", fontSize: 14.5, minWidth: 0 }} />
+            <button type="submit" className={btn} style={{ width: "auto", padding: "11px 20px", flex: "0 0 auto" }}>Search</button>
+          </form>
+        </Reveal>
+
+        {/* quick links */}
+        <Reveal delay={260}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 9, justifyContent: "center", marginTop: 26 }}>
+            {QUICK.map(([label, href]) => (
+              <a key={label} href={href} style={{ fontFamily: "var(--font-ui)", fontSize: 13.5, fontWeight: 600, color: "var(--brand)",
+                padding: "9px 16px", borderRadius: 999, border: "1px solid var(--line)", background: "#fff", transition: "background .15s, border-color .15s" }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "var(--surface)"; e.currentTarget.style.borderColor = "var(--gold-line)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; e.currentTarget.style.borderColor = "var(--line)"; }}>
+                {label}
+              </a>
+            ))}
+          </div>
+        </Reveal>
+
+        <Reveal delay={300}>
+          <div style={{ marginTop: 34 }}>
+            <a href="Home.html" style={{ display: "inline-flex", alignItems: "center", gap: 9, fontFamily: "var(--font-ui)", fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M11 18l-6-6 6-6" /></svg>
+              Back to home
+            </a>
+          </div>
+        </Reveal>
+      </div>
+    </main>
+  );
+}
+
+function NotFoundApp() {
+  const cart = useCart();
+  const [market, setMarket] = useMarket();
+  const [cartOpen, setCartOpen] = nfState(false);
+  const [signInOpen, setSignInOpen] = nfState(false);
+  nfEffect(() => { window.__openCart = () => setCartOpen(true); return () => { delete window.__openCart; }; }, []);
+  return (
+    <div className="aranya nf-wrap">
+      <AranyaNavbar market={market} heroMode={false} cartCount={cart.count()} onCartClick={() => setCartOpen(true)} onAccountClick={() => setSignInOpen(true)} />
+      <NotFound market={market} />
+      <Footer market={market} setMarket={setMarket} />
+
+      <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} />
+      <SignInModal open={signInOpen} onClose={() => setSignInOpen(false)} />
+
+      <div className="mkt">
+        <b>Market</b>
+        <button className={market === "intl" ? "on" : ""} onClick={() => setMarket("intl")}>USD · Intl</button>
+        <button className={"local " + (market === "local" ? "on" : "")} onClick={() => setMarket("local")}>LKR · Local</button>
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<NotFoundApp />);
+</script>
+</body>
+</html>

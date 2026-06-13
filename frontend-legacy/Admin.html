@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aranya Ceylon — Admin Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Spectral:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="aranya.css" />
+<link rel="stylesheet" href="admin.css" />
+<style>
+  html, body { margin: 0; background: var(--ad-canvas); }
+  #root { min-height: 100vh; }
+  /* loading splash */
+  #boot { position: fixed; inset: 0; display: grid; place-items: center; background: var(--ad-canvas); z-index: 200; transition: opacity .3s; }
+  #boot.gone { opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="boot"><div style="text-align:center;font-family:'Cormorant Garamond',serif;color:#0F6E56;font-size:22px;font-weight:600;letter-spacing:.02em;">Aranya Ceylon · Admin</div></div>
+<div id="root"></div>
+
+<template id="__bundler_thumbnail">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+    <rect width="100" height="100" fill="#0B5343" />
+    <g transform="translate(50,50)">
+      <rect x="-22" y="-22" width="18" height="26" rx="3" fill="#E6B860" />
+      <rect x="0" y="-22" width="18" height="13" rx="3" fill="#FDFAF5" opacity=".9" />
+      <rect x="0" y="-4" width="18" height="26" rx="3" fill="#1D9E75" />
+      <rect x="-22" y="9" width="18" height="13" rx="3" fill="#FDFAF5" opacity=".9" />
+    </g>
+  </svg>
+</template>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<!-- data -->
+<script src="spice-data.js"></script>
+<script src="journal-data.js"></script>
+<script src="admin-data.js"></script>
+
+<!-- shared + admin modules -->
+<script type="text/babel" src="shared.jsx"></script>
+<script type="text/babel" src="admin-shell.jsx"></script>
+<script type="text/babel" src="admin-dashboard.jsx"></script>
+<script type="text/babel" src="admin-orders.jsx"></script>
+<script type="text/babel" src="admin-products.jsx"></script>
+<script type="text/babel" src="admin-blog.jsx"></script>
+<script type="text/babel" src="admin-audit.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect } = React;
+
+function AdminApp() {
+  const [route, setRoute] = useState(() => (location.hash.replace("#", "") || localStorage.getItem("ad_route") || "dashboard"));
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    localStorage.setItem("ad_route", route);
+    if (location.hash.replace("#", "") !== route) history.replaceState(null, "", "#" + route);
+    window.scrollTo(0, 0);
+  }, [route]);
+
+  useEffect(() => {
+    const onHash = () => { const r = location.hash.replace("#", ""); if (r && r !== route) setRoute(r); };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, [route]);
+
+  const go = (r) => setRoute(r);
+
+  return (
+    <AdminShell route={route} setRoute={setRoute} search={search} setSearch={setSearch} pendingCount={18}>
+      {route === "dashboard" && <AdminDashboard go={go} />}
+      {route === "orders" && <AdminOrders />}
+      {route === "products" && <AdminProducts />}
+      {route === "blog" && <AdminBlog />}
+      {route === "audit" && <AdminAudit />}
+    </AdminShell>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<AdminApp />);
+function __hideBoot(){ const b = document.getElementById("boot"); if (b) { b.classList.add("gone"); setTimeout(() => b.remove(), 400); } }
+requestAnimationFrame(__hideBoot);
+setTimeout(__hideBoot, 600);
+document.addEventListener("visibilitychange", __hideBoot);
+</script>
+</body>
+</html>

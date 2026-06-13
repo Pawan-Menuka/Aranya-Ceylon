@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aranya Ceylon — Forest Sourced Ceylon Spices</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,400;1,500;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="aranya.css" />
+<style>
+  html, body { margin: 0; background: var(--bg); }
+  body { overflow-x: hidden; }
+  @keyframes heroDot { 0%,100% { transform: translate(-50%,0); opacity: 1; } 50% { transform: translate(-50%,11px); opacity: .35; } }
+  .hero-dot { animation: heroDot 2s ease-in-out infinite; }
+
+  .feat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 1024px) {
+    .cat-feature { grid-template-columns: 1fr !important; }
+    .foot-grid { grid-template-columns: 1fr 1fr !important; gap: 36px !important; }
+    .best-grid { grid-template-columns: repeat(2, 1fr) !important; }
+    .story-grid { grid-template-columns: 1fr !important; gap: 40px !important; }
+    .feat-row { grid-template-columns: 1fr !important; }
+  }
+  @media (max-width: 720px) {
+    .cat-trio { grid-template-columns: 1fr !important; }
+    .best-grid { grid-template-columns: 1fr !important; }
+    .foot-grid { grid-template-columns: 1fr !important; }
+    .home-section-pad { padding-left: 22px !important; padding-right: 22px !important; }
+    .disp-hero-h2 { font-size: 34px !important; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="image-slot.js"></script>
+<script src="spice-data.js"></script>
+<script src="api.js"></script>
+<script type="text/babel" src="shared.jsx"></script>
+<script type="text/babel" src="cards.jsx"></script>
+<script type="text/babel" src="navbar.jsx"></script>
+<script type="text/babel" src="home-common.jsx"></script>
+<script type="text/babel" src="home-hero.jsx"></script>
+<script type="text/babel" src="home-sections.jsx"></script>
+<script type="text/babel" src="home-footer.jsx"></script>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+/* From the Forest — curated Card B row */
+function FeaturedForest({ market }) {
+  /* Seed from dummy data immediately so the section is never blank on first
+     paint, then swap in live featured products once the API resolves. */
+  const [picks, setPicks] = useState(() => {
+    const s = window.SPICES || [];
+    return [s[0], s[5], s[2]].filter(Boolean);
+  });
+
+  useEffect(() => {
+    let alive = true;
+    if (!window.AranyaAPI) return;
+    window.AranyaAPI.getAllProducts()
+      .then((r) => {
+        if (!alive) return;
+        const all = (r.items || []);
+        if (!all.length) return;
+        const feat = all.filter((s) => s.featured);
+        setPicks(feat.length >= 3 ? feat.slice(0, 3) : all.slice(0, 3));
+      })
+      .catch(() => {/* keep fallback */});
+    return () => { alive = false; };
+  }, []);
+
+  return (
+    <section style={{ background: "var(--bg)", padding: "96px 0 40px" }}>
+      <div className="home-section-pad" style={{ maxWidth: 1280, margin: "0 auto", padding: "0 40px" }}>
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 40, flexWrap: "wrap", gap: 16 }}>
+          <div>
+            <Reveal><Eyebrow>Curated This Week</Eyebrow></Reveal>
+            <Reveal delay={60}><h2 className="disp" style={{ fontSize: 50, color: "var(--brand)", margin: "14px 0 0", lineHeight: 1.03 }}>From the Forest</h2></Reveal>
+          </div>
+          <Reveal delay={100}>
+            <p style={{ fontFamily: "var(--font-ui)", fontSize: 15, color: "var(--muted)", maxWidth: 320, lineHeight: 1.6, paddingBottom: 6 }}>
+              Three lots we're reaching for right now — picked for their season, not their shelf life.
+            </p>
+          </Reveal>
+        </div>
+        <Reveal delay={120}>
+          <div className="feat-row">
+            {picks.map((s) => <CardB key={s.slug || s.name} spice={s} market={market} />)}
+          </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+function Home() {
+  const [market, setMarket] = useState("intl");
+  return (
+    <div className="aranya">
+      <AranyaNavbar market={market} heroMode={true} />
+      <MarketStrip market={market} setMarket={setMarket} />
+      <HomeHero />
+      <FeaturedForest market={market} />
+      <CategoryTiles />
+      <StoryBand />
+      <Bestsellers market={market} />
+      <Heritage />
+      <Newsletter />
+      <Footer market={market} setMarket={setMarket} />
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<Home />);
+</script>
+</body>
+</html>

@@ -1,0 +1,146 @@
+/* Aranya Ceylon — Account / order-tracking sample data.
+   Plain JS, load BEFORE the account React files. Exposes window.ACCOUNT + helpers.
+   Colour fields mirror spice-data.js so <SpicePhoto> + per-spice stripes work. */
+(function () {
+  /* small palette pulled from the catalogue (name → colour fields) */
+  var S = {
+    cinnamon:  { name: "Ceylon Cinnamon Quills", latin: "Cinnamomum verum",   color: "#B5651D", base: "#C2772E", deep: "#7E481A", surface: "#F3E7D4", usd: 14.5, lkr: 2150 },
+    cardamom:  { name: "Green Cardamom Pods",     latin: "Elettaria cardamomum", color: "#7C9A5A", base: "#93AE6A", deep: "#566F37", surface: "#EAEFDD", usd: 18.0, lkr: 2680 },
+    cloves:    { name: "Whole Cloves",            latin: "Syzygium aromaticum",  color: "#6B4226", base: "#7A4A2A", deep: "#462914", surface: "#EBDDCD", usd: 11.25, lkr: 1670 },
+    turmeric:  { name: "Ground Turmeric",         latin: "Curcuma longa",        color: "#D99A1C", base: "#E2A62B", deep: "#A8740F", surface: "#F6E9C9", usd: 8.5,  lkr: 1260 },
+    pepper:    { name: "Black Peppercorns",       latin: "Piper nigrum",         color: "#3C3A36", base: "#54504A", deep: "#26241F", surface: "#E6E2DA", usd: 9.9,  lkr: 1470 },
+    nutmeg:    { name: "Whole Nutmeg",            latin: "Myristica fragrans",   color: "#A9683C", base: "#B57441", deep: "#7A451F", surface: "#F0E2D2", usd: 16.75, lkr: 2490 },
+    curry:     { name: "Ceylon Curry Powder",     latin: "Roasted estate blend", color: "#9A5B22", base: "#AC6C2D", deep: "#6E3F16", surface: "#EFE2CE", usd: 13.75, lkr: 2040 },
+  };
+  var MULT = { "50g": 0.6, "100g": 1, "250g": 2.3 };
+
+  /* build a line item from a base spice + chosen weight/form/qty */
+  function L(key, weight, form, qty) {
+    var s = S[key];
+    return {
+      key: key, name: s.name, latin: s.latin, weight: weight, form: form, qty: qty,
+      color: s.color, base: s.base, deep: s.deep, surface: s.surface,
+      usd: s.usd * (MULT[weight] || 1), lkr: s.lkr * (MULT[weight] || 1),
+    };
+  }
+
+  /* canonical fulfilment steps (the tracking spine) */
+  var STEPS = [
+    { key: "placed",    label: "Order placed",        note: "We received your order and payment." },
+    { key: "packed",    label: "Packed & sealed",     note: "Fresh-milled and sealed at peak aroma within 24h." },
+    { key: "shipped",   label: "Dispatched",          note: "Handed to the carrier from our Kandy facility." },
+    { key: "transit",   label: "In transit",          note: "On the move toward your delivery address." },
+    { key: "out",       label: "Out for delivery",    note: "With the courier for delivery today." },
+    { key: "delivered", label: "Delivered",           note: "Left at your door — enjoy the harvest." },
+  ];
+  /* status → index of the CURRENT step (everything before is complete) */
+  var STATUS_INDEX = { processing: 1, in_transit: 3, out_for_delivery: 4, delivered: 5 };
+
+  var ACCOUNT = {
+    user: {
+      first: "Amara", name: "Amara Wijesinghe", initials: "AW",
+      email: "amara.w@example.com", since: "March 2024",
+      tier: "Harvest Club · Gold", points: 1840, pointsTo: 2000,
+    },
+    addresses: [
+      { id: "a1", label: "Home", market: "intl", name: "Amara Wijesinghe",
+        lines: ["48 Marine Drive, Apt 9B", "Brooklyn, NY 11209"], country: "United States",
+        phone: "+1 (917) 555 0142", isDefault: true },
+      { id: "a2", label: "Office", market: "intl", name: "Amara Wijesinghe",
+        lines: ["120 Hudson Street, Floor 5"], cityzip: "New York, NY 10013", country: "United States",
+        phone: "+1 (212) 555 0190", isDefault: false },
+      { id: "a3", label: "Colombo flat", market: "local", name: "Amara Wijesinghe",
+        lines: ["22/4 Horton Place", "Colombo 07"], country: "Sri Lanka",
+        phone: "+94 77 555 0142", isDefault: false },
+    ],
+    /* orders newest-first. The first OPEN order is the "active shipment". */
+    orders: [
+      {
+        id: "AC-820417", placedISO: "2026-05-29", placedLabel: "29 May 2026",
+        status: "in_transit", carrier: "DHL Express", tracking: "JD0149220117",
+        etaLabel: "2–3 Jun 2026", shipTo: "a1",
+        items: [ L("cinnamon", "250g", "Whole", 1), L("cardamom", "100g", "Whole", 1), L("turmeric", "100g", "Ground", 2) ],
+        events: [
+          { step: "placed",  at: "29 May, 9:24 AM",  loc: "Online" },
+          { step: "packed",  at: "29 May, 6:10 PM",  loc: "Kandy facility, LK" },
+          { step: "shipped", at: "30 May, 8:02 AM",  loc: "Colombo (CMB) hub, LK" },
+          { step: "transit", at: "31 May, 4:48 PM",  loc: "Dubai (DXB) transit, AE" },
+        ],
+      },
+      {
+        id: "AC-817905", placedISO: "2026-05-12", placedLabel: "12 May 2026",
+        status: "delivered", carrier: "DHL Express", tracking: "JD0149118840",
+        deliveredLabel: "17 May 2026", shipTo: "a1",
+        items: [ L("pepper", "100g", "Whole", 1), L("curry", "100g", "Ground", 1) ],
+        events: [
+          { step: "placed",    at: "12 May, 11:02 AM", loc: "Online" },
+          { step: "packed",    at: "12 May, 5:40 PM",  loc: "Kandy facility, LK" },
+          { step: "shipped",   at: "13 May, 7:30 AM",  loc: "Colombo (CMB) hub, LK" },
+          { step: "transit",   at: "15 May, 2:10 PM",  loc: "Leipzig (LEJ) transit, DE" },
+          { step: "out",       at: "17 May, 8:15 AM",  loc: "Brooklyn, NY" },
+          { step: "delivered", at: "17 May, 1:46 PM",  loc: "Front desk · signed AW" },
+        ],
+      },
+      {
+        id: "AC-811233", placedISO: "2026-04-02", placedLabel: "2 Apr 2026",
+        status: "delivered", carrier: "DHL Express", tracking: "JD0148880021",
+        deliveredLabel: "9 Apr 2026", shipTo: "a1",
+        items: [ L("cinnamon", "100g", "Whole", 2), L("cloves", "50g", "Whole", 1), L("nutmeg", "50g", "Whole", 1) ],
+        events: [
+          { step: "placed",    at: "2 Apr, 3:18 PM",  loc: "Online" },
+          { step: "delivered", at: "9 Apr, 11:20 AM", loc: "Front desk · signed AW" },
+        ],
+      },
+    ],
+    wishlistKeys: ["nutmeg", "cardamom", "cloves", "curry"],
+  };
+
+  /* ---- helpers ---- */
+  function fmt(n, market) {
+    if (market === "local") return "Rs " + Math.round(n).toLocaleString("en-US");
+    return "$" + (Math.round(n * 100) / 100).toFixed(2);
+  }
+  function orderSubtotal(o, market) {
+    return o.items.reduce(function (s, it) { return s + (market === "local" ? it.lkr : it.usd) * it.qty; }, 0);
+  }
+  function orderTotal(o, market) {
+    var sub = orderSubtotal(o, market);
+    var ship = sub >= (market === "local" ? 5000 : 60) ? 0 : (market === "local" ? 650 : 8.5);
+    return sub + ship;
+  }
+  function statusMeta(status) {
+    return ({
+      processing:       { label: "Processing",       tone: "amber",  short: "Processing" },
+      in_transit:       { label: "In transit",       tone: "forest", short: "In transit" },
+      out_for_delivery: { label: "Out for delivery", tone: "forest", short: "Out for delivery" },
+      delivered:        { label: "Delivered",        tone: "muted",  short: "Delivered" },
+    })[status] || { label: status, tone: "muted", short: status };
+  }
+  /* merge the canonical spine with an order's recorded events + live status.
+     returns [{key,label,note,state:'done'|'active'|'pending',at,loc}] */
+  function buildTimeline(order, statusOverride) {
+    var status = statusOverride || order.status;
+    var curIdx = STATUS_INDEX[status];
+    var byStep = {};
+    (order.events || []).forEach(function (e) { byStep[e.step] = e; });
+    return STEPS.map(function (st, i) {
+      var ev = byStep[st.key];
+      var state = i < curIdx ? "done" : i === curIdx ? "active" : "pending";
+      /* delivered status: the delivered step itself is 'done' */
+      if (status === "delivered" && i <= curIdx) state = "done";
+      return {
+        key: st.key, label: st.label, note: st.note, state: state,
+        at: ev ? ev.at : null, loc: ev ? ev.loc : null,
+      };
+    });
+  }
+
+  window.ACCOUNT = ACCOUNT;
+  window.ACCOUNT_SPICES = S;
+  window.acFmt = fmt;
+  window.acOrderSubtotal = orderSubtotal;
+  window.acOrderTotal = orderTotal;
+  window.acStatusMeta = statusMeta;
+  window.acBuildTimeline = buildTimeline;
+  window.AC_STEPS = STEPS;
+})();

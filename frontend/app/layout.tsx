@@ -3,7 +3,7 @@ import { Cormorant_Garamond, Plus_Jakarta_Sans, Spectral } from "next/font/googl
 import { SITE_URL } from "@/lib/env";
 import "./globals.css";
 
-// Three locked typography roles (see frontend/DESIGN.md):
+// Three locked typography roles (see frontend-legacy/CLAUDE.md):
 //   display → Cormorant Garamond, UI → Plus Jakarta Sans, reading → Spectral
 const display = Cormorant_Garamond({
   subsets: ["latin"],
