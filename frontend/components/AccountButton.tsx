@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useSession } from "./SessionProvider";
+import { useT } from "./I18nProvider";
 
 // Navbar account control: "Sign in" when logged out, or a small menu with the
 // user's name + account link + logout when signed in.
 export function AccountButton() {
   const { user, loading, logout } = useSession();
+  const t = useT().account;
   const [open, setOpen] = useState(false);
 
   if (loading) return <span style={{ width: 22, height: 22 }} aria-hidden />;
@@ -18,7 +20,7 @@ export function AccountButton() {
         href="/account/login"
         style={{ fontFamily: "var(--font-ui), sans-serif", fontSize: 14, fontWeight: 500, color: "rgba(253,250,245,0.9)" }}
       >
-        Sign in
+        {t.signIn}
       </Link>
     );
   }
@@ -46,10 +48,10 @@ export function AccountButton() {
             color: "var(--ink)", borderRadius: "var(--radius)", boxShadow: "var(--shadow-md)", overflow: "hidden", zIndex: 60,
           }}
         >
-          <Link href="/account" onClick={() => setOpen(false)} style={menuItem}>My account</Link>
-          <Link href="/account/orders" onClick={() => setOpen(false)} style={menuItem}>Orders</Link>
+          <Link href="/account" onClick={() => setOpen(false)} style={menuItem}>{t.myAccount}</Link>
+          <Link href="/account/orders" onClick={() => setOpen(false)} style={menuItem}>{t.orders}</Link>
           <button onClick={() => { setOpen(false); void logout(); }} style={{ ...menuItem, width: "100%", textAlign: "left", background: "none", border: 0, cursor: "pointer", borderTop: "1px solid var(--line)" }}>
-            Sign out
+            {t.signOut}
           </button>
         </div>
       )}

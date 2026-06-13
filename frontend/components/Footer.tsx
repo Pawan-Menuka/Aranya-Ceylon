@@ -1,4 +1,6 @@
-export function Footer() {
+import type { Dictionary } from "@/lib/i18n/dictionaries";
+
+export function Footer({ dict }: { dict: Dictionary }) {
   return (
     <footer style={{ background: "var(--brand)", color: "rgba(253,250,245,0.85)", marginTop: 80 }}>
       <div
@@ -17,10 +19,10 @@ export function Footer() {
           ARANYA <span style={{ fontStyle: "italic", color: "var(--gold-line)" }}>Ceylon</span>
         </div>
         <p style={{ fontSize: 13, margin: 0 }}>
-          Single-origin Ceylon spices · Matale · Kandy · Sabaragamuwa
+          {dict.footer.tagline}
         </p>
         <p style={{ fontSize: 12, margin: 0, opacity: 0.7 }}>
-          © {new Date().getFullYear()} Aranya Ceylon
+          © {new Date().getFullYear()} {dict.footer.rights}
         </p>
       </div>
     </footer>

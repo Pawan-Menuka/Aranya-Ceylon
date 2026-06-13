@@ -1,8 +1,11 @@
 import Link from "next/link";
+import { getLocale } from "@/lib/i18n/locale";
+import { getDictionary } from "@/lib/i18n/dictionaries";
 
 // Phase 0a placeholder landing. The real scroll-frame hero homepage is a later
 // phase; this confirms the scaffold, fonts, and design tokens render correctly.
-export default function HomePage() {
+export default async function HomePage() {
+  const dict = getDictionary(await getLocale());
   return (
     <main
       style={{
@@ -37,7 +40,7 @@ export default function HomePage() {
         CEYLON
       </p>
       <p style={{ marginTop: 22, fontSize: 13, letterSpacing: ".04em", color: "rgba(253,250,245,.7)" }}>
-        Spice, as the forest intended.
+        {dict.home.tagline}
       </p>
 
       <Link
@@ -45,7 +48,7 @@ export default function HomePage() {
         className="btn btn-intl"
         style={{ marginTop: 40, display: "inline-block", textDecoration: "none" }}
       >
-        Explore the catalog
+        {dict.home.cta}
       </Link>
     </main>
   );
