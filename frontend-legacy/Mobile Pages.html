@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aranya Ceylon — Mobile Pages</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,400;1,500;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Spectral:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="aranya.css" />
+<style>
+  html, body { margin: 0; background: #E7E0D4; }
+  .page { min-height: 100vh; padding: 54px 28px 90px; }
+  .intro { max-width: 780px; margin: 0 auto 20px; text-align: center; }
+  .intro .eyebrow { color: var(--accent); justify-content: center; display: flex; gap: 11px; align-items: center; margin-bottom: 14px; }
+  .intro h1 { font-family: var(--font-display); font-weight: 600; color: var(--brand); font-size: clamp(34px, 5vw, 56px); line-height: 1.02; margin: 0; }
+  .intro p { font-family: var(--font-read); font-size: 17px; line-height: 1.65; color: var(--muted); margin: 16px auto 0; max-width: 600px; }
+
+  .group { max-width: 1400px; margin: 0 auto; }
+  .group-head { text-align: center; margin: 64px 0 30px; }
+  .group-head .gh-eyebrow { font-family: var(--font-ui); font-size: 12px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--accent); }
+  .group-head h2 { font-family: var(--font-display); font-weight: 600; color: var(--brand); font-size: clamp(26px, 3vw, 38px); margin: 8px 0 0; line-height: 1.04; }
+  .group-head p { font-family: var(--font-ui); font-size: 14px; color: var(--muted); margin: 8px auto 0; max-width: 460px; }
+
+  .devices { display: flex; flex-wrap: wrap; justify-content: center; gap: 38px 46px; }
+  .frame { flex: 0 0 auto; }
+  .frame .label { text-align: center; font-family: var(--font-ui); margin-top: 16px; }
+  .frame .label .name { display: block; font-size: 15px; font-weight: 700; color: var(--ink); }
+  .frame .label .desc { display: block; font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+  .frame .label .tag { display: inline-block; margin-top: 8px; font-size: 9.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--brand); background: rgba(15,110,86,.1); border-radius: 999px; padding: 4px 10px; }
+
+  .noscroll::-webkit-scrollbar { display: none; }
+  .noscroll { scrollbar-width: none; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="intro">
+    <div class="eyebrow"><span style="width:22px;height:1px;background:var(--accent)"></span>Mobile · iOS<span style="width:22px;height:1px;background:var(--accent)"></span></div>
+    <h1>The rest of the site, on mobile.</h1>
+    <p>Faithful mobile ports of every content page — Categories, Search, Gifts, the Journal, Recipes and Our Story. Each device is live: filter, search, tap a story or recipe to open it, and switch market. Drag inside a phone to scroll.</p>
+  </div>
+  <div id="root"></div>
+</div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="spice-data.js"></script>
+<script src="catalog-data.js"></script>
+<script src="journal-data.js"></script>
+<script src="recipes-data.js"></script>
+<script src="gifts-data.js"></script>
+<script type="text/babel" src="shared.jsx"></script>
+<script type="text/babel" src="home-common.jsx"></script>
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="mobile.jsx"></script>
+<script type="text/babel" src="mobile-pages-common.jsx"></script>
+<script type="text/babel" src="mobile-categories.jsx"></script>
+<script type="text/babel" src="mobile-search.jsx"></script>
+<script type="text/babel" src="mobile-gifts.jsx"></script>
+<script type="text/babel" src="mobile-journal.jsx"></script>
+<script type="text/babel" src="mobile-recipes.jsx"></script>
+<script type="text/babel" src="mobile-about.jsx"></script>
+<script type="text/babel">
+function Frame({ name, desc, tag, children }) {
+  return (
+    <div className="frame">
+      <IOSDevice>{children}</IOSDevice>
+      <div className="label">
+        <span className="name">{name}</span>
+        <span className="desc">{desc}</span>
+        {tag && <span className="tag">{tag}</span>}
+      </div>
+    </div>
+  );
+}
+
+function Group({ eyebrow, title, blurb, children }) {
+  return (
+    <div className="group">
+      <div className="group-head">
+        <div className="gh-eyebrow">{eyebrow}</div>
+        <h2>{title}</h2>
+        {blurb && <p>{blurb}</p>}
+      </div>
+      <div className="devices">{children}</div>
+    </div>
+  );
+}
+
+function App() {
+  const market = "intl";
+  return (
+    <React.Fragment>
+      <Group eyebrow="Discovery" title="Browse, search & gift" blurb="The three ways into the range — by category, by search, and by gift set.">
+        <Frame name="Categories" desc="Prep, flavour & collections" tag="Interactive"><MobileCategories market={market} /></Frame>
+        <Frame name="Search" desc="Live product + journal search" tag="Type to filter"><MobileSearch market={market} /></Frame>
+        <Frame name="Gifts & Sets" desc="Curated boxes + occasions" tag="Interactive"><MobileGifts market={market} /></Frame>
+      </Group>
+
+      <Group eyebrow="Editorial" title="The Journal & the Kitchen" blurb="Stories and recipes — tap any card to open the full article or recipe inside the same phone.">
+        <Frame name="Journal" desc="Index · tap a post to read" tag="List → Article"><MobileJournal market={market} /></Frame>
+        <Frame name="Article" desc="Full post layout" tag="Story"><MobileArticle market={market} slug="true-cinnamon" /></Frame>
+        <Frame name="Recipes" desc="Index · tap to open recipe" tag="List → Detail"><MobileRecipes market={market} /></Frame>
+        <Frame name="Recipe Detail" desc="Ingredients · method · spices" tag="Cook view"><MobileRecipeDetail market={market} slug="black-pork-curry" /></Frame>
+      </Group>
+
+      <Group eyebrow="Story" title="Our Story" blurb="The full brand narrative — origin, growers, the land, and how it's made.">
+        <Frame name="About" desc="Full story, top to bottom" tag="Editorial"><MobileAbout market={market} /></Frame>
+      </Group>
+    </React.Fragment>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

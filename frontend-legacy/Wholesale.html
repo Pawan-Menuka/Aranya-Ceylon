@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aranya Ceylon — Wholesale &amp; Trade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,400;1,500;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="aranya.css" />
+<style>
+  html, body { margin: 0; background: var(--bg); }
+  body { overflow-x: hidden; }
+
+  /* form inputs */
+  .wh-input {
+    font-family: var(--font-ui); font-size: 14.5px; color: var(--ink); background: #fff;
+    border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; outline: none; width: 100%;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .wh-input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(15,110,86,.12); }
+  .wh-input::placeholder { color: #A99E8C; }
+  select.wh-input { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%235C5248' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 13px center; padding-right: 36px; }
+
+  /* responsive */
+  @media (max-width: 1024px) {
+    .wh-who-grid { grid-template-columns: repeat(3, 1fr) !important; }
+    .wh-steps-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 36px 22px !important; }
+    .wh-tier-grid { grid-template-columns: 1fr !important; max-width: 520px; margin-left: auto; margin-right: auto; }
+    .wh-form-wrap { grid-template-columns: 1fr !important; gap: 40px !important; }
+    .wh-form-wrap > div:first-child { position: static !important; }
+    .foot-grid { grid-template-columns: 1fr 1fr !important; gap: 36px !important; }
+  }
+  @media (max-width: 720px) {
+    .wh-why-grid { grid-template-columns: 1fr !important; }
+    .wh-who-grid { grid-template-columns: 1fr !important; }
+    .wh-steps-grid { grid-template-columns: 1fr !important; }
+    .wh-grid2 { grid-template-columns: 1fr !important; }
+    .foot-grid { grid-template-columns: 1fr !important; }
+    .home-section-pad { padding-left: 22px !important; padding-right: 22px !important; }
+    .disp-hero-h2 { font-size: 44px !important; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="image-slot.js"></script>
+<script src="spice-data.js"></script>
+<script type="text/babel" src="shared.jsx"></script>
+<script type="text/babel" src="navbar.jsx"></script>
+<script type="text/babel" src="home-common.jsx"></script>
+<script type="text/babel" src="home-footer.jsx"></script>
+<script type="text/babel" src="wholesale.jsx"></script>
+<script type="text/babel">
+const { useState, useRef } = React;
+
+function WholesalePage() {
+  const [market, setMarket] = useState("intl");
+  const formRef = useRef(null);
+  const scrollToForm = () => { if (formRef.current) formRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); };
+  return (
+    <div className="aranya">
+      <AranyaNavbar market={market} heroMode={true} />
+      <WholesaleHero market={market} scrollToForm={scrollToForm} />
+      <WholesaleWhy />
+      <WholesaleWho />
+      <WholesaleSteps market={market} scrollToForm={scrollToForm} />
+      <WholesaleTiers market={market} scrollToForm={scrollToForm} />
+      <WholesaleForm market={market} formRef={formRef} />
+      <WholesaleFAQ />
+      <Footer market={market} setMarket={setMarket} />
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<WholesalePage />);
+</script>
+</body>
+</html>

@@ -8,7 +8,7 @@ import { CartButton } from "./CartButton";
 import { AccountButton } from "./AccountButton";
 
 // Storefront navbar shell — solid forest bar (heroMode/auto-hide come later).
-// Light text, market switcher drives currency. See frontend/DESIGN.md.
+// Light text, market switcher drives currency. See frontend-legacy/CLAUDE.md.
 export function Navbar({ market, dict, locale }: { market: Market; dict: Dictionary; locale: Locale }) {
   return (
     <header

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aranya Ceylon — Account & Tracking (Mobile)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Spectral:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="aranya.css" />
+<style>
+  html, body { margin: 0; background: var(--bg); }
+  @keyframes acPulse  { 0% { transform: scale(1); opacity: .55; } 100% { transform: scale(2.6); opacity: 0; } }
+  @keyframes acPulse2 { 0% { box-shadow: 0 0 0 0 rgba(230,184,96,.55); } 100% { box-shadow: 0 0 0 7px rgba(230,184,96,0); } }
+  .stage { background:
+      radial-gradient(120% 80% at 50% -10%, rgba(15,110,86,.07), transparent 60%),
+      var(--bg);
+    min-height: 100vh; padding: 56px 24px 80px; }
+  .frames { display: flex; gap: 44px; justify-content: flex-start; align-items: flex-start;
+    overflow-x: auto; padding: 8px 4px 28px; scroll-snap-type: x proximity; }
+  .frames > div { scroll-snap-align: center; }
+  .fcap { font-family: var(--font-ui); font-size: 12px; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--muted); text-align: center; margin-top: 18px; }
+  @media (min-width: 1340px) { .frames { justify-content: center; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="spice-data.js"></script>
+<script src="catalog-data.js"></script>
+<script src="cart-store.js"></script>
+<script src="account-data.js"></script>
+<script type="text/babel" src="shared.jsx"></script>
+<script type="text/babel" src="home-common.jsx"></script>
+<script type="text/babel" src="account-tracking.jsx"></script>
+<script type="text/babel" src="account-mobile.jsx"></script>
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel">
+const { useState: aUse } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "market": "intl",
+  "orderStatus": "in_transit"
+}/*EDITMODE-END*/;
+
+function Frame({ children, cap }) {
+  return (
+    <div>
+      <IOSDevice width={392} height={840}>{children}</IOSDevice>
+      <div className="fcap">{cap}</div>
+    </div>
+  );
+}
+
+/* interactive phone: home <-> tracking detail */
+function FlowPhone({ market, activeOrder, orders }) {
+  const [screen, setScreen] = aUse("home");
+  const [open, setOpen] = aUse(activeOrder ? activeOrder.id : null);
+  const detail = orders.find((o) => o.id === open) || activeOrder;
+  return (
+    <div>
+      <IOSDevice width={392} height={840}>
+        {screen === "home"
+          ? <MAccountHome market={market} activeOrder={activeOrder} orders={orders} onOpen={(o) => { setOpen(o.id); setScreen("detail"); }} />
+          : <MTrackingDetail order={detail} market={market} onBack={() => setScreen("home")} />}
+      </IOSDevice>
+      <div className="fcap">Account · tap to track</div>
+    </div>
+  );
+}
+
+function MobileApp() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const market = t.market;
+
+  const baseActive = ACCOUNT.orders.find((o) => o.status !== "delivered") || ACCOUNT.orders[0];
+  const orders = ACCOUNT.orders.map((o) => o.id === baseActive.id ? { ...o, status: t.orderStatus } : o);
+  const activeOrder = orders.find((o) => o.id === baseActive.id);
+  const delivered = orders.find((o) => o.status === "delivered" && o.id !== baseActive.id) || orders[1];
+
+  return (
+    <div className="aranya stage">
+      <div style={{ maxWidth: 1280, margin: "0 auto" }}>
+        <div style={{ marginBottom: 30 }}>
+          <Eyebrow>Mobile · iOS</Eyebrow>
+          <h1 className="disp" style={{ fontSize: 40, color: "var(--brand)", margin: "14px 0 8px", lineHeight: 1.04, fontWeight: 600 }}>Account & order tracking on mobile</h1>
+          <p style={{ fontFamily: "var(--font-ui)", fontSize: 15, color: "var(--muted)", margin: 0, maxWidth: 600 }}>
+            Sign in, follow each shipment from the hill country, and reorder in a tap. The middle phone is live — tap the green tracking card to open the full timeline.
+          </p>
+        </div>
+        <div className="frames">
+          <Frame cap="Sign in"><MSignIn market={market} onSignIn={() => {}} /></Frame>
+          <FlowPhone market={market} activeOrder={activeOrder} orders={orders} />
+          <Frame cap="Live tracking"><MTrackingDetail order={activeOrder} market={market} onBack={() => {}} /></Frame>
+        </div>
+      </div>
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Market" />
+        <TweakRadio label="Currency" value={market} options={[{ value: "intl", label: "USD · Intl" }, { value: "local", label: "LKR · Local" }]} onChange={(v) => setTweak("market", v)} />
+        <TweakSection label="Order tracking" />
+        <TweakSelect label="Active shipment status" value={t.orderStatus}
+          options={[{ value: "processing", label: "Processing" }, { value: "in_transit", label: "In transit" }, { value: "out_for_delivery", label: "Out for delivery" }, { value: "delivered", label: "Delivered" }]}
+          onChange={(v) => setTweak("orderStatus", v)} />
+      </TweaksPanel>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<MobileApp />);
+</script>
+</body>
+</html>
