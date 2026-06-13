@@ -13,6 +13,11 @@ router.get('/search', asyncHandler(productController.searchProducts));
 router.get('/:slug', asyncHandler(productController.getProduct));
 
 // Admin routes
+// Two-segment path so it can't be captured by the public GET '/:slug'.
+router.get('/admin/all',
+    asyncHandler(requireAuth), requireRole('ADMIN', 'SUPERADMIN'),
+    asyncHandler(productController.adminListProducts),
+);
 router.post('/',
     asyncHandler(requireAuth), requireRole('ADMIN', 'SUPERADMIN'),
     asyncHandler(productController.createProduct),
