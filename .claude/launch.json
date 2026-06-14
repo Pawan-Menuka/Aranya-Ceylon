@@ -5,8 +5,7 @@
       "name": "frontend",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@aranya/frontend", "dev"],
-      "port": 3000,
-      "autoPort": true
+      "port": 3000
     }
   ]
 }

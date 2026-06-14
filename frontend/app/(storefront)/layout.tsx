@@ -19,7 +19,7 @@ export default async function StorefrontLayout({ children }: { children: React.R
         <CartProvider>
           <Navbar market={market} dict={dict} locale={locale} />
           <div style={{ minHeight: "60vh" }}>{children}</div>
-          <Footer market={market} />
+          <Footer dict={dict} />
         </CartProvider>
       </SessionProvider>
     </I18nProvider>
