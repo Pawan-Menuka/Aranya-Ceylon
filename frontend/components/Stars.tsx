@@ -1,25 +1,19 @@
-"use client";
-
-import { useId } from "react";
-
-// Simple star rating display (filled/half/empty) in amber. useId (not
-// Math.random) keeps the half-star gradient id stable across SSR/hydration.
+// Simple star rating display (filled/half/empty) in amber.
 export function Stars({ rating, size = 16 }: { rating: number; size?: number }) {
   const full = Math.floor(rating);
   const half = rating - full >= 0.5;
-  const gradId = useId().replace(/:/g, "");
   return (
     <span aria-label={`${rating.toFixed(1)} out of 5`} style={{ display: "inline-flex", gap: 2, color: "var(--accent)" }}>
       {[0, 1, 2, 3, 4].map((i) => {
         const fill = i < full ? "full" : i === full && half ? "half" : "empty";
-        return <Star key={i} size={size} fill={fill} gradId={gradId} />;
+        return <Star key={i} size={size} fill={fill} />;
       })}
     </span>
   );
 }
 
-function Star({ size, fill, gradId }: { size: number; fill: "full" | "half" | "empty"; gradId: string }) {
-  const id = `half-${gradId}`;
+function Star({ size, fill }: { size: number; fill: "full" | "half" | "empty" }) {
+  const id = `half-${Math.random().toString(36).slice(2, 8)}`;
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
       {fill === "half" && (
