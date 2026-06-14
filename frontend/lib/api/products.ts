@@ -48,7 +48,21 @@ export function mapProduct(p: ApiProduct, market: Market): ProductView {
   const currency = currencyForMarket(market);
   const variant = pickVariant(p.variants ?? [], currency);
   const weights = [...new Set((p.variants ?? []).map((v) => v.weight))].sort((a, b) => a - b);
+  // In-currency variants for the card's weight picker + add-to-cart.
+  const variants = (p.variants ?? [])
+    .filter((v) => v.currency === currency)
+    .sort((a, b) => a.weight - b.weight)
+    .map((v) => ({
+      id: v.id,
+      weight: v.weight,
+      label: `${v.weight}g`,
+      price: formatPrice(v.price, currency),
+      priceAmount: Number(v.price),
+      stock: v.stock,
+      sku: v.sku,
+    }));
   return {
+    variants,
     id: p.id,
     slug: p.slug,
     name: p.name,
