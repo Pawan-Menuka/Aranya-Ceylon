@@ -64,6 +64,17 @@ export async function updateItem(req: Request, res: Response) {
     return res.json({ item });
 }
 
+// --- Remove item ---
+export async function removeItem(req: Request, res: Response) {
+    const userId = req.user?.userId;
+    const guestToken = req.cookies?.[GUEST_TOKEN_COOKIE];
+
+    const cart = await cartService.getOrCreateCart(userId, guestToken);
+    await cartService.updateCartItem(cart.id, req.params.itemId!, { quantity: 0 });
+
+    return res.status(204).send();
+}
+
 // --- Apply coupon ---
 export async function applyCoupon(req: Request, res: Response) {
     const userId = req.user?.userId;

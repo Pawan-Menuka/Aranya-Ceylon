@@ -137,3 +137,17 @@ export async function getMe(req: Request, res: Response) {
     if (!user) return res.status(404).json({ error: 'User not found' });
     return res.json({ user });
 }
+
+export async function patchMe(req: Request, res: Response) {
+    const { name, phone } = req.body as { name?: string; phone?: string };
+    const update: { name?: string; phone?: string } = {};
+    if (name !== undefined) update.name = String(name).trim();
+    if (phone !== undefined) update.phone = String(phone).trim();
+
+    const user = await prisma.user.update({
+        where: { id: req.user!.userId },
+        data: update,
+        select: { id: true, name: true, email: true, role: true, verified: true, createdAt: true },
+    });
+    return res.json({ user });
+}
