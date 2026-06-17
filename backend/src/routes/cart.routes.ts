@@ -12,6 +12,7 @@ router.use(asyncHandler(optionalAuth));
 router.get('/', asyncHandler(cartController.getCart));
 router.post('/items', asyncHandler(cartController.addItem));
 router.patch('/items/:itemId', asyncHandler(cartController.updateItem));
+router.delete('/items/:itemId', asyncHandler(cartController.removeItem));
 router.post('/coupon', asyncHandler(cartController.applyCoupon));
 // Merge the guest cart into the user's cart on login (auth required).
 router.post('/merge', asyncHandler(requireAuth), asyncHandler(cartController.mergeCart));

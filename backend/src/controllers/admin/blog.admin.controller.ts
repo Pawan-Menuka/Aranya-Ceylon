@@ -19,7 +19,7 @@ export async function listBlogs(_req: Request, res: Response) {
         orderBy: { createdAt: 'desc' },
         select: {
             id: true, title: true, slug: true, status: true,
-            publishedAt: true, scheduledAt: true, viewCount: true, tags: true,
+            publishedAt: true, scheduledAt: true, viewCount: true, tags: true, authorId: true,
         },
     });
     return res.json({ blogs });
