@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import * as cartController from '../controllers/cart.controller.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
-import { optionalAuth } from '../middleware/authenticate.js';
+import { optionalAuth, requireAuth } from '../middleware/authenticate.js';
 
 const router = Router();
 
@@ -12,6 +12,9 @@ router.use(asyncHandler(optionalAuth));
 router.get('/', asyncHandler(cartController.getCart));
 router.post('/items', asyncHandler(cartController.addItem));
 router.patch('/items/:itemId', asyncHandler(cartController.updateItem));
+router.delete('/items/:itemId', asyncHandler(cartController.removeItem));
 router.post('/coupon', asyncHandler(cartController.applyCoupon));
+// Merge the guest cart into the user's cart on login (auth required).
+router.post('/merge', asyncHandler(requireAuth), asyncHandler(cartController.mergeCart));
 
 export default router;

@@ -83,10 +83,35 @@ export function startLowStockAlertJob() {
     });
 }
 
+// --- Job 4: Cancel stale unpaid orders ---
+// Runs hourly. Cancels orders stuck in PENDING for more than 24h — a failed or
+// abandoned checkout. This is the real cancellation path now that the payment
+// webhooks no longer cancel on a single failed attempt (#16), since the same
+// PaymentIntent / PayHere order can be retried. The `status: 'PENDING'` guard
+// makes it race-safe against a late successful payment.
+const STALE_ORDER_HOURS = 24;
+
+export function startStaleOrderCancellationJob() {
+    cron.schedule('0 * * * *', async () => {
+        try {
+            const cutoff = new Date(Date.now() - STALE_ORDER_HOURS * 60 * 60 * 1000);
+            const { count } = await prisma.order.updateMany({
+                where: { status: 'PENDING', createdAt: { lt: cutoff } },
+                data: { status: 'CANCELLED' },
+            });
+
+            if (count > 0) console.log(`🛒 Cancelled ${count} stale unpaid order(s)`);
+        } catch (err) {
+            console.error('[CRON] Stale order cancellation job failed:', err);
+        }
+    });
+}
+
 // Start all jobs
 export function startAllJobs() {
     startScheduledPostsJob();
     startCartExpiryJob();
     startLowStockAlertJob();
+    startStaleOrderCancellationJob();
     console.log('⏰ Cron jobs started');
 }

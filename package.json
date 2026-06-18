@@ -10,7 +10,8 @@
     "dev:backend": "pnpm --filter @aranya/backend dev",
     "build:backend": "pnpm --filter @aranya/backend build",
     "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r --if-present test"
   },
   "pnpm": {
     "workspacePackages": [

@@ -19,10 +19,18 @@ export async function listBlogs(_req: Request, res: Response) {
         orderBy: { createdAt: 'desc' },
         select: {
             id: true, title: true, slug: true, status: true,
-            publishedAt: true, scheduledAt: true, viewCount: true, tags: true,
+            publishedAt: true, scheduledAt: true, viewCount: true, tags: true, authorId: true,
         },
     });
     return res.json({ blogs });
+}
+
+// Full post by id (any status) — for the admin editor, which must load drafts
+// and scheduled posts the public /blog/:slug endpoint won't return.
+export async function getBlog(req: Request, res: Response) {
+    const blog = await prisma.blog.findUnique({ where: { id: req.params.id! } });
+    if (!blog) return res.status(404).json({ error: 'Blog not found' });
+    return res.json({ blog });
 }
 
 export async function createBlog(req: Request, res: Response) {

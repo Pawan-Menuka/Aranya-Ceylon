@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { createId } from '@paralleldrive/cuid2';
 import { prisma } from '../index.js';
-import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../lib/jwt.js';
+import { signAccessToken } from '../lib/jwt.js';
 import type { User } from '@prisma/client';
 
 // How long refresh tokens live in the DB
@@ -14,20 +14,20 @@ function hashToken(plaintext: string): string {
 }
 
 // --- Issue a brand new token pair (called at login / register) ---
+// The refresh token is an opaque random string: plaintext goes in the
+// HttpOnly cookie, only its SHA-256 hash is stored. Rotation looks the
+// cookie value up by hash — no JWT involved.
 export async function issueTokenPair(user: User) {
     const family = createId(); // New family ID for this login session
-    const tokenId = createId();
 
     // Plaintext refresh token — goes into the cookie
     const refreshTokenPlaintext = createId() + createId(); // 48 random chars
 
-    // Store only the hash in DB
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRY_DAYS);
 
     await prisma.token.create({
         data: {
-            id: tokenId,
             userId: user.id,
             tokenHash: hashToken(refreshTokenPlaintext),
             type: 'REFRESH',
@@ -42,32 +42,23 @@ export async function issueTokenPair(user: User) {
         role: user.role,
     });
 
-    const refreshToken = await signRefreshToken({
-        userId: user.id,
-        family,
-        tokenId,
-    });
-
-    return { accessToken, refreshTokenPlaintext, refreshToken };
+    return { accessToken, refreshTokenPlaintext };
 }
 
 // --- Rotate refresh token (called on every /auth/refresh request) ---
 export async function rotateRefreshToken(refreshTokenCookie: string) {
-    // 1. Verify the JWT signature first
-    const payload = await verifyRefreshToken(refreshTokenCookie);
-
-    // 2. Look up the token record in DB by tokenId
+    // 1. Look up the token record by the hash of the cookie value
     const tokenRecord = await prisma.token.findUnique({
-        where: { id: payload.tokenId },
+        where: { tokenHash: hashToken(refreshTokenCookie) },
         include: { user: true },
     });
 
-    // 3. Token not found — already deleted or never existed
-    if (!tokenRecord) {
+    // 2. Token not found — already deleted or never existed
+    if (!tokenRecord || tokenRecord.type !== 'REFRESH') {
         throw new Error('INVALID_TOKEN');
     }
 
-    // 4. Token already used — REUSE DETECTED → nuke the entire family
+    // 3. Token already used — REUSE DETECTED → nuke the entire family
     if (tokenRecord.usedAt !== null) {
         await prisma.token.deleteMany({
             where: { family: tokenRecord.family },
@@ -75,20 +66,25 @@ export async function rotateRefreshToken(refreshTokenCookie: string) {
         throw new Error('TOKEN_REUSE_DETECTED');
     }
 
-    // 5. Token expired
+    // 4. Token expired
     if (tokenRecord.expiresAt < new Date()) {
         await prisma.token.delete({ where: { id: tokenRecord.id } });
         throw new Error('TOKEN_EXPIRED');
     }
 
-    // 6. Mark old token as used (invalidate it)
-    await prisma.token.update({
-        where: { id: tokenRecord.id },
+    // 5. Mark old token as used (invalidate it). updateMany with a usedAt
+    // guard so two concurrent refreshes can't both win the rotation.
+    const { count } = await prisma.token.updateMany({
+        where: { id: tokenRecord.id, usedAt: null },
         data: { usedAt: new Date() },
     });
+    if (count === 0) {
+        // Lost the race — treat like reuse: kill the family
+        await prisma.token.deleteMany({ where: { family: tokenRecord.family } });
+        throw new Error('TOKEN_REUSE_DETECTED');
+    }
 
-    // 7. Issue new token pair with SAME family
-    const newTokenId = createId();
+    // 6. Issue new token in the SAME family — keeps the chain trackable
     const newPlaintext = createId() + createId();
 
     const expiresAt = new Date();
@@ -96,11 +92,10 @@ export async function rotateRefreshToken(refreshTokenCookie: string) {
 
     await prisma.token.create({
         data: {
-            id: newTokenId,
             userId: tokenRecord.userId,
             tokenHash: hashToken(newPlaintext),
             type: 'REFRESH',
-            family: tokenRecord.family, // Same family — keeps the chain trackable
+            family: tokenRecord.family,
             expiresAt,
         },
     });
@@ -111,13 +106,21 @@ export async function rotateRefreshToken(refreshTokenCookie: string) {
         role: tokenRecord.user.role,
     });
 
-    const refreshToken = await signRefreshToken({
-        userId: tokenRecord.user.id,
-        family: tokenRecord.family,
-        tokenId: newTokenId,
+    return { accessToken, refreshTokenPlaintext: newPlaintext, user: tokenRecord.user };
+}
+
+// --- Revoke the session (token family) the cookie belongs to ---
+// Used by logout: kills this device's session only. No auth required —
+// possession of the refresh cookie IS the proof.
+export async function revokeTokenFamily(refreshTokenCookie: string) {
+    const tokenRecord = await prisma.token.findUnique({
+        where: { tokenHash: hashToken(refreshTokenCookie) },
+        select: { family: true },
     });
 
-    return { accessToken, refreshTokenPlaintext: newPlaintext, refreshToken, user: tokenRecord.user };
+    if (tokenRecord?.family) {
+        await prisma.token.deleteMany({ where: { family: tokenRecord.family } });
+    }
 }
 
 // --- Revoke all tokens for a user (logout all devices) ---

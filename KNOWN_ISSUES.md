@@ -11,6 +11,63 @@
 
 ---
 
+## ✅ Resolution log
+
+Fixed on branch `claude/silly-ptolemy-149cfc` (2026-06-11), all gated by `pnpm typecheck`, `pnpm lint`
+(0 errors), and `pnpm test` (46 passing).
+
+| # | Issue | Status |
+|---|---|---|
+| #0  | Frontend/backend uncommitted | ✅ Committed by user to `Develop` |
+| #1  | Refresh token flow broken | ✅ Fixed — opaque-token lookup by hash; dead JWT path removed |
+| #2  | Zero tests | ✅ Fixed — vitest suite (22 tests) wired into CI |
+| #3  | Webhook idempotency race | ✅ Fixed — conditional `updateMany` claim inside the transaction |
+| #4  | No stock validation / negative stock | ✅ Fixed — checkout pre-check + atomic guarded decrement + DB CHECK constraint |
+| #5  | Coupons wired 0% into checkout | ✅ Fixed — cart coupon applied to total, persisted on order, usage counted on payment |
+| #6  | `Order.total` stored subtotal | ✅ Fixed — now stores the grand total charged |
+| #7  | Float money math | ✅ Fixed — all totals computed in integer cents |
+| #8  | Error handler leaks stack traces | ✅ Fixed — internals only in development |
+| #9  | Register enumerates emails | ✅ Fixed — identical neutral response, no token issued on signup |
+| #10 | No rate limiting | ✅ Fixed — `express-rate-limit` on auth routes + `trust proxy` |
+| #11 | DB TLS verification disabled | ✅ Fixed — `rejectUnauthorized: true` verifies Neon's cert |
+| #12 | Auth routes miss `asyncHandler` | ✅ Fixed |
+| #13 | Logout broken / over-aggressive | ✅ Fixed — cookie-based, single-session; new `/auth/logout-all` |
+| #14 | `sameSite: 'strict'` breaks PayHere redirect | ✅ Fixed — now `'lax'` (see cross-domain note in #14) |
+| #15 | PayHere webhook: no merchant/amount cross-check | ✅ Fixed — verifies merchant_id + amount + currency |
+| #16 | Stripe `payment_failed` cancels prematurely | ✅ Fixed — failures leave order PENDING; cron sweeps stale orders |
+| #17 | Guest checkout impossible | ✅ Fixed — `optionalAuth`, cart-by-guest-token, `guestEmail`; order→cart link clears guest carts on payment |
+| #18 | Register TOCTOU race on duplicate email | ✅ Fixed — relies on unique constraint + P2002 catch |
+| #19 | Cart can check out cross-market/mixed-currency items | ✅ Fixed — checkout re-validates each line's market + currency (409) |
+| #20 | Duplicate email libraries | ✅ Fixed — removed unused `nodemailer` + `@types/nodemailer` (Resend kept) |
+| #21 | Placeholder README | ✅ Fixed — real README (stack, setup, env, scripts, migrations) |
+| #23 | No graceful shutdown | ✅ Fixed — SIGTERM/SIGINT close server + DB pool; cron-scaling caveat documented |
+| #24 | Middleware ordering undocumented | ✅ Fixed — comment explains webhook-before-helmet/json ordering |
+| #25 | Dead code / redundant indexes | ✅ Fixed — dropped `User_email_idx` + `Variant_productId_idx` (migration); dead imports already gone |
+| #26 | Dev CORS fails open | ✅ Fixed — fails closed; only `NODE_ENV=development` relaxes |
+| #27 | `/dev/seed-catalog` fails open | ✅ Fixed — requires `ENABLE_DEV_ROUTES=true` |
+| #28 | Stale DB connections vs Neon serverless | ✅ Fixed — switched to `@neondatabase/serverless` + `@prisma/adapter-neon`; verified live |
+
+**Behaviour change to note (#9):** registration no longer logs the user in or returns a token. After
+`POST /auth/register` the client should send the user to sign in. In development, accounts are
+auto-verified so login works immediately; in production `verified` stays `false` until the (not-yet-built)
+email-verification flow ships — login does not currently enforce `verified`, so users can still sign in.
+
+**New behaviour to note (#16):** failed payments no longer cancel the order — it stays `PENDING` so the
+customer can retry the same PaymentIntent / PayHere order. A new hourly cron job
+(`startStaleOrderCancellationJob`) cancels orders left `PENDING` for more than 24h. Explicit
+cancellations (Stripe `payment_intent.canceled`, PayHere status `-1`) still cancel immediately.
+
+**Coupon usage-limit caveat (#5):** redemptions are counted at payment time (`usageCount++`). The limit
+is checked at apply/checkout, so under heavy concurrent use of a tightly-limited coupon a few extra
+redemptions could slip through before the count catches up. Acceptable for launch; a hard cap would
+need reservation logic. The math itself (#7) is exact.
+
+**Still open:** the remaining
+frontend port phases (Phase 0 done; product detail, cart/checkout, account, admin, content), plus the
+feature roadmap. Every high- and medium-severity issue from the original review is resolved.
+
+---
+
 ## 🔴 CRITICAL — #0: The entire frontend (and recent backend work) is uncommitted
 
 **Where:** `frontend/` — ~110 untracked files (`git status` shows `??` on every one). Plus 15 modified
@@ -366,6 +423,41 @@ with `seed-catalog.ts` does the same job without an HTTP surface.
 *(For the record, the rest of the uncommitted backend work is solid: `latin`/`originLabel`/`color` on
 Product matching the frontend adapter, the `ratingAvg` enrichment via a single `groupBy`, deterministic
 brand-palette color fallback, and the dual-market seed catalog with per-market packaging. Keep all of it.)*
+
+---
+
+## ✅ RESOLVED — #28: Stale DB connections against Neon serverless
+
+**Fixed 2026-06-12.** Replaced node-postgres (`pg` Pool + `@prisma/adapter-pg`) with Neon's serverless
+driver (`@neondatabase/serverless` + `@prisma/adapter-neon`, with `ws` for the Node WebSocket). The old
+persistent pool against Neon's pooler dropped connections — it failed on *every* query right after boot,
+not just after idle (`P1017 / "Server has closed the connection"`). The serverless driver is the
+Neon-recommended path for serverless hosts (Vercel) and recovers connections transparently; it also
+encrypts to Neon by default (covers the old #11 TLS concern). Removed the now-unused `pg`/`adapter-pg`/
+`@types/pg`. **Verified live:** `/products` + `/health` return 200 in ~0.3–0.5s across repeated calls
+with zero P1017s, and the full SSR catalog + market switch (USD↔LKR) work end-to-end against the backend.
+
+<details><summary>Original report</summary>
+
+**Where:** `backend/src/index.ts` — the `pg` `Pool` + `@prisma/adapter-pg`.
+
+**What's observed:** the server boots and connects fine, but after Neon's compute auto-suspends on idle,
+the `pg` pool hands out **dead connections**. The next query (the `/health` `SELECT 1`, and the
+every-minute `blog.findMany` cron) fails with `P1017 / "Server has closed the connection" /
+ConnectionClosed`, so `/health` returns 503 and cron logs errors until traffic forces fresh connections.
+This is pre-existing infra behaviour — **not** caused by the TLS change (#11): the initial connect
+succeeded over verified TLS.
+
+**Why it matters:** on a real PaaS, low-traffic periods make the app look unhealthy and spam cron errors.
+
+**Fix options (needs an approach decision):**
+- Best: use Neon's driver (`@neondatabase/serverless`) instead of node-postgres for serverless-aware
+  connection handling.
+- Or tune the pool: low `idleTimeoutMillis` (close idle clients before Neon does) + `keepAlive`, and
+  make `/health` retry once on `P1017`.
+- Make cron jobs tolerant of cold starts (they already catch errors; consider a connectivity check).
+
+</details>
 
 ---
 

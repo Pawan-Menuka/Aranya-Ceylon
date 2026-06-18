@@ -4,6 +4,7 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 import * as orderAdmin from '../controllers/admin/order.admin.controller.js';
 import * as blogAdmin from '../controllers/admin/blog.admin.controller.js';
 import * as analyticsAdmin from '../controllers/admin/analytics.admin.controller.js';
+import * as productController from '../controllers/product.controller.js';
 
 const router = Router();
 
@@ -22,8 +23,15 @@ router.post('/orders/:id/refund', asyncHandler(orderAdmin.refundOrder));
 
 // --- Blog ---
 router.get('/blogs', asyncHandler(blogAdmin.listBlogs));
+router.get('/blogs/:id', asyncHandler(blogAdmin.getBlog));
 router.post('/blogs', asyncHandler(blogAdmin.createBlog));
 router.patch('/blogs/:id', asyncHandler(blogAdmin.updateBlog));
 router.delete('/blogs/:id', asyncHandler(blogAdmin.deleteBlog));
+
+// --- Products ---
+router.get('/products', asyncHandler(productController.adminListProducts));
+router.post('/products', asyncHandler(productController.createProduct));
+router.patch('/products/:id', asyncHandler(productController.updateProduct));
+router.delete('/products/:id', asyncHandler(productController.archiveProduct));
 
 export default router;

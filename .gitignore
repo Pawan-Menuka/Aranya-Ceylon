@@ -22,3 +22,4 @@ Thumbs.db
 
 # Prisma (added in Step 2)
 prisma/migrations/
+*.tsbuildinfo

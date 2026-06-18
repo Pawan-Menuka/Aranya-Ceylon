@@ -292,22 +292,67 @@ export async function createProduct(data: CreateProductInput) {
 }
 
 // --- Update product (admin only) ---
+// Updates product fields and, when `variants` is supplied, reconciles them by
+// id within a transaction: rows with an `id` are updated, rows without are
+// created, and existing variants missing from the payload are deleted ONLY if
+// no order/cart item references them (kept otherwise to preserve order history).
 export async function updateProduct(id: string, data: UpdateProductInput) {
-    const product = await prisma.product.update({
-        where: { id },
-        data: {
-            ...(data.name && { name: data.name }),
-            ...(data.description && { description: data.description }),
-            ...(data.categoryId && { categoryId: data.categoryId }),
-            ...(data.featured !== undefined && { featured: data.featured }),
-            ...(data.certifications && { certifications: data.certifications }),
-            ...(data.latin !== undefined && { latin: data.latin }),
-            ...(data.originLabel !== undefined && { originLabel: data.originLabel }),
-            ...(data.color !== undefined && { color: data.color }),
-        },
-        include: adminProductIncludes,
+    const { variants, ...fields } = data;
+
+    return prisma.$transaction(async (tx) => {
+        await tx.product.update({
+            where: { id },
+            data: {
+                ...(fields.name && { name: fields.name }),
+                ...(fields.description && { description: fields.description }),
+                ...(fields.categoryId && { categoryId: fields.categoryId }),
+                ...(fields.featured !== undefined && { featured: fields.featured }),
+                ...(fields.certifications && { certifications: fields.certifications }),
+                ...(fields.latin !== undefined && { latin: fields.latin }),
+                ...(fields.originLabel !== undefined && { originLabel: fields.originLabel }),
+                ...(fields.color !== undefined && { color: fields.color }),
+            },
+        });
+
+        if (variants) {
+            const existing = await tx.variant.findMany({ where: { productId: id }, select: { id: true } });
+            const existingIds = new Set(existing.map((v) => v.id));
+            const incomingIds = new Set(variants.filter((v) => v.id).map((v) => v.id as string));
+
+            // Remove variants the admin dropped — but only when unreferenced.
+            for (const exId of existingIds) {
+                if (incomingIds.has(exId)) continue;
+                const [orderRefs, cartRefs] = await Promise.all([
+                    tx.orderItem.count({ where: { variantId: exId } }),
+                    tx.cartItem.count({ where: { variantId: exId } }),
+                ]);
+                if (orderRefs === 0 && cartRefs === 0) {
+                    await tx.variant.delete({ where: { id: exId } });
+                }
+                // else: referenced by an order/cart — keep it (re-appears in the response).
+            }
+
+            // Update existing, create new.
+            for (const v of variants) {
+                const fieldsForVariant = {
+                    weight: v.weight,
+                    price: v.price,
+                    sku: v.sku,
+                    stock: v.stock,
+                    market: v.market,
+                    currency: v.currency,
+                };
+                if (v.id && existingIds.has(v.id)) {
+                    await tx.variant.update({ where: { id: v.id }, data: fieldsForVariant });
+                } else {
+                    await tx.variant.create({ data: { productId: id, ...fieldsForVariant } });
+                }
+            }
+        }
+
+        const product = await tx.product.findUniqueOrThrow({ where: { id }, include: adminProductIncludes });
+        return enrichProductWithRatingAvg(product);
     });
-    return enrichProductWithRatingAvg(product);
 }
 
 // --- Soft delete (archive) product (admin only) ---

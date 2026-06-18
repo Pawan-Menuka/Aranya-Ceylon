@@ -121,8 +121,7 @@ model User {
   tokens             Token[]
   auditLogs          AuditLog[]
   wholesale          WholesaleAccount?
-
-  @@index([email])   // Fast lookup at login
+  // No @@index([email]) — @unique already creates an index used at login.
 }
 
 model Category {
@@ -189,12 +188,12 @@ model Variant {
   currency      Currency  @default(LKR)   
   packagingType String?                   
   packagingDesc String?                   
+  // Composite index also serves productId-only lookups (leftmost prefix),
+  // so no separate @@index([productId]) is needed.
   @@index([productId, market])
 
   orderItems OrderItem[]
   cartItems  CartItem[]
-
-  @@index([productId])
 }
 
 // ============================================================
@@ -215,6 +214,7 @@ model Order {
   discount         Decimal      @db.Decimal(10, 2) @default(0)
   couponId         String?
   coupon           Coupon?      @relation(fields: [couponId], references: [id])
+  cartId           String?      // source cart — cleared on payment (works for guest + user)
   shippingAddress  Json         // Address snapshot at order time
   trackingNumber   String?
   createdAt        DateTime     @default(now())
