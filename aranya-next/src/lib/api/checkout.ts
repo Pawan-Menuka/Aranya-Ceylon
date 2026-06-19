@@ -39,7 +39,14 @@ export interface PayHereIntent {
   params: Record<string, string>;    // signed fields for the hidden form
 }
 
-export type CheckoutIntent = StripeIntent | PayHereIntent;
+export interface StubIntent {
+  provider: "stub";
+  orderId: string;
+  total: number;
+  currency: string;
+}
+
+export type CheckoutIntent = StripeIntent | PayHereIntent | StubIntent;
 
 export function createIntent(input: CheckoutInput): Promise<CheckoutIntent> {
   return apiFetch(`/checkout/create-intent`, { method: "POST", body: input, auth: true });
