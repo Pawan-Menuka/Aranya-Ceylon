@@ -14,11 +14,6 @@
     "test": "pnpm -r --if-present test"
   },
   "pnpm": {
-    "workspacePackages": [
-      "backend",
-      "frontend",
-      "shared"
-    ],
     "ignoredBuiltDependencies": [
       "@prisma/engines",
       "esbuild",

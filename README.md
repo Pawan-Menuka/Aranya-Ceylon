@@ -9,15 +9,16 @@ via Stripe), served from one catalog and one API.
 - **Backend:** Node + Express + TypeScript, Prisma 7 (PostgreSQL / Neon), `jose` JWTs,
   bcrypt, Stripe + PayHere, Resend (email), node-cron.
 - **Shared:** `@aranya/shared` — Zod schemas/types shared between backend and frontend.
-- **Frontend:** React storefront prototype (see `frontend/`); a Next.js port is planned.
+- **Frontend:** `aranya-next/` — production Next.js 14 (App Router) + TypeScript storefront,
+  talking to the API through a same-origin BFF proxy (`src/app/api/[...path]/route.ts`).
 - **Tooling:** pnpm workspaces, Vitest, ESLint (flat config), GitHub Actions CI.
 
 ## Monorepo layout
 
 ```
-backend/    Express API, Prisma schema + migrations, cron jobs, services
-shared/     Zod schemas and types (built to dist/, consumed by backend & frontend)
-frontend/   Storefront prototype + design system (CLAUDE.md, BACKEND_INTEGRATION.md)
+backend/      Express API, Prisma schema + migrations, cron jobs, services
+shared/       Zod schemas and types (built to dist/, consumed by backend & frontend)
+aranya-next/  Next.js storefront + admin console (see aranya-next/HANDOFF.md)
 ```
 
 ## Prerequisites

@@ -3,8 +3,9 @@
   "configurations": [
     {
       "name": "frontend",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@aranya/frontend", "dev"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "aranya-next",
       "port": 3000
     }
   ]
