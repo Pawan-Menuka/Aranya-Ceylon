@@ -6,7 +6,8 @@ import {
   CART_KEY, CONFIG, type CartLine, type CartState, type Totals,
   computeTotals, fmt as fmtMoney, lineFromSpice, linePrice as linePriceOf, unitPrice as unitPriceOf,
 } from "@/lib/cart";
-import { addCartItem, updateCartItem, removeCartItem, applyCoupon as apiApplyCoupon } from "@/lib/api/cart";
+import { getCart, addCartItem, updateCartItem, removeCartItem, applyCoupon as apiApplyCoupon } from "@/lib/api/cart";
+import type { CartItem } from "@/lib/types";
 import { useMarket } from "./MarketContext";
 
 // Client cart store as a typed React context (ports cart-store.js + the useCart
@@ -64,18 +65,48 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = React.useState<CartState>(EMPTY);
   const [open, setOpen] = React.useState(false);
   const [signInOpen, setSignInOpen] = React.useState(false);
+  // `hydrated` becomes true after the first localStorage read; used to gate
+  // persistence so the pre-hydration EMPTY state never overwrites the store.
+  const [hydrated, setHydrated] = React.useState(false);
 
-  // hydrate from localStorage after mount (avoids SSR/client mismatch)
-  React.useEffect(() => setState(loadState()), []);
-
-  // persist items only (gift/promo are session-scoped, matching the prototype)
+  // Hydrate from localStorage on mount, then reconcile backendItemIds with the
+  // server cart (which also causes the backend to issue the guestCartToken cookie
+  // via the BFF so subsequent checkout calls can find the right cart).
   React.useEffect(() => {
+    let mounted = true;
+    const loaded = loadState();
+    setState(loaded);
+    setHydrated(true);
+
+    getCart()
+      .then(({ cart: bc }) => {
+        if (!mounted || !bc?.items?.length) return;
+        setState((s) => ({
+          ...s,
+          items: s.items.map((localItem) => {
+            if (localItem.backendItemId) return localItem;
+            const bi = (bc.items as CartItem[]).find(
+              (b) => b.variant?.id === localItem.variantId
+            );
+            return bi ? { ...localItem, backendItemId: bi.id } : localItem;
+          }),
+        }));
+      })
+      .catch(() => { /* offline — localStorage-only mode */ });
+
+    return () => { mounted = false; };
+  }, []);
+
+  // Persist items to localStorage only after the initial hydration so the
+  // pre-hydration empty state never blanks out a previously saved cart.
+  React.useEffect(() => {
+    if (!hydrated) return;
     try {
       localStorage.setItem(CART_KEY, JSON.stringify(state.items));
     } catch {
       /* ignore quota / disabled storage */
     }
-  }, [state.items]);
+  }, [state.items, hydrated]);
 
   // open the drawer if arriving via /cart → /products?cart=1
   React.useEffect(() => {

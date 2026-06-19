@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Cormorant_Garamond, Plus_Jakarta_Sans, Spectral } from "next/font/google";
 import "./globals.css";
+import { resolveMarket } from "@/lib/market";
+import { CommerceProvider } from "@/components/CommerceProvider";
 
 // Three locked brand roles (spec §3). next/font self-hosts the files and
 // exposes each as a CSS variable consumed by globals.css.
@@ -45,9 +47,14 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const market = resolveMarket();
   return (
     <html lang="en" className={`${cormorant.variable} ${jakarta.variable} ${spectral.variable}`}>
-      <body className="aranya">{children}</body>
+      <body className="aranya">
+        <CommerceProvider initialMarket={market}>
+          {children}
+        </CommerceProvider>
+      </body>
     </html>
   );
 }

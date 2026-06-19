@@ -16,21 +16,22 @@ export const applyCouponSchema = z.object({
 });
 
 export const checkoutSchema = z.object({
+    // Required for guest checkout; ignored (user email used) when authenticated
+    guestEmail: z.string().email().optional(),
+    customerPhone: z.string().min(1).optional(),
     shippingAddress: z.object({
+        firstName: z.string().min(1),
+        lastName: z.string().min(1),
         line1: z.string().min(1),
         line2: z.string().optional(),
         city: z.string().min(1),
+        region: z.string().optional(),
+        postalCode: z.string().optional(),
         country: z.string().min(2).max(2), // ISO 3166-1 alpha-2
-        postalCode: z.string().min(1),
     }),
     shippingMethod: z.enum(['STANDARD', 'EXPRESS']),
     saveAddress: z.boolean().default(false),
-    // PayHere needs customer name + phone for the payment page
-    customerName: z.string().min(1).optional(),
-    customerPhone: z.string().min(1).optional(),
-    // Required for guest checkout (no authenticated user) — where to send the
-    // order confirmation. The controller enforces its presence for guests.
-    guestEmail: z.string().email().optional(),
+    couponCode: z.string().optional(),
 });
 
 export type AddToCartInput = z.infer<typeof addToCartSchema>;

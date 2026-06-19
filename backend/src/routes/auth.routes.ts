@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { register, login, refresh, logout, logoutAll, getMe } from '../controllers/auth.controller.js';
+import { register, login, refresh, logout, logoutAll, getMe, patchMe } from '../controllers/auth.controller.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { validate } from '../middleware/validate.js';
@@ -15,5 +15,6 @@ router.post('/refresh', authLimiter, asyncHandler(refresh));
 router.post('/logout', authLimiter, asyncHandler(logout));
 router.post('/logout-all', asyncHandler(requireAuth), asyncHandler(logoutAll));
 router.get('/me', asyncHandler(requireAuth), asyncHandler(getMe));
+router.patch('/me', asyncHandler(requireAuth), asyncHandler(patchMe));
 
 export default router;

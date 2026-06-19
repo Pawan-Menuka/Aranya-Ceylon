@@ -6,15 +6,19 @@ import { Seal } from "../primitives/Seal";
 import { SpicePhoto } from "../primitives/SpicePhoto";
 import { useCart } from "../CartContext";
 import { useMarket } from "../MarketContext";
-import { createIntent, pollOrderPaid, type CheckoutInput } from "@/lib/api/checkout";
+import { useAuth } from "../AuthContext";
+import { createIntent, pollOrderPaid, type CheckoutInput, type PayHereIntent } from "@/lib/api/checkout";
 import type { Market } from "@/lib/types";
 
-// Single-page checkout + inline confirmation (ported from checkout.jsx). Guest
-// checkout is the default path (collects guestEmail); "Sign in" opens the modal.
-// In production "Place order" calls POST /checkout/create-intent — Stripe
-// Elements (intl) / PayHere hidden-form (local) — and the success state polls
-// until the webhook flips the order to PAID. Here it resolves locally, faithful
-// to the prototype's confirmation screen.
+// Checkout page: guest-first single-page form.
+// On submit:
+//   - International → POST create-intent → Stripe Elements or manual redirect
+//   - Local        → POST create-intent → hidden PayHere form auto-submitted
+// Success state polls GET /orders/:id until the webhook flips the order to PAID.
+
+// ---------------------------------------------------------------------------
+// Layout primitives
+// ---------------------------------------------------------------------------
 
 function CheckoutHeader({ market, onMarket }: { market: Market; onMarket: (m: Market) => void }) {
   return (
@@ -43,11 +47,44 @@ function CheckoutHeader({ market, onMarket }: { market: Market; onMarket: (m: Ma
   );
 }
 
-function Field({ label, type = "text", ph, value, onChange, half }: { label: string; type?: string; ph?: string; value?: string; onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void; half?: boolean }) {
+function Field({
+  label, type = "text", ph, value, onChange, half, required,
+}: {
+  label: string; type?: string; ph?: string;
+  value: string; onChange: (v: string) => void;
+  half?: boolean; required?: boolean;
+}) {
+  return (
+    <label style={{ display: "block", flex: half ? "1 1 0" : "1 1 100%", minWidth: 0 }}>
+      <span style={{ fontFamily: "var(--font-ui)", fontSize: 11.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)", display: "block", marginBottom: 6 }}>
+        {label}{required && <span style={{ color: "var(--brand)", marginLeft: 3 }}>*</span>}
+      </span>
+      <input
+        type={type}
+        placeholder={ph}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ width: "100%", boxSizing: "border-box", fontFamily: "var(--font-ui)", fontSize: 14.5, color: "var(--ink)", border: "1px solid var(--line)", borderRadius: 8, padding: "12px 14px", background: "#fff", outline: "none" }}
+        onFocus={(e) => (e.target.style.borderColor = "var(--brand)")}
+        onBlur={(e) => (e.target.style.borderColor = "var(--line)")}
+      />
+    </label>
+  );
+}
+
+function SelectField({
+  label, value, onChange, options, half,
+}: {
+  label: string; value: string; onChange: (v: string) => void;
+  options: { label: string; value: string }[];
+  half?: boolean;
+}) {
   return (
     <label style={{ display: "block", flex: half ? "1 1 0" : "1 1 100%", minWidth: 0 }}>
       <span style={{ fontFamily: "var(--font-ui)", fontSize: 11.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)", display: "block", marginBottom: 6 }}>{label}</span>
-      <input type={type} placeholder={ph} value={value} onChange={onChange} style={{ width: "100%", boxSizing: "border-box", fontFamily: "var(--font-ui)", fontSize: 14.5, color: "var(--ink)", border: "1px solid var(--line)", borderRadius: 8, padding: "12px 14px", background: "#fff", outline: "none" }} onFocus={(e) => (e.target.style.borderColor = "var(--brand)")} onBlur={(e) => (e.target.style.borderColor = "var(--line)")} />
+      <select value={value} onChange={(e) => onChange(e.target.value)} style={{ width: "100%", boxSizing: "border-box", fontFamily: "var(--font-ui)", fontSize: 14.5, color: "var(--ink)", border: "1px solid var(--line)", borderRadius: 8, padding: "12px 14px", background: "#fff", outline: "none", appearance: "none" }}>
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
     </label>
   );
 }
@@ -82,39 +119,6 @@ function DeliveryOptions({ market, value, onChange, standardLabel }: { market: M
             </span>
             <span style={{ fontFamily: "var(--font-ui)", fontSize: 14, fontWeight: 700, color: price === "Free" ? "var(--brand)" : "var(--ink)" }}>{price}</span>
           </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function PaymentMethods({ market, value, onChange }: { market: Market; value: string; onChange: (v: string) => void }) {
-  const methods: [string, string][] = market === "local"
-    ? [["card", "Credit / Debit card"]]
-    : [["card", "Credit / Debit card"], ["paypal", "PayPal"], ["wallet", "Apple Pay / Google Pay"]];
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {methods.map(([id, label]) => {
-        const on = value === id;
-        return (
-          <div key={id} style={{ border: on ? "1.5px solid var(--brand)" : "1px solid var(--line)", borderRadius: 9, overflow: "hidden", background: on ? "rgba(15,110,86,.04)" : "#fff" }}>
-            <button onClick={() => onChange(id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 13, textAlign: "left", cursor: "pointer", background: "none", border: 0, padding: "14px 16px" }}>
-              <span style={{ width: 18, height: 18, borderRadius: 999, flex: "0 0 auto", border: on ? "5px solid var(--brand)" : "1.5px solid var(--line)", background: "#fff" }} />
-              <span style={{ flex: 1, fontFamily: "var(--font-ui)", fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>{label}</span>
-              {id === "card" && <span style={{ display: "inline-flex", gap: 5 }}>{["#1A1F71", "#EB001B", "#006FCF"].map((c, k) => <span key={k} style={{ width: 30, height: 19, borderRadius: 3, background: c, opacity: 0.9 }} />)}</span>}
-              {id === "paypal" && <span style={{ fontFamily: "var(--font-display)", fontStyle: "italic", fontSize: 18, fontWeight: 700, color: "#003087" }}>Pay<span style={{ color: "#009cde" }}>Pal</span></span>}
-            </button>
-            {on && id === "card" && (
-              <div style={{ padding: "4px 16px 18px", display: "flex", flexWrap: "wrap", gap: 12 }}>
-                <Field label="Card number" ph="1234 5678 9012 3456" />
-                <Field label="Expiry" ph="MM / YY" half />
-                <Field label="CVC" ph="123" half />
-                <Field label="Name on card" ph="As printed on card" />
-              </div>
-            )}
-            {on && id === "paypal" && <p style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--muted)", margin: 0, padding: "0 16px 16px" }}>You&rsquo;ll be redirected to PayPal to complete payment securely.</p>}
-            {on && id === "wallet" && <p style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--muted)", margin: 0, padding: "0 16px 16px" }}>Confirm with Face ID / fingerprint after placing your order.</p>}
-          </div>
         );
       })}
     </div>
@@ -199,17 +203,102 @@ function OrderConfirmation({ order }: { order: { id: string; email: string; tota
   );
 }
 
+// ---------------------------------------------------------------------------
+// Hidden PayHere form — auto-submitted to redirect the customer to PayHere
+// ---------------------------------------------------------------------------
+
+function PayHereRedirectForm({ intent }: { intent: PayHereIntent }) {
+  const formRef = React.useRef<HTMLFormElement>(null);
+
+  React.useEffect(() => {
+    // Submit on the next tick so the DOM is ready
+    const t = setTimeout(() => formRef.current?.submit(), 100);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
+    <div style={{ maxWidth: 520, margin: "80px auto", textAlign: "center" }}>
+      <p style={{ fontFamily: "var(--font-ui)", fontSize: 15, color: "var(--muted)", marginBottom: 24 }}>
+        Redirecting to PayHere for secure payment…
+      </p>
+      <form ref={formRef} method="POST" action={intent.action} style={{ display: "none" }}>
+        {Object.entries(intent.params).map(([k, v]) => (
+          <input key={k} type="hidden" name={k} value={v} />
+        ))}
+      </form>
+      <button
+        type="button"
+        onClick={() => formRef.current?.submit()}
+        className="btn btn-local"
+        style={{ display: "inline-flex", width: "auto", padding: "13px 30px" }}
+      >
+        Go to PayHere
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Country options
+// ---------------------------------------------------------------------------
+
+const INTL_COUNTRIES = [
+  { value: "US", label: "United States" },
+  { value: "GB", label: "United Kingdom" },
+  { value: "AU", label: "Australia" },
+  { value: "CA", label: "Canada" },
+  { value: "DE", label: "Germany" },
+  { value: "FR", label: "France" },
+  { value: "JP", label: "Japan" },
+  { value: "SG", label: "Singapore" },
+  { value: "AE", label: "United Arab Emirates" },
+  { value: "NZ", label: "New Zealand" },
+  { value: "IN", label: "India" },
+  { value: "MY", label: "Malaysia" },
+];
+
+// ---------------------------------------------------------------------------
+// Main checkout component
+// ---------------------------------------------------------------------------
+
 export function CheckoutClient() {
   const cart = useCart();
   const { market, setMarket } = useMarket();
+  const { user } = useAuth();
   const items = cart.items;
+
+  // Delivery + payment method selection
   const [deliv, setDeliv] = React.useState("standard");
   const [pay, setPay] = React.useState("card");
-  const [email, setEmail] = React.useState("");
+
+  // Contact fields
+  const [email, setEmail] = React.useState(user?.email ?? "");
+  const [phone, setPhone] = React.useState("");
+
+  // Shipping address fields
+  const [firstName, setFirstName] = React.useState("");
+  const [lastName, setLastName] = React.useState("");
+  const [line1, setLine1] = React.useState("");
+  const [line2, setLine2] = React.useState("");
+  const [city, setCity] = React.useState("");
+  const [region, setRegion] = React.useState("");
+  const [postalCode, setPostalCode] = React.useState("");
+  const [country, setCountry] = React.useState(market === "local" ? "LK" : "US");
+
+  // Flow state
   const [placing, setPlacing] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [payhereIntent, setPayhereIntent] = React.useState<PayHereIntent | null>(null);
   const [order, setOrder] = React.useState<{ id: string; email: string; total: string } | null>(null);
 
+  // Keep email in sync when user signs in mid-session
   React.useEffect(() => {
+    if (user?.email) setEmail(user.email);
+  }, [user?.email]);
+
+  // Reset country when market switches
+  React.useEffect(() => {
+    setCountry(market === "local" ? "LK" : "US");
     if (market === "local" && pay !== "card") setPay("card");
   }, [market, pay]);
 
@@ -218,41 +307,67 @@ export function CheckoutClient() {
   const shipShown = deliv === "express" ? expressFee : t.ship;
   const totalShown = t.subtotal - t.discount + t.gift + shipShown;
 
-  // Real flow: POST /checkout/create-intent (Stripe for intl / PayHere for local),
-  // then Elements / hosted-form confirm + poll the order until PAID. When the API
-  // is unreachable (offline/demo), resolve locally to the confirmation screen —
-  // faithful to the prototype. Either way the cart clears on success.
   const placeOrder = async () => {
     if (placing) return;
+    setError("");
+
+    // Basic validation
+    if (!user && !email) { setError("Please enter your email address."); return; }
+    if (!firstName || !line1 || !city) { setError("Please fill in all required shipping fields."); return; }
+
     setPlacing(true);
-    const localId = "AC-" + Math.floor(100000 + Math.random() * 900000);
-    const finish = (id: string) => {
-      setOrder({ id, email, total: t.fmt(totalShown) });
-      cart.clear();
-      window.scrollTo({ top: 0 });
-    };
     try {
       const payload: CheckoutInput = {
-        email,
-        deliveryMethod: deliv as "standard" | "express",
-        giftWrap: cart.giftWrap,
-        giftNote: cart.giftNote,
+        guestEmail: user ? undefined : email,
+        customerPhone: phone || undefined,
+        shippingAddress: {
+          firstName,
+          lastName,
+          line1,
+          line2: line2 || undefined,
+          city,
+          region: region || undefined,
+          postalCode: postalCode || undefined,
+          country,
+        },
+        shippingMethod: deliv.toUpperCase() as "STANDARD" | "EXPRESS",
         couponCode: cart.promo || undefined,
-        shippingAddress: { firstName: "", lastName: "", line1: "", city: "", country: market === "local" ? "Sri Lanka" : "" },
       };
+
       const intent = await createIntent(payload);
-      // In production: confirm via Stripe Elements (intl) or submit the signed
-      // PayHere form (local) here, then poll. We've created the order, so poll it.
+
+      if (intent.provider === "payhere") {
+        // Render the hidden form which auto-submits and redirects to PayHere
+        setPayhereIntent(intent);
+        return; // don't clear cart yet — PayHere return_url page handles that
+      }
+
+      // Stripe: poll until webhook confirms payment (real Stripe Elements integration
+      // requires @stripe/react-stripe-js — add it and use intent.clientSecret +
+      // intent.publishableKey to mount the Elements form before polling).
       await pollOrderPaid(intent.orderId).catch(() => false);
-      finish(intent.orderId || localId);
-    } catch {
-      // offline / endpoint not wired → faithful local confirmation
-      finish(localId);
+      setOrder({ id: intent.orderId, email, total: t.fmt(totalShown) });
+      cart.clear();
+      window.scrollTo({ top: 0 });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+      setError(msg);
     } finally {
       setPlacing(false);
     }
   };
 
+  // PayHere redirect screen
+  if (payhereIntent) {
+    return (
+      <div className="aranya" style={{ minHeight: "100vh", background: "var(--bg)" }}>
+        <CheckoutHeader market={market} onMarket={setMarket} />
+        <PayHereRedirectForm intent={payhereIntent} />
+      </div>
+    );
+  }
+
+  // Order confirmed screen
   if (order) {
     return (
       <div className="aranya" style={{ minHeight: "100vh", background: "var(--bg)" }}>
@@ -262,6 +377,7 @@ export function CheckoutClient() {
     );
   }
 
+  // Empty cart guard (resolved after backend cart hydration in CartContext)
   if (items.length === 0) {
     return (
       <div className="aranya" style={{ minHeight: "100vh", background: "var(--bg)" }}>
@@ -277,6 +393,21 @@ export function CheckoutClient() {
   }
 
   const standardLabel = t.freeShip ? "Free" : t.fmt(cart.config().ship);
+  const localDistricts = [
+    { value: "Colombo", label: "Colombo" }, { value: "Gampaha", label: "Gampaha" },
+    { value: "Kalutara", label: "Kalutara" }, { value: "Kandy", label: "Kandy" },
+    { value: "Matale", label: "Matale" }, { value: "Nuwara Eliya", label: "Nuwara Eliya" },
+    { value: "Galle", label: "Galle" }, { value: "Matara", label: "Matara" },
+    { value: "Hambantota", label: "Hambantota" }, { value: "Jaffna", label: "Jaffna" },
+    { value: "Kilinochchi", label: "Kilinochchi" }, { value: "Mannar", label: "Mannar" },
+    { value: "Vavuniya", label: "Vavuniya" }, { value: "Mullaitivu", label: "Mullaitivu" },
+    { value: "Batticaloa", label: "Batticaloa" }, { value: "Ampara", label: "Ampara" },
+    { value: "Trincomalee", label: "Trincomalee" }, { value: "Kurunegala", label: "Kurunegala" },
+    { value: "Puttalam", label: "Puttalam" }, { value: "Anuradhapura", label: "Anuradhapura" },
+    { value: "Polonnaruwa", label: "Polonnaruwa" }, { value: "Badulla", label: "Badulla" },
+    { value: "Monaragala", label: "Monaragala" }, { value: "Ratnapura", label: "Ratnapura" },
+    { value: "Kegalle", label: "Kegalle" },
+  ];
 
   return (
     <div className="aranya" data-screen-label="Checkout" style={{ minHeight: "100vh", background: "var(--bg)" }}>
@@ -289,38 +420,89 @@ export function CheckoutClient() {
         <h1 className="disp" style={{ fontSize: 44, color: "var(--brand)", margin: "0 0 26px", lineHeight: 1.02 }}>Checkout</h1>
         <div className="ck-cols">
           <div>
+            {/* ── 1. Contact ─────────────────────────────── */}
             <Section n="1" title="Contact" sub="We'll send your order confirmation and tracking here.">
               <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
-                <Field label="Email" type="email" ph="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-                <Field label="Phone" type="tel" ph={market === "local" ? "07X XXX XXXX" : "+1 555 000 0000"} />
+                <Field label="Email" type="email" ph="you@example.com" value={email} onChange={setEmail} required />
+                <Field label="Phone" type="tel" ph={market === "local" ? "07X XXX XXXX" : "+1 555 000 0000"} value={phone} onChange={setPhone} />
               </div>
-              <p style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--muted)", margin: "14px 0 0" }}>
-                Have an account? <button onClick={() => cart.openSignIn()} style={{ background: "none", border: 0, padding: 0, cursor: "pointer", color: "var(--brand)", fontWeight: 700, fontFamily: "var(--font-ui)", fontSize: 12.5 }}>Sign in</button> for a faster checkout — or continue as a guest.
-              </p>
+              {!user && (
+                <p style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--muted)", margin: "14px 0 0" }}>
+                  Have an account?{" "}
+                  <button onClick={() => cart.openSignIn()} style={{ background: "none", border: 0, padding: 0, cursor: "pointer", color: "var(--brand)", fontWeight: 700, fontFamily: "var(--font-ui)", fontSize: 12.5 }}>Sign in</button>
+                  {" "}for a faster checkout — or continue as a guest.
+                </p>
+              )}
             </Section>
 
+            {/* ── 2. Shipping address ─────────────────────── */}
             <Section n="2" title="Shipping address">
               <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
-                <Field label="First name" ph="First" half />
-                <Field label="Last name" ph="Last" half />
-                <Field label="Address" ph="Street address" />
-                <Field label="Apartment, suite (optional)" ph="Apt, unit, etc." />
-                <Field label="City" ph="City" half />
-                {market === "local" ? <Field label="District" ph="e.g. Colombo" half /> : <Field label="Postal code" ph="ZIP / postal" half />}
-                {market === "local" ? <Field label="Postal code" ph="Postal code" half /> : <Field label="Country" ph="Country" half />}
+                <Field label="First name" ph="First" value={firstName} onChange={setFirstName} half required />
+                <Field label="Last name" ph="Last" value={lastName} onChange={setLastName} half />
+                <Field label="Address" ph="Street address" value={line1} onChange={setLine1} required />
+                <Field label="Apartment, suite (optional)" ph="Apt, unit, etc." value={line2} onChange={setLine2} />
+                <Field label="City" ph="City" value={city} onChange={setCity} half required />
+                {market === "local" ? (
+                  <>
+                    <SelectField label="District" value={region} onChange={setRegion} options={localDistricts} half />
+                    <Field label="Postal code" ph="Postal code" value={postalCode} onChange={setPostalCode} half />
+                  </>
+                ) : (
+                  <>
+                    <Field label="State / Region" ph="State" value={region} onChange={setRegion} half />
+                    <Field label="Postal code" ph="ZIP / postal" value={postalCode} onChange={setPostalCode} half />
+                    <SelectField label="Country" value={country} onChange={setCountry} options={INTL_COUNTRIES} />
+                  </>
+                )}
               </div>
             </Section>
 
+            {/* ── 3. Delivery method ──────────────────────── */}
             <Section n="3" title="Delivery method">
               <DeliveryOptions market={market} value={deliv} onChange={setDeliv} standardLabel={standardLabel} />
             </Section>
 
+            {/* ── 4. Payment ──────────────────────────────── */}
             <Section n="4" title="Payment" sub="All transactions are encrypted and secure.">
-              <PaymentMethods market={market} value={pay} onChange={setPay} />
+              {market === "local" ? (
+                <div style={{ padding: "14px 16px", border: "1.5px solid var(--brand)", borderRadius: 9, background: "rgba(15,110,86,.04)" }}>
+                  <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, fontWeight: 700, color: "var(--ink)", marginBottom: 6 }}>PayHere — cards &amp; mobile banking</div>
+                  <p style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--muted)", margin: 0 }}>
+                    You will be securely redirected to PayHere to complete payment with Visa, Mastercard, or online banking.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ padding: "14px 16px", border: "1.5px solid var(--brand)", borderRadius: 9, background: "rgba(15,110,86,.04)" }}>
+                  <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, fontWeight: 700, color: "var(--ink)", marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                    Stripe — secure card payment
+                    <span style={{ display: "inline-flex", gap: 5 }}>{["#1A1F71", "#EB001B", "#006FCF"].map((c, k) => <span key={k} style={{ width: 28, height: 18, borderRadius: 3, background: c, opacity: 0.9 }} />)}</span>
+                  </div>
+                  <p style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--muted)", margin: 0 }}>
+                    Your card details are handled directly by Stripe — we never see or store them.
+                    {!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY && (
+                      <span style={{ display: "block", marginTop: 6, color: "#b45309" }}>
+                        (Stripe test keys not configured — set NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY to enable card capture.)
+                      </span>
+                    )}
+                  </p>
+                </div>
+              )}
             </Section>
 
-            <button className={market === "local" ? "btn btn-local" : "btn btn-intl"} onClick={placeOrder} disabled={placing} style={{ marginTop: 4, opacity: placing ? 0.75 : 1 }}>
-              {placing ? "Placing your order…" : "Place order — " + t.fmt(totalShown)}
+            {error && (
+              <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "12px 16px", marginBottom: 14, fontFamily: "var(--font-ui)", fontSize: 13.5, color: "#b91c1c" }}>
+                {error}
+              </div>
+            )}
+
+            <button
+              className={market === "local" ? "btn btn-local" : "btn btn-intl"}
+              onClick={placeOrder}
+              disabled={placing}
+              style={{ marginTop: 4, opacity: placing ? 0.75 : 1 }}
+            >
+              {placing ? "Placing your order…" : `Place order — ${t.fmt(totalShown)}`}
             </button>
             <p style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--muted)", textAlign: "center", margin: "12px 0 0" }}>
               By placing your order you agree to our terms &amp; privacy policy.

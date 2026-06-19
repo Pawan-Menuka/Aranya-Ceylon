@@ -9,13 +9,15 @@ import { ADMIN } from "@/lib/admin-data";
 // Aranya Ceylon — ADMIN shell (rail + topbar), ported from admin-shell.jsx.
 // `onSignOut` clears the auth session; "View store" routes back to the storefront.
 
-export const AD_NAV = [
+type NavItem = { key: string; label: string; icon: string; count?: number; hot?: boolean };
+
+export const AD_NAV: NavItem[] = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard" },
   { key: "orders", label: "Orders", icon: "orders", count: 18, hot: true },
   { key: "products", label: "Products", icon: "products" },
   { key: "blog", label: "Blog", icon: "blog" },
   { key: "audit", label: "Audit log", icon: "audit" },
-] as const;
+];
 
 export function AdminShell({
   route, setRoute, search, setSearch, children, pendingCount = 18, onSignOut, userName, userInitials,
