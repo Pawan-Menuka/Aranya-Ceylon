@@ -19,6 +19,8 @@ import orderRoutes from './routes/order.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
 import { resolveMarket } from './middleware/market.js';
 import adminRoutes from './routes/admin.routes.js';
+import contactRoutes from './routes/contact.routes.js';
+import wholesaleRoutes from './routes/wholesale.routes.js';
 import devSeedRoutes from './routes/dev-seed.routes.js';
 import { startAllJobs } from './jobs/scheduler.js';
 
@@ -85,7 +87,9 @@ app.use('/cart', cartRoutes);
 app.use('/checkout', checkoutRoutes);
 app.use('/orders', orderRoutes);
 app.use('/admin', adminRoutes);
-// Dev-only seed endpoint — requires explicit opt-in, never just NODE_ENV
+app.use('/contact', contactRoutes);
+app.use('/wholesale', wholesaleRoutes);
+// Dev-only seed endpoint — requires explicit opt-in via ENABLE_DEV_ROUTES=true
 if (process.env.ENABLE_DEV_ROUTES === 'true') {
     app.use('/dev', devSeedRoutes);
 }

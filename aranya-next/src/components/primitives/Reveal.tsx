@@ -13,7 +13,7 @@ export function Reveal({
   style = {},
   ...rest
 }: {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   delay?: number;
   y?: number;
   as?: keyof JSX.IntrinsicElements;

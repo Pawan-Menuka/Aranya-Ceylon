@@ -5,10 +5,11 @@ import { createIntent, stubComplete } from '../controllers/checkout.controller.j
 
 const router = Router();
 
-// optionalAuth: works for both authenticated users and guests (#17).
+// optionalAuth: guests get req.user = undefined; authenticated users get req.user populated.
+// Guest cart is resolved by the guestCartToken cookie forwarded by the BFF.
 router.post('/create-intent', asyncHandler(optionalAuth), asyncHandler(createIntent));
 
-// Stub-mode payment confirmation (no-op in live mode — see controller).
+// Stub-mode payment confirmation — no-op in live mode (controller guards with isStubPayments()).
 router.post('/stub/complete', asyncHandler(optionalAuth), asyncHandler(stubComplete));
 
 export default router;

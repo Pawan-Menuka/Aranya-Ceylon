@@ -67,7 +67,7 @@ if (process.env.ENABLE_DEV_ROUTES === 'true') {
                 const variants = WEIGHTS.flatMap((w) => [
                     {
                         weight: w,
-                        price:  Math.round(p.lkr * MULT[w]),
+                        price:  Math.round(p.lkr * MULT[w]!),
                         sku:    `${p.sku}-${w}-LK`,
                         stock:  w === 50 ? 120 : w === 100 ? 90 : 40,
                         market: 'LOCAL' as const,
@@ -78,7 +78,7 @@ if (process.env.ENABLE_DEV_ROUTES === 'true') {
                     },
                     {
                         weight: w,
-                        price:  Math.round(p.usd * MULT[w] * 100) / 100,
+                        price:  Math.round(p.usd * MULT[w]! * 100) / 100,
                         sku:    `${p.sku}-${w}-INT`,
                         stock:  w === 50 ? 120 : w === 100 ? 90 : 40,
                         market: 'INTERNATIONAL' as const,

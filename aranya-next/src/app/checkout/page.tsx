@@ -1,6 +1,4 @@
 import type { Metadata } from "next";
-import { resolveMarket } from "@/lib/market";
-import { CommerceProvider } from "@/components/CommerceProvider";
 import { CheckoutClient } from "@/components/checkout/CheckoutClient";
 
 export const metadata: Metadata = {
@@ -9,14 +7,8 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
-// Checkout has its own minimal branded header (not the storefront navbar), so it
-// wraps in CommerceProvider directly rather than SiteChrome. Guest checkout is
-// the default; the cart lives in context.
+// Checkout has its own minimal branded header (not the storefront navbar).
+// CommerceProvider is mounted at the root layout — no wrapper needed here.
 export default function CheckoutPage() {
-  const market = resolveMarket();
-  return (
-    <CommerceProvider initialMarket={market}>
-      <CheckoutClient />
-    </CommerceProvider>
-  );
+  return <CheckoutClient />;
 }
