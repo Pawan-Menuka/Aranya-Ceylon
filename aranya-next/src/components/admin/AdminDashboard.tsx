@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { ADMIN } from "@/lib/admin-data";
+import { getDashboard, type DashboardData } from "@/lib/api/admin";
 import { AreaChart, AreaChartLight, Donut, Spark, ShareBar } from "./AdminCharts";
 import { AIcon, Delta, Pill, MarketTag, Avatar, SectionCard, StatCard } from "./AdminPrimitives";
 
@@ -10,8 +11,19 @@ import { AIcon, Delta, Pill, MarketTag, Avatar, SectionCard, StatCard } from "./
 
 type Market = "all" | "intl" | "local";
 
-/* ---------- market-aware series + kpis ---------- */
-function useDashData(market: Market) {
+/* ---------- live dashboard data hook ---------- */
+function useLiveDash() {
+  const [data, setData] = React.useState<DashboardData | null>(null);
+  React.useEffect(() => {
+    getDashboard()
+      .then(setData)
+      .catch(() => { /* keep null — fallback to demo */ });
+  }, []);
+  return data;
+}
+
+/* ---------- market-aware series + kpis (demo fallback) ---------- */
+function useDashData(market: Market, live: DashboardData | null) {
   return React.useMemo(() => {
     const A = ADMIN;
     const key = market === "intl" ? "intl" : market === "local" ? "local" : "all";
@@ -23,20 +35,43 @@ function useDashData(market: Market) {
     const scale = key === "all" ? 1 : key === "intl" ? 0.61 : 0.39;
     const k = A.KPIS;
     const last7v = series.slice(-7).map((d) => d.value);
+
+    // Override KPI values with live data when available
+    const liveLocal = live?.revenue?.local;
+    const liveIntl = live?.revenue?.international;
+    const liveOrders = live?.orders;
+
+    const localRevUsd = liveLocal?.total ? Number(liveLocal.total) / 300 : 0;
+    const intlRevUsd = liveIntl?.total ? Number(liveIntl.total) : 0;
+    const allRevUsd = localRevUsd + intlRevUsd;
+    const totalOrders = (liveOrders?.localCount ?? 0) + (liveOrders?.intlCount ?? 0);
+
+    const last30Rev = live
+      ? key === "intl" ? intlRevUsd : key === "local" ? localRevUsd : allRevUsd
+      : series.reduce((a, d) => a + d.value, 0);
+
+    const last30Ord = live
+      ? key === "intl" ? (liveOrders?.intlCount ?? 0) : key === "local" ? (liveOrders?.localCount ?? 0) : totalOrders
+      : Math.round(k.last30Ord * scale);
+
+    const pending = live ? (liveOrders?.pendingFulfilment ?? 0) : (market === "local" ? 6 : market === "intl" ? 12 : k.pendingFulfillment);
+    const lowStockCount = live ? (live.lowStockVariants?.length ?? 0) : A.LOW_STOCK.length;
+
     return {
       series,
-      todayRev: series[series.length - 1].value,
-      todayOrders: Math.round(k.todayOrders * scale),
-      last30Rev: series.reduce((a, d) => a + d.value, 0),
-      last30Ord: Math.round(k.last30Ord * scale),
-      aov: k.aov,
-      pending: market === "local" ? 6 : market === "intl" ? 12 : k.pendingFulfillment,
+      todayRev: live ? (key === "intl" ? intlRevUsd / 30 : key === "local" ? localRevUsd / 30 : allRevUsd / 30) : series[series.length - 1].value,
+      todayOrders: live ? Math.round(last30Ord / 30) : Math.round(k.todayOrders * scale),
+      last30Rev,
+      last30Ord,
+      aov: live && totalOrders > 0 ? Math.round(allRevUsd / totalOrders) : k.aov,
+      pending,
+      lowStockCount,
       spark7: last7v,
       revChange: k.revChange, ordChange: k.ordChange, aovChange: k.aovChange,
       conversion: k.conversion, convChange: k.convChange,
       newCustomers: Math.round(k.newCustomers * scale),
     };
-  }, [market]);
+  }, [market, live]);
 }
 
 type DashData = ReturnType<typeof useDashData>;
@@ -46,6 +81,7 @@ const fmtUSD0 = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
 
 interface DashProps {
   d: DashData;
+  live: DashboardData | null;
   market: Market;
   setMarket: (m: Market) => void;
   range: string;
@@ -151,25 +187,43 @@ function TopProductsCard({ compact }: { compact?: boolean }) {
   );
 }
 
-function LowStockCard({ onGo }: { onGo: () => void }) {
+function LowStockCard({ onGo, live }: { onGo: () => void; live: DashboardData | null }) {
   const A = ADMIN;
+  const liveItems = live?.lowStockVariants;
+  const items = liveItems ?? A.LOW_STOCK;
+  const count = items.length;
   return (
     <SectionCard title={<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><AIcon name="alert" size={15} stroke="var(--neg)" />Low stock</span>}
-      action={<span className="pill out" style={{ textTransform: "none" }}>{A.LOW_STOCK.length} items</span>}>
+      action={<span className="pill out" style={{ textTransform: "none" }}>{count} items</span>}>
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {A.LOW_STOCK.map((s) => (
-          <div key={s.sku} className="alert-row">
-            <span className="swatch" style={{ width: 26, height: 26, background: `radial-gradient(70% 70% at 50% 35%, ${s.color}, ${s.color}bb)` }} />
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name} · {s.weight}</div>
-              <div style={{ fontSize: 11.5, color: "var(--ad-faint)" }}>{s.sku} · threshold {s.threshold}</div>
+        {liveItems
+          ? liveItems.slice(0, 6).map((v) => (
+            <div key={v.id} className="alert-row">
+              <span className="swatch" style={{ width: 26, height: 26, background: "var(--brand)" }} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v.product.name} · {v.sku}</div>
+                <div style={{ fontSize: 11.5, color: "var(--ad-faint)" }}>{v.sku}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div className="tnum" style={{ fontSize: 16, fontWeight: 800, color: v.stock < 8 ? "var(--neg)" : "var(--warn)" }}>{v.stock}</div>
+                <div style={{ fontSize: 10, color: "var(--ad-faint)", fontWeight: 600 }}>left</div>
+              </div>
             </div>
-            <div style={{ textAlign: "right" }}>
-              <div className="tnum" style={{ fontSize: 16, fontWeight: 800, color: s.stock < 8 ? "var(--neg)" : "var(--warn)" }}>{s.stock}</div>
-              <div style={{ fontSize: 10, color: "var(--ad-faint)", fontWeight: 600 }}>left</div>
+          ))
+          : A.LOW_STOCK.map((s) => (
+            <div key={s.sku} className="alert-row">
+              <span className="swatch" style={{ width: 26, height: 26, background: `radial-gradient(70% 70% at 50% 35%, ${s.color}, ${s.color}bb)` }} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name} · {s.weight}</div>
+                <div style={{ fontSize: 11.5, color: "var(--ad-faint)" }}>{s.sku} · threshold {s.threshold}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div className="tnum" style={{ fontSize: 16, fontWeight: 800, color: s.stock < 8 ? "var(--neg)" : "var(--warn)" }}>{s.stock}</div>
+                <div style={{ fontSize: 10, color: "var(--ad-faint)", fontWeight: 600 }}>left</div>
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        }
       </div>
       <button className="ad-btn ad-btn-ghost ad-btn-sm" style={{ width: "100%", justifyContent: "center", marginTop: 14 }} onClick={onGo}>Restock products</button>
     </SectionCard>
@@ -269,7 +323,7 @@ function AlertTile({ icon, tone, value, label, sub, onGo }: { icon: string; tone
 }
 
 /* ============================ VARIATION A — COMMAND ============================ */
-function DashCommand({ d, market, setMarket, range, setRange, go }: DashProps) {
+function DashCommand({ d, live, market, setMarket, range, setRange, go }: DashProps) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16 }}>
@@ -281,7 +335,7 @@ function DashCommand({ d, market, setMarket, range, setRange, go }: DashProps) {
       <div style={{ display: "grid", gridTemplateColumns: "1.62fr 1fr", gap: 18, alignItems: "start" }}>
         <RevenueCard d={d} market={market} setMarket={setMarket} range={range} setRange={setRange} height={250} title="Revenue trend" />
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          <LowStockCard onGo={() => go("products")} />
+          <LowStockCard onGo={() => go("products")} live={live} />
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1.62fr 1fr", gap: 18, alignItems: "start" }}>
@@ -300,7 +354,7 @@ function DashCommand({ d, market, setMarket, range, setRange, go }: DashProps) {
 }
 
 /* ============================ VARIATION B — EDITORIAL SPLIT ============================ */
-function DashEditorial({ d, market, setMarket, range, go }: DashProps) {
+function DashEditorial({ d, live, market, setMarket, range, go }: DashProps) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1.7fr 1fr", gap: 18, alignItems: "stretch" }}>
@@ -342,7 +396,7 @@ function DashEditorial({ d, market, setMarket, range, go }: DashProps) {
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div className="ad-eyebrow" style={{ color: "var(--ad-faint)", marginBottom: -2 }}>Needs attention</div>
           <AlertTile icon="truck" tone="amber" value={d.pending} label="to fulfill" sub="Orders awaiting shipment" onGo={() => go("orders")} />
-          <AlertTile icon="alert" tone="red" value={ADMIN.LOW_STOCK.length} label="low stock" sub="Items below threshold — restock soon" onGo={() => go("products")} />
+          <AlertTile icon="alert" tone="red" value={d.lowStockCount} label="low stock" sub="Items below threshold — restock soon" onGo={() => go("products")} />
           <AlertTile icon="handshake" tone="brand" value={ADMIN.WHOLESALE.filter((w) => w.status !== "approved").length} label="wholesale" sub="Applications pending review" onGo={() => go("orders")} />
           <AlertTile icon="users" tone="slate" value={d.newCustomers} label="new customers" sub="Joined the Harvest Club this week" onGo={() => go("orders")} />
         </div>
@@ -373,7 +427,7 @@ function MiniStat({ label, value, delta, deltaInvert, bar }: { label: string; va
   );
 }
 
-function DashDense({ d, market, setMarket, range, setRange, go }: DashProps) {
+function DashDense({ d, live, market, setMarket, range, setRange, go }: DashProps) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 12 }}>
@@ -381,7 +435,7 @@ function DashDense({ d, market, setMarket, range, setRange, go }: DashProps) {
         <MiniStat label="Orders" value={d.todayOrders} delta={d.ordChange} />
         <MiniStat label="AOV" value={fmtUSD0(d.aov)} delta={d.aovChange} />
         <MiniStat label="Pending" value={d.pending} bar="#BA7517" delta={-2} deltaInvert />
-        <MiniStat label="Low stock" value={ADMIN.LOW_STOCK.length} bar="#C0492F" />
+        <MiniStat label="Low stock" value={d.lowStockCount} bar="#C0492F" />
         <MiniStat label="Conversion" value={d.conversion + "%"} delta={d.convChange} />
       </div>
       {/* chart row — chart + market split, balanced heights */}
@@ -392,7 +446,7 @@ function DashDense({ d, market, setMarket, range, setRange, go }: DashProps) {
       {/* operations row — three equal queues */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, alignItems: "stretch" }}>
         <FulfillmentCard onOpen={() => go("orders")} />
-        <LowStockCard onGo={() => go("products")} />
+        <LowStockCard onGo={() => go("products")} live={live} />
         <WholesaleCard onGo={() => go("orders")} />
       </div>
       {/* detail row — top products table + activity */}
@@ -417,16 +471,18 @@ export function AdminDashboard({ go }: { go: (r: string) => void }) {
   );
   const [market, setMarket] = React.useState<Market>("all");
   const [range, setRange] = React.useState("30d");
-  const d = useDashData(market);
+  const live = useLiveDash();
+  const d = useDashData(market, live);
   const setL = (k: string) => { setLayout(k); if (typeof window !== "undefined") localStorage.setItem("ad_dash_layout", k); };
+  const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 
   return (
     <div>
       <div className="ad-pagehd">
         <div>
-          <div className="ad-eyebrow">Thursday · June 4, 2026</div>
-          <h1 className="ad-title" style={{ marginTop: 6 }}>Good morning, Devika</h1>
-          <p className="ad-sub">Here&apos;s how Aranya Ceylon is moving today.</p>
+          <div className="ad-eyebrow">{today}</div>
+          <h1 className="ad-title" style={{ marginTop: 6 }}>Dashboard</h1>
+          <p className="ad-sub">Here&apos;s how Aranya Ceylon is moving today.{!live && " (demo data)"}</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
@@ -438,12 +494,12 @@ export function AdminDashboard({ go }: { go: (r: string) => void }) {
             </div>
           </div>
           <button className="ad-btn ad-btn-ghost ad-btn-sm"><AIcon name="download" size={15} stroke="var(--ad-muted)" />Export</button>
-          <button className="ad-btn ad-btn-amber ad-btn-sm"><AIcon name="plus" size={15} stroke="#fff" />New product</button>
+          <button className="ad-btn ad-btn-amber ad-btn-sm" onClick={() => go("products")}><AIcon name="plus" size={15} stroke="#fff" />New product</button>
         </div>
       </div>
-      {layout === "command" && <DashCommand d={d} market={market} setMarket={setMarket} range={range} setRange={setRange} go={go} />}
-      {layout === "editorial" && <DashEditorial d={d} market={market} setMarket={setMarket} range={range} setRange={setRange} go={go} />}
-      {layout === "dense" && <DashDense d={d} market={market} setMarket={setMarket} range={range} setRange={setRange} go={go} />}
+      {layout === "command" && <DashCommand d={d} live={live} market={market} setMarket={setMarket} range={range} setRange={setRange} go={go} />}
+      {layout === "editorial" && <DashEditorial d={d} live={live} market={market} setMarket={setMarket} range={range} setRange={setRange} go={go} />}
+      {layout === "dense" && <DashDense d={d} live={live} market={market} setMarket={setMarket} range={range} setRange={setRange} go={go} />}
     </div>
   );
 }

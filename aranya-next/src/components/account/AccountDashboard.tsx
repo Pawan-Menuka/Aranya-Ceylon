@@ -9,7 +9,8 @@ import {
   type AccountOrder,
 } from "@/lib/account-data";
 import { listOrders } from "@/lib/api/orders";
-import { patchMe } from "@/lib/api/auth";
+import { patchMe, getAddresses, createAddress, deleteAddress, type SavedAddress } from "@/lib/api/auth";
+import { getWishlist, removeFromWishlist, type WishlistItem } from "@/lib/api/wishlist";
 import { useMarket } from "../MarketContext";
 import { useCart } from "../CartContext";
 import { useAuth } from "../AuthContext";
@@ -181,38 +182,98 @@ function OrdersView({ market, orders, onOpen, onReorder }: { market: Market; ord
 }
 
 function AddressesView() {
+  const [addresses, setAddresses] = React.useState<SavedAddress[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [showForm, setShowForm] = React.useState(false);
+  const [newAddr, setNewAddr] = React.useState({ label: "", line1: "", line2: "", city: "", country: "LK", postalCode: "" });
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    getAddresses()
+      .then(({ addresses: a }) => setAddresses(a))
+      .catch(() => setAddresses(ACCOUNT.addresses.map((a, i) => ({
+        id: String(i), label: a.label, line1: a.lines[0] || "", city: a.cityzip?.split(",")[0]?.trim() || "", country: a.country, postalCode: "", isDefault: a.isDefault,
+      }))))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const addAddress = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const { address } = await createAddress({ ...newAddr, isDefault: addresses.length === 0 });
+      setAddresses((prev) => [...prev, address]);
+      setShowForm(false);
+      setNewAddr({ label: "", line1: "", line2: "", city: "", country: "LK", postalCode: "" });
+    } catch { /* ignore */ } finally { setSaving(false); }
+  };
+
+  const removeAddress = async (id: string) => {
+    try {
+      await deleteAddress(id);
+      setAddresses((prev) => prev.filter((a) => a.id !== id));
+    } catch { /* ignore */ }
+  };
+
+  const fieldStyle = { width: "100%", boxSizing: "border-box" as const, fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--ink)", border: "1px solid var(--line)", borderRadius: 8, padding: "10px 12px", background: "#fff", outline: "none" };
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <h1 className="disp" style={{ fontSize: 36, color: "var(--brand)", margin: 0, lineHeight: 1.05 }}>Saved addresses</h1>
-        <button className="btn btn-ghost" style={{ width: "auto", padding: "11px 18px", display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <button onClick={() => setShowForm((v) => !v)} className="btn btn-ghost" style={{ width: "auto", padding: "11px 18px", display: "inline-flex", alignItems: "center", gap: 8 }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
           Add address
         </button>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
-        {ACCOUNT.addresses.map((a) => (
-          <div key={a.id} style={{ background: "#FFFDF9", border: a.isDefault ? "1.5px solid var(--brand)" : "1px solid var(--line)", borderRadius: 12, padding: "20px 22px", position: "relative" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-              <span className="eyebrow" style={{ color: "var(--brand)", display: "inline-flex", alignItems: "center", gap: 8 }}>
-                <span style={{ width: 14, height: 2, background: a.market === "local" ? "var(--brand)" : "var(--accent)" }} />{a.label}
-              </span>
-              {a.isDefault && <span style={{ fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "#fff", background: "var(--brand)", borderRadius: 999, padding: "3px 8px" }}>Default</span>}
-            </div>
-            <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--ink)", lineHeight: 1.6 }}>
-              <div style={{ fontWeight: 700 }}>{a.name}</div>
-              {a.lines.map((l, i) => <div key={i} style={{ color: "var(--muted)" }}>{l}</div>)}
-              {a.cityzip && <div style={{ color: "var(--muted)" }}>{a.cityzip}</div>}
-              <div style={{ color: "var(--muted)" }}>{a.country}</div>
-              <div style={{ color: "var(--muted)", marginTop: 6 }}>{a.phone}</div>
-            </div>
-            <div style={{ display: "flex", gap: 16, marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
-              <button style={{ background: "none", border: 0, cursor: "pointer", fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 700, color: "var(--brand)", padding: 0 }}>Edit</button>
-              {!a.isDefault && <button style={{ background: "none", border: 0, cursor: "pointer", fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 600, color: "var(--muted)", padding: 0 }}>Set default</button>}
-            </div>
+
+      {showForm && (
+        <form onSubmit={addAddress} style={{ background: "#FFFDF9", border: "1.5px solid var(--brand)", borderRadius: 12, padding: "22px 24px", marginBottom: 20 }}>
+          <h3 className="disp" style={{ fontSize: 22, color: "var(--brand)", margin: "0 0 16px" }}>New address</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <label><span style={{ fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)", display: "block", marginBottom: 5 }}>Label (optional)</span><input style={fieldStyle} placeholder="Home, Office…" value={newAddr.label} onChange={(e) => setNewAddr((p) => ({ ...p, label: e.target.value }))} /></label>
+            <label><span style={{ fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)", display: "block", marginBottom: 5 }}>Country</span><input style={fieldStyle} value={newAddr.country} onChange={(e) => setNewAddr((p) => ({ ...p, country: e.target.value.toUpperCase().slice(0, 2) }))} maxLength={2} /></label>
           </div>
-        ))}
-      </div>
+          <div style={{ display: "grid", gap: 12, marginBottom: 12 }}>
+            <label><span style={{ fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)", display: "block", marginBottom: 5 }}>Address line 1 *</span><input required style={fieldStyle} value={newAddr.line1} onChange={(e) => setNewAddr((p) => ({ ...p, line1: e.target.value }))} /></label>
+            <label><span style={{ fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)", display: "block", marginBottom: 5 }}>Address line 2</span><input style={fieldStyle} value={newAddr.line2} onChange={(e) => setNewAddr((p) => ({ ...p, line2: e.target.value }))} /></label>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+            <label><span style={{ fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)", display: "block", marginBottom: 5 }}>City *</span><input required style={fieldStyle} value={newAddr.city} onChange={(e) => setNewAddr((p) => ({ ...p, city: e.target.value }))} /></label>
+            <label><span style={{ fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)", display: "block", marginBottom: 5 }}>Postal code</span><input style={fieldStyle} value={newAddr.postalCode} onChange={(e) => setNewAddr((p) => ({ ...p, postalCode: e.target.value }))} /></label>
+          </div>
+          <div style={{ display: "flex", gap: 12 }}>
+            <button type="submit" className="btn btn-local" style={{ width: "auto", padding: "11px 20px", fontSize: 14, opacity: saving ? 0.6 : 1 }} disabled={saving}>{saving ? "Saving…" : "Save address"}</button>
+            <button type="button" onClick={() => setShowForm(false)} className="btn btn-ghost" style={{ width: "auto", padding: "11px 20px", fontSize: 14 }}>Cancel</button>
+          </div>
+        </form>
+      )}
+
+      {loading ? (
+        <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--muted)", padding: "24px 0" }}>Loading addresses…</div>
+      ) : addresses.length === 0 ? (
+        <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--muted)", padding: "24px 0" }}>No saved addresses yet. Add one above.</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
+          {addresses.map((a) => (
+            <div key={a.id} style={{ background: "#FFFDF9", border: a.isDefault ? "1.5px solid var(--brand)" : "1px solid var(--line)", borderRadius: 12, padding: "20px 22px", position: "relative" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <span className="eyebrow" style={{ color: "var(--brand)" }}>{a.label || "Address"}</span>
+                {a.isDefault && <span style={{ fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "#fff", background: "var(--brand)", borderRadius: 999, padding: "3px 8px" }}>Default</span>}
+              </div>
+              <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--muted)", lineHeight: 1.6 }}>
+                <div>{a.line1}</div>
+                {a.line2 && <div>{a.line2}</div>}
+                <div>{a.city}{a.postalCode ? `, ${a.postalCode}` : ""}</div>
+                <div>{a.country}</div>
+              </div>
+              <div style={{ display: "flex", gap: 16, marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
+                <button onClick={() => removeAddress(a.id)} style={{ background: "none", border: 0, cursor: "pointer", fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 600, color: "var(--muted)", padding: 0 }}>Remove</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -291,14 +352,53 @@ function ProfileView({ market, userName, userEmail }: { market: Market; userName
 }
 
 function WishlistView({ market }: { market: Market }) {
-  const items = wishlistSpices(ACCOUNT.wishlistKeys);
+  const [items, setItems] = React.useState<WishlistItem[] | null>(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    getWishlist()
+      .then(({ items: wi }) => setItems(wi))
+      .catch(() => setItems(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const remove = async (productId: string) => {
+    try {
+      await removeFromWishlist(productId);
+      setItems((prev) => prev ? prev.filter((i) => i.productId !== productId) : prev);
+    } catch { /* ignore */ }
+  };
+
+  // Fallback to demo data if backend unavailable
+  const demoItems = wishlistSpices(ACCOUNT.wishlistKeys);
+
   return (
     <div>
       <h1 className="disp" style={{ fontSize: 36, color: "var(--brand)", margin: "0 0 6px", lineHeight: 1.05 }}>Your wishlist</h1>
       <p style={{ fontFamily: "var(--font-ui)", fontSize: 14.5, color: "var(--muted)", margin: "0 0 24px" }}>Spices you&rsquo;ve saved for later — add them to a future harvest box.</p>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 22 }}>
-        {items.map((s) => <CardCFinal key={s.name} spice={s} market={market} />)}
-      </div>
+      {loading ? (
+        <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--muted)" }}>Loading wishlist…</div>
+      ) : items !== null ? (
+        items.length === 0 ? (
+          <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--muted)", padding: "24px 0" }}>Your wishlist is empty. Browse the store to save favourites.</div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 22 }}>
+            {items.map((wi) => {
+              const spice = { name: wi.product.name, latin: wi.product.latin || "", origin: "Sri Lanka", color: wi.product.color || "#6b5d4b", base: wi.product.color || "#6b5d4b", deep: wi.product.color || "#6b5d4b", surface: "#FDFAF5", rating: 4.8, reviews: 0, badge: "In Stock", usd: "$" + (Number(wi.product.variants?.[0]?.price) || 0).toFixed(2), lkr: "Rs " + (Number(wi.product.variants?.[0]?.price) || 0).toLocaleString("en-US"), weights: ["50g", "100g", "250g"], slug: wi.product.slug };
+              return (
+                <div key={wi.id} style={{ position: "relative" }}>
+                  <CardCFinal spice={spice} market={market} />
+                  <button onClick={() => remove(wi.productId)} style={{ position: "absolute", top: 10, right: 10, background: "rgba(255,253,249,.9)", border: "1px solid var(--line)", borderRadius: 8, padding: "4px 8px", cursor: "pointer", fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 600, color: "var(--muted)" }}>Remove</button>
+                </div>
+              );
+            })}
+          </div>
+        )
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 22 }}>
+          {demoItems.map((s) => <CardCFinal key={s.name} spice={s} market={market} />)}
+        </div>
+      )}
     </div>
   );
 }
@@ -306,19 +406,22 @@ function WishlistView({ market }: { market: Market }) {
 export function AccountDashboard() {
   const { market } = useMarket();
   const cart = useCart();
-  const { user, signOut } = useAuth();
+  const { user, demo, signOut } = useAuth();
   const [view, setView] = React.useState<View>("overview");
   const [openOrder, setOpenOrder] = React.useState<string | null>(null);
-  const [orders, setOrders] = React.useState<AccountOrder[]>(ACCOUNT.orders);
+  // Authenticated users start with an empty list; demo users get demo orders.
+  const [orders, setOrders] = React.useState<AccountOrder[]>(demo ? ACCOUNT.orders : []);
+  const [ordersLoading, setOrdersLoading] = React.useState(!demo);
 
-  // Load real orders from the backend; fall back to demo data if the API is down.
   React.useEffect(() => {
+    if (demo) return; // demo mode — keep demo orders
     listOrders()
       .then(({ orders: apiOrders }) => {
-        if (apiOrders?.length) setOrders(apiOrders.map(toAccountOrder));
+        setOrders(apiOrders?.length ? apiOrders.map(toAccountOrder) : []);
       })
-      .catch(() => { /* keep demo data */ });
-  }, []);
+      .catch(() => { /* empty list on error */ })
+      .finally(() => setOrdersLoading(false));
+  }, [demo]);
 
   const baseActive = orders.find((o) => o.status !== "delivered") || orders[0];
   const activeOrder = orders.find((o) => o.id === (baseActive?.id ?? ""));
@@ -345,8 +448,16 @@ export function AccountDashboard() {
         <div className="ac-shell" style={{ display: "flex", gap: 40, alignItems: "flex-start" }}>
           <Sidebar view={view} setView={(v) => { setView(v); setOpenOrder(null); }} onSignOut={signOut} userName={userName} />
           <main style={{ flex: 1, minWidth: 0 }}>
-            {view === "overview" && <OverviewView market={market} activeOrder={activeOrder} orders={orders} onOpen={open} onReorder={reorder} setView={setView} firstName={firstName} />}
-            {view === "orders" && <OrdersView market={market} orders={orders} onOpen={open} onReorder={reorder} />}
+            {view === "overview" && (
+              ordersLoading
+                ? <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--muted)", padding: "40px 0" }}>Loading your orders…</div>
+                : <OverviewView market={market} activeOrder={activeOrder} orders={orders} onOpen={open} onReorder={reorder} setView={setView} firstName={firstName} />
+            )}
+            {view === "orders" && (
+              ordersLoading
+                ? <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--muted)", padding: "40px 0" }}>Loading your orders…</div>
+                : <OrdersView market={market} orders={orders} onOpen={open} onReorder={reorder} />
+            )}
             {view === "detail" && detailOrder && <OrderDetailView order={detailOrder} market={market} address={addr} onBack={() => { setView("orders"); setOpenOrder(null); }} onReorder={reorder} />}
             {view === "addresses" && <AddressesView />}
             {view === "wishlist" && <WishlistView market={market} />}
