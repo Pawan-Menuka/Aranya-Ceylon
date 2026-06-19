@@ -13,7 +13,7 @@ const TOTAL_FRAMES = 192;
 const SCROLL_MULTIPLIER = 5; // hero scroll room = SCROLL_MULTIPLIER × 100vh (more room = slower pace)
 const SMOOTHING = 0.08;      // lerp factor: lower = smoother/floatier, higher = snappier
 const framePath = (index: number, isMobile: boolean) =>
-  `/hero/${isMobile ? "mobile" : "desktop"}/frame_${String(index + 1).padStart(4, "0")}.jpg`;
+  `/hero/${isMobile ? "mobile" : "desktop"}/frame_${String(index + 1).padStart(4, "0")}.webp`;
 
 function smooth(a: number, b: number, x: number) {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -95,12 +95,30 @@ function HeroFrames({ progress }: { progress: number }) {
     const canvas = canvasRef.current;
     const ctx = ctxRef.current;
     if (!img || !img.complete || !canvas || !ctx) return;
-    const cw = canvas.width, ch = canvas.height;
+    // Draw in CSS pixels — sizeCanvas() scales the context by DPR, so the backing
+    // store is higher-resolution while the cover-fit math stays in CSS space.
+    const cw = canvas.clientWidth, ch = canvas.clientHeight;
     const iw = img.naturalWidth, ih = img.naturalHeight;
     if (!iw || !ih) return;
     const scale = Math.max(cw / iw, ch / ih);
     const sw = iw * scale, sh = ih * scale;
     ctx.drawImage(img, (cw - sw) / 2, (ch - sh) / 2, sw, sh);
+  }, []);
+
+  // Size the canvas backing store to the device pixel ratio so frames render
+  // crisply on high-DPI/retina displays (it was previously sized in CSS pixels
+  // and upscaled, which softened the imagery). Capped at 2× to avoid allocating
+  // an oversized canvas on 3× phones. Reassigning width/height resets the
+  // context transform, so the DPR scale is re-applied on every call.
+  const sizeCanvas = React.useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = ctxRef.current;
+    if (!canvas || !ctx) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }, []);
 
   // Detect mobile to pick the right frame folder.
@@ -117,14 +135,13 @@ function HeroFrames({ progress }: { progress: number }) {
     if (!canvas) return;
     ctxRef.current = canvas.getContext("2d");
     const setSize = () => {
-      canvas.width = canvas.offsetWidth;
-      canvas.height = canvas.offsetHeight;
+      sizeCanvas();
       drawFrame(imagesRef.current[Math.max(0, currentFrameRef.current)]);
     };
     setSize();
     window.addEventListener("resize", setSize);
     return () => window.removeEventListener("resize", setSize);
-  }, [drawFrame]);
+  }, [drawFrame, sizeCanvas]);
 
   // Progressive preload: first frame immediately, then 1–40, rest on idle.
   React.useEffect(() => {
@@ -141,10 +158,8 @@ function HeroFrames({ progress }: { progress: number }) {
     firstImg.src = framePath(0, mobile);
     imagesRef.current[0] = firstImg;
     firstImg.onload = () => {
-      const canvas = canvasRef.current;
-      if (canvas && ctxRef.current) {
-        canvas.width = canvas.offsetWidth;
-        canvas.height = canvas.offsetHeight;
+      if (canvasRef.current && ctxRef.current) {
+        sizeCanvas();
         drawFrame(firstImg);
         currentFrameRef.current = 0;
       }
@@ -159,7 +174,7 @@ function HeroFrames({ progress }: { progress: number }) {
       if (ric && typeof idleId === "number") window.cancelIdleCallback(idleId);
       else clearTimeout(idleId as number);
     };
-  }, [isMobile, drawFrame]);
+  }, [isMobile, drawFrame, sizeCanvas]);
 
   // Continuous render loop — glides toward the scroll target instead of jumping.
   React.useEffect(() => {
@@ -190,7 +205,11 @@ function HeroFrames({ progress }: { progress: number }) {
       aria-hidden="true"
       style={{
         position: "absolute", inset: 0, display: "block", width: "100%", height: "100%",
-        background: "#1A1A1A", opacity: firstLoaded ? 1 : 0, transition: "opacity 0.4s ease",
+        // Transparent so the high-res poster (on the wrapper) shows through at rest.
+        // The frame sequence fades in only once the user starts scrolling, so the
+        // crisp, watermark-free still is the resting image and the video footage
+        // (different layout) never pops in on first paint.
+        background: "transparent", opacity: firstLoaded && progress > 0.002 ? 1 : 0, transition: "opacity 0.4s ease",
       }}
     />
   );
@@ -225,7 +244,7 @@ export function HomeHero({ dust = true }: { dust?: boolean }) {
 
   return (
     <div ref={wrapRef} data-hero data-screen-label="Hero" style={{ height: `${SCROLL_MULTIPLIER * 100}vh`, position: "relative" }}>
-      <div style={{ position: "sticky", top: 0, height: "100vh", overflow: "hidden", background: "#1A1A1A" }}>
+      <div style={{ position: "sticky", top: 0, height: "100vh", overflow: "hidden", backgroundColor: "#1A1A1A", backgroundImage: "url('/hero/poster.webp')", backgroundSize: "cover", backgroundPosition: "center" }}>
         <HeroFrames progress={p} />
         <div style={{ position: "absolute", inset: 0, boxShadow: `inset 0 0 ${120 + p * 160}px rgba(0,0,0,${0.42 + p * 0.28})`, pointerEvents: "none" }} />
         <HeroDust progress={p} enabled={dust} />
