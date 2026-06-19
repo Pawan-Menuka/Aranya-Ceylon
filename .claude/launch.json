@@ -6,6 +6,12 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@aranya/frontend", "dev"],
       "port": 3000
+    },
+    {
+      "name": "aranya-next",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "aranya-ceylon-storefront", "dev", "-p", "3100"],
+      "port": 3100
     }
   ]
 }
