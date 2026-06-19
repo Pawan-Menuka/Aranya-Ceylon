@@ -6,14 +6,14 @@ import { Seal } from "../primitives/Seal";
 import { Icon } from "../primitives/Icon";
 import { useMarket } from "../MarketContext";
 
-// Homepage hero (ported from home2-hero.jsx): 300vh pinned frame-sequence +
-// entrance choreography + amber spice-dust canvas + kinetic letter-spacing.
-// Real frames: host 0001…0192 on NEXT_PUBLIC_ASSETS_URL and set USE_REAL_FRAMES.
-const ASSETS = process.env.NEXT_PUBLIC_ASSETS_URL || "";
-const USE_REAL_FRAMES = false;
-const FRAME_COUNT = 192;
-const FRAME_SRC = (i: number) => `${ASSETS}/frames/${String(i).padStart(4, "0")}.webp`;
-const SIM_STILL = "/assets/hero-spices.png";
+// Homepage hero: 300vh pinned scroll-driven frame sequence (AranyaHero design)
+// + entrance choreography + amber spice-dust canvas + kinetic letter-spacing.
+// Frames are served from /public/hero/{desktop,mobile}/frame_0001.jpg … 0192.jpg.
+const TOTAL_FRAMES = 192;
+const SCROLL_MULTIPLIER = 5; // hero scroll room = SCROLL_MULTIPLIER × 100vh (more room = slower pace)
+const SMOOTHING = 0.08;      // lerp factor: lower = smoother/floatier, higher = snappier
+const framePath = (index: number, isMobile: boolean) =>
+  `/hero/${isMobile ? "mobile" : "desktop"}/frame_${String(index + 1).padStart(4, "0")}.jpg`;
 
 function smooth(a: number, b: number, x: number) {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -78,6 +78,124 @@ function HeroDust({ progress, enabled }: { progress: number; enabled: boolean })
   return <canvas ref={cvRef} aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />;
 }
 
+// Scroll-driven frame-sequence background (AranyaHero). Preloads progressively
+// and paints the frame matching the hero scroll progress onto a cover-fit canvas.
+function HeroFrames({ progress }: { progress: number }) {
+  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const ctxRef = React.useRef<CanvasRenderingContext2D | null>(null);
+  const imagesRef = React.useRef<HTMLImageElement[]>([]);
+  const currentFrameRef = React.useRef(-1);
+  const [isMobile, setIsMobile] = React.useState(false);
+  const [firstLoaded, setFirstLoaded] = React.useState(false);
+  const progressRef = React.useRef(0);
+  progressRef.current = progress;
+
+  // Cover-fit draw (like object-fit: cover) of an image onto the canvas.
+  const drawFrame = React.useCallback((img: HTMLImageElement | undefined) => {
+    const canvas = canvasRef.current;
+    const ctx = ctxRef.current;
+    if (!img || !img.complete || !canvas || !ctx) return;
+    const cw = canvas.width, ch = canvas.height;
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    if (!iw || !ih) return;
+    const scale = Math.max(cw / iw, ch / ih);
+    const sw = iw * scale, sh = ih * scale;
+    ctx.drawImage(img, (cw - sw) / 2, (ch - sh) / 2, sw, sh);
+  }, []);
+
+  // Detect mobile to pick the right frame folder.
+  React.useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  // Canvas context + sizing, redraw current frame on resize.
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    ctxRef.current = canvas.getContext("2d");
+    const setSize = () => {
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+      drawFrame(imagesRef.current[Math.max(0, currentFrameRef.current)]);
+    };
+    setSize();
+    window.addEventListener("resize", setSize);
+    return () => window.removeEventListener("resize", setSize);
+  }, [drawFrame]);
+
+  // Progressive preload: first frame immediately, then 1–40, rest on idle.
+  React.useEffect(() => {
+    const mobile = isMobile;
+    imagesRef.current = [];
+    currentFrameRef.current = -1;
+    const loadAt = (i: number) => {
+      if (imagesRef.current[i]) return;
+      const img = new Image();
+      img.src = framePath(i, mobile);
+      imagesRef.current[i] = img;
+    };
+    const firstImg = new Image();
+    firstImg.src = framePath(0, mobile);
+    imagesRef.current[0] = firstImg;
+    firstImg.onload = () => {
+      const canvas = canvasRef.current;
+      if (canvas && ctxRef.current) {
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+        drawFrame(firstImg);
+        currentFrameRef.current = 0;
+      }
+      setFirstLoaded(true);
+      for (let i = 1; i <= 40; i++) loadAt(i);
+    };
+    const ric = typeof window !== "undefined" ? window.requestIdleCallback : undefined;
+    const idleId = ric
+      ? ric(() => { for (let i = 41; i < TOTAL_FRAMES; i++) loadAt(i); })
+      : window.setTimeout(() => { for (let i = 41; i < TOTAL_FRAMES; i++) loadAt(i); }, 1000);
+    return () => {
+      if (ric && typeof idleId === "number") window.cancelIdleCallback(idleId);
+      else clearTimeout(idleId as number);
+    };
+  }, [isMobile, drawFrame]);
+
+  // Continuous render loop — glides toward the scroll target instead of jumping.
+  React.useEffect(() => {
+    let running = true;
+    let rendered = progressRef.current * (TOTAL_FRAMES - 1);
+    const tick = () => {
+      if (!running) return;
+      const target = Math.min(TOTAL_FRAMES - 1, Math.max(0, progressRef.current * (TOTAL_FRAMES - 1)));
+      // Lerp: move a fraction of the remaining distance each frame.
+      rendered += (target - rendered) * SMOOTHING;
+      const idx = Math.round(rendered);
+      if (idx !== currentFrameRef.current) {
+        const img = imagesRef.current[idx];
+        if (img && img.complete) {
+          currentFrameRef.current = idx;
+          drawFrame(img);
+        }
+      }
+      requestAnimationFrame(tick);
+    };
+    const raf = requestAnimationFrame(tick);
+    return () => { running = false; cancelAnimationFrame(raf); };
+  }, [drawFrame]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      aria-hidden="true"
+      style={{
+        position: "absolute", inset: 0, display: "block", width: "100%", height: "100%",
+        background: "#1A1A1A", opacity: firstLoaded ? 1 : 0, transition: "opacity 0.4s ease",
+      }}
+    />
+  );
+}
+
 export function HomeHero({ dust = true }: { dust?: boolean }) {
   const [p, setP] = React.useState(0);
   const wrapRef = React.useRef<HTMLDivElement | null>(null);
@@ -100,28 +218,15 @@ export function HomeHero({ dust = true }: { dust?: boolean }) {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const scale = 1 + p * 0.7;
-  const bright = 1 + p * 0.32;
-  const sat = 1 + p * 0.22;
-  const blur = Math.max(0, p - 0.85) * 6;
-  const glow = smooth(0.25, 1, p) * 0.66;
   const brandFade = 1 - smooth(0.4, 0.74, p);
   const scrollFade = 1 - smooth(0.02, 0.12, p);
-  const frameIdx = Math.min(FRAME_COUNT, Math.max(1, Math.round(1 + p * (FRAME_COUNT - 1))));
   const track = (0.14 + smooth(0, 0.74, p) * 0.16).toFixed(3);
   const lift = (smooth(0, 0.74, p) * 36).toFixed(1);
 
   return (
-    <div ref={wrapRef} data-hero data-screen-label="Hero" style={{ height: "300vh", position: "relative" }}>
+    <div ref={wrapRef} data-hero data-screen-label="Hero" style={{ height: `${SCROLL_MULTIPLIER * 100}vh`, position: "relative" }}>
       <div style={{ position: "sticky", top: 0, height: "100vh", overflow: "hidden", background: "#1A1A1A" }}>
-        {USE_REAL_FRAMES ? (
-          <img src={FRAME_SRC(frameIdx)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
-        ) : (
-          <>
-            <div style={{ position: "absolute", inset: 0, backgroundImage: `url(${SIM_STILL})`, backgroundSize: "cover", backgroundPosition: "center 46%", transform: `scale(${scale})`, filter: `brightness(${bright}) saturate(${sat}) blur(${blur}px)`, transformOrigin: "50% 46%" }} />
-            <div style={{ position: "absolute", inset: 0, mixBlendMode: "screen", opacity: glow, background: "radial-gradient(42% 42% at 50% 46%, rgba(230,160,60,.85), rgba(186,117,23,.22) 46%, transparent 70%)" }} />
-          </>
-        )}
+        <HeroFrames progress={p} />
         <div style={{ position: "absolute", inset: 0, boxShadow: `inset 0 0 ${120 + p * 160}px rgba(0,0,0,${0.42 + p * 0.28})`, pointerEvents: "none" }} />
         <HeroDust progress={p} enabled={dust} />
         <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 180, background: "linear-gradient(180deg, transparent, var(--bg))", opacity: smooth(0.88, 1, p) }} />
