@@ -16,6 +16,8 @@ export const AD_NAV: NavItem[] = [
   { key: "orders", label: "Orders", icon: "orders", count: 18, hot: true },
   { key: "products", label: "Products", icon: "products" },
   { key: "blog", label: "Blog", icon: "blog" },
+  { key: "recipes", label: "Recipes", icon: "sparkle" },
+  { key: "gifts", label: "Gift Sets", icon: "box" },
   { key: "audit", label: "Audit log", icon: "audit" },
 ];
 

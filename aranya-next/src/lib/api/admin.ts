@@ -124,6 +124,110 @@ export function deleteBlog(id: string): Promise<void> {
   return apiFetch(`/admin/blogs/${encodeURIComponent(id)}`, { method: "DELETE", auth: true });
 }
 
+// ---- recipes (admin) ----
+export interface AdminRecipe {
+  id: string;
+  slug: string;
+  title: string;
+  course: string;
+  difficulty: string;
+  featured: boolean;
+  status: string;
+  prepMins: number;
+  cookMins: number;
+  serves: number;
+  createdAt: string;
+}
+
+export interface AdminRecipeInput {
+  title: string;
+  slug: string;
+  dek: string;
+  course: string;
+  accent?: string;
+  slot?: string;
+  featured?: boolean;
+  prepMins?: number;
+  cookMins?: number;
+  serves?: number;
+  difficulty?: string;
+  intro?: string;
+  spices?: string[];
+  ingredients?: Array<{ group?: string; items: string[] }>;
+  method?: string[];
+  tips?: string[];
+  status?: "DRAFT" | "PUBLISHED";
+}
+
+export function listAdminRecipes(): Promise<{ recipes: AdminRecipe[] }> {
+  return apiFetch(`/admin/recipes`, { auth: true });
+}
+
+export function getAdminRecipe(id: string): Promise<{ recipe: AdminRecipe }> {
+  return apiFetch(`/admin/recipes/${encodeURIComponent(id)}`, { auth: true });
+}
+
+export function createRecipe(input: AdminRecipeInput): Promise<{ recipe: AdminRecipe }> {
+  return apiFetch(`/admin/recipes`, { method: "POST", body: input, auth: true });
+}
+
+export function updateRecipe(id: string, input: Partial<AdminRecipeInput>): Promise<{ recipe: AdminRecipe }> {
+  return apiFetch(`/admin/recipes/${encodeURIComponent(id)}`, { method: "PATCH", body: input, auth: true });
+}
+
+export function deleteRecipe(id: string): Promise<void> {
+  return apiFetch(`/admin/recipes/${encodeURIComponent(id)}`, { method: "DELETE", auth: true });
+}
+
+// ---- gifts (admin) ----
+export interface AdminGiftSet {
+  id: string;
+  slug: string;
+  name: string;
+  featured: boolean;
+  badge: string | null;
+  usd: string;
+  lkr: string;
+  jar: string;
+  status: string;
+  contents: string[];
+  createdAt: string;
+}
+
+export interface AdminGiftInput {
+  slug: string;
+  name: string;
+  featured?: boolean;
+  tagline: string;
+  blurb: string;
+  badge?: string | null;
+  jar?: string;
+  color?: string;
+  base?: string;
+  deep?: string;
+  surface?: string;
+  usd: string;
+  lkr: string;
+  contents: string[];
+  status?: "DRAFT" | "PUBLISHED";
+}
+
+export function listAdminGifts(): Promise<{ gifts: AdminGiftSet[] }> {
+  return apiFetch(`/admin/gifts`, { auth: true });
+}
+
+export function createGift(input: AdminGiftInput): Promise<{ gift: AdminGiftSet }> {
+  return apiFetch(`/admin/gifts`, { method: "POST", body: input, auth: true });
+}
+
+export function updateGift(id: string, input: Partial<AdminGiftInput>): Promise<{ gift: AdminGiftSet }> {
+  return apiFetch(`/admin/gifts/${encodeURIComponent(id)}`, { method: "PATCH", body: input, auth: true });
+}
+
+export function deleteGift(id: string): Promise<void> {
+  return apiFetch(`/admin/gifts/${encodeURIComponent(id)}`, { method: "DELETE", auth: true });
+}
+
 // ---- audit ----
 export interface AuditEntry {
   id: string;

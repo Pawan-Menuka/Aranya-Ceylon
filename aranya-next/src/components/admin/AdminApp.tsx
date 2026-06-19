@@ -8,6 +8,8 @@ import { AdminDashboard } from "./AdminDashboard";
 import { AdminOrders } from "./AdminOrders";
 import { AdminProducts } from "./AdminProducts";
 import { AdminBlog } from "./AdminBlog";
+import { AdminRecipes } from "./AdminRecipes";
+import { AdminGifts } from "./AdminGifts";
 import { AdminAudit } from "./AdminAudit";
 import { ADMIN } from "@/lib/admin-data";
 
@@ -16,7 +18,7 @@ import { ADMIN } from "@/lib/admin-data";
 // AuthProvider so it can detect a real ADMIN/SUPERADMIN session; offline it falls
 // back to a local demo session granted by the sign-in gate.
 
-const VALID_ROUTES = ["dashboard", "orders", "products", "blog", "audit"];
+const VALID_ROUTES = ["dashboard", "orders", "products", "blog", "recipes", "gifts", "audit"];
 
 function BootSplash() {
   return (
@@ -99,6 +101,8 @@ function AdminConsole() {
       {route === "orders" && <AdminOrders />}
       {route === "products" && <AdminProducts />}
       {route === "blog" && <AdminBlog />}
+      {route === "recipes" && <AdminRecipes />}
+      {route === "gifts" && <AdminGifts />}
       {route === "audit" && <AdminAudit />}
     </AdminShell>
   );
