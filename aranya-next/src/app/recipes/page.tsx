@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { resolveMarket } from "@/lib/market";
 import { RECIPES } from "@/lib/recipes-data";
+import { fetchRecipes } from "@/lib/api/recipes";
 import { SiteChrome } from "@/components/SiteChrome";
 import { RecipesClient } from "@/components/recipes/RecipesClient";
 
@@ -10,13 +11,15 @@ export const metadata: Metadata = {
   alternates: { canonical: "/recipes" },
 };
 
-// Recipes are curated content (no live endpoint in the spec), so the demo set is
-// the source. Served SSG.
-export default function RecipesPage() {
+export const revalidate = 3600; // ISR: revalidate every hour
+
+export default async function RecipesPage() {
   const market = resolveMarket();
+  // Prefer live DB data; fall back to static file when backend is unavailable
+  const recipes = (await fetchRecipes()) ?? RECIPES;
   return (
     <SiteChrome initialMarket={market}>
-      <RecipesClient recipes={RECIPES} />
+      <RecipesClient recipes={recipes} />
     </SiteChrome>
   );
 }
