@@ -64,3 +64,30 @@ export async function logout(): Promise<void> {
     setAccessToken(null);
   }
 }
+
+export interface SavedAddress {
+  id: string;
+  label?: string;
+  line1: string;
+  line2?: string;
+  city: string;
+  country: string;
+  postalCode: string;
+  isDefault: boolean;
+}
+
+export function getAddresses(): Promise<{ addresses: SavedAddress[] }> {
+  return apiFetch("/auth/me/addresses", { auth: true });
+}
+
+export function createAddress(input: Omit<SavedAddress, "id">): Promise<{ address: SavedAddress }> {
+  return apiFetch("/auth/me/addresses", { method: "POST", body: input, auth: true });
+}
+
+export function updateAddress(id: string, input: Partial<Omit<SavedAddress, "id">>): Promise<{ address: SavedAddress }> {
+  return apiFetch(`/auth/me/addresses/${encodeURIComponent(id)}`, { method: "PATCH", body: input, auth: true });
+}
+
+export function deleteAddress(id: string): Promise<{ ok: boolean }> {
+  return apiFetch(`/auth/me/addresses/${encodeURIComponent(id)}`, { method: "DELETE", auth: true });
+}

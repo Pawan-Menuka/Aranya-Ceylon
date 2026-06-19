@@ -12,11 +12,13 @@ import { ACCOUNT } from "@/lib/account-data";
 // falls back to a local demo session so the account dashboard stays viewable
 // offline (acceptance criterion §11) — flagged via `demo`.
 
+export interface SignInResult { user: AuthUser; demo: boolean }
+
 interface AuthCtx {
   user: AuthUser | null;
   loading: boolean;
   demo: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<SignInResult>;
   signUp: (name: string, email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -63,17 +65,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const signIn = React.useCallback(async (email: string, password: string) => {
+  const signIn = React.useCallback(async (email: string, password: string): Promise<SignInResult> => {
     try {
       const u = await apiLogin(email, password);
       setUser(u);
       setDemo(false);
       await afterAuth();
+      return { user: u, demo: false };
     } catch (e) {
       if (isOffline(e)) {
-        setUser({ ...DEMO_USER, email: email || DEMO_USER.email });
+        const demoUser = { ...DEMO_USER, email: email || DEMO_USER.email };
+        setUser(demoUser);
         setDemo(true);
-        return;
+        return { user: demoUser, demo: true };
       }
       throw e;
     }

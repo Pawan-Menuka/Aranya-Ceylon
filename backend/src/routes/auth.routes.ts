@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { register, login, refresh, logout, logoutAll, getMe, patchMe } from '../controllers/auth.controller.js';
+import { register, login, refresh, logout, logoutAll, getMe, patchMe, listAddresses, createAddress, updateAddress, deleteAddress } from '../controllers/auth.controller.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { validate } from '../middleware/validate.js';
@@ -16,5 +16,11 @@ router.post('/logout', authLimiter, asyncHandler(logout));
 router.post('/logout-all', asyncHandler(requireAuth), asyncHandler(logoutAll));
 router.get('/me', asyncHandler(requireAuth), asyncHandler(getMe));
 router.patch('/me', asyncHandler(requireAuth), asyncHandler(patchMe));
+
+// Addresses
+router.get('/me/addresses', asyncHandler(requireAuth), asyncHandler(listAddresses));
+router.post('/me/addresses', asyncHandler(requireAuth), asyncHandler(createAddress));
+router.patch('/me/addresses/:id', asyncHandler(requireAuth), asyncHandler(updateAddress));
+router.delete('/me/addresses/:id', asyncHandler(requireAuth), asyncHandler(deleteAddress));
 
 export default router;

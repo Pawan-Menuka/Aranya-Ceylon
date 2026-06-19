@@ -152,10 +152,9 @@ export async function getMe(req: Request, res: Response) {
 }
 
 export async function patchMe(req: Request, res: Response) {
-    const { name, phone } = req.body as { name?: string; phone?: string };
-    const update: { name?: string; phone?: string } = {};
+    const { name } = req.body as { name?: string };
+    const update: { name?: string } = {};
     if (name !== undefined) update.name = String(name).trim();
-    if (phone !== undefined) update.phone = String(phone).trim();
 
     const user = await prisma.user.update({
         where: { id: req.user!.userId },
@@ -163,4 +162,70 @@ export async function patchMe(req: Request, res: Response) {
         select: { id: true, name: true, email: true, role: true, verified: true, createdAt: true },
     });
     return res.json({ user });
+}
+
+// --- Addresses ---
+
+export async function listAddresses(req: Request, res: Response) {
+    const addresses = await prisma.address.findMany({
+        where: { userId: req.user!.userId },
+        orderBy: [{ isDefault: 'desc' }, { id: 'asc' }],
+    });
+    return res.json({ addresses });
+}
+
+export async function createAddress(req: Request, res: Response) {
+    const { label, line1, line2, city, country, postalCode, isDefault } =
+        req.body as { label?: string; line1: string; line2?: string; city: string; country: string; postalCode?: string; isDefault?: boolean };
+
+    if (!line1 || !city || !country) {
+        return res.status(400).json({ error: 'line1, city, and country are required.' });
+    }
+
+    const userId = req.user!.userId;
+
+    const address = await prisma.$transaction(async (tx) => {
+        if (isDefault) {
+            await tx.address.updateMany({ where: { userId }, data: { isDefault: false } });
+        }
+        return tx.address.create({
+            data: { userId, label, line1, line2, city, country, postalCode: postalCode ?? '', isDefault: !!isDefault },
+        });
+    });
+
+    return res.status(201).json({ address });
+}
+
+export async function updateAddress(req: Request, res: Response) {
+    const { id } = req.params;
+    const userId = req.user!.userId;
+
+    const existing = await prisma.address.findFirst({ where: { id, userId } });
+    if (!existing) return res.status(404).json({ error: 'Address not found.' });
+
+    const { label, line1, line2, city, country, postalCode, isDefault } =
+        req.body as { label?: string; line1?: string; line2?: string; city?: string; country?: string; postalCode?: string; isDefault?: boolean };
+
+    const address = await prisma.$transaction(async (tx) => {
+        if (isDefault) {
+            await tx.address.updateMany({ where: { userId }, data: { isDefault: false } });
+        }
+        return tx.address.update({
+            where: { id },
+            data: { label, line1, line2, city, country, postalCode, isDefault },
+        });
+    });
+
+    return res.json({ address });
+}
+
+export async function deleteAddress(req: Request, res: Response) {
+    const { id } = req.params;
+    const userId = req.user!.userId;
+
+    const existing = await prisma.address.findFirst({ where: { id, userId } });
+    if (!existing) return res.status(404).json({ error: 'Address not found.' });
+
+    await prisma.address.delete({ where: { id } });
+    return res.json({ ok: true });
 }

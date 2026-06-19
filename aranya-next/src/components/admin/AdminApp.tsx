@@ -64,16 +64,21 @@ function AdminConsole() {
   const onEnter = React.useCallback(async (email: string, password: string) => {
     setGateError(null);
     try {
-      await signIn(email, password);
-      // signIn resolves; if the backend returned a non-admin role we still let
-      // the demo session through below (offline demo). A real backend would
-      // return an ADMIN role here and isRealAdmin flips true on the next render.
-      setDemoAdmin({ name: email.split("@")[0].replace(/\W/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || ADMIN.user.name, email });
+      const { user: signedInUser, demo: isDemo } = await signIn(email, password);
+      if (isDemo) {
+        // Backend unreachable — grant local demo session for offline review
+        setDemoAdmin({ name: email.split("@")[0].replace(/\W/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || ADMIN.user.name, email });
+      } else if (signedInUser.role !== "ADMIN" && signedInUser.role !== "SUPERADMIN") {
+        // Authenticated but not an admin — deny access and sign back out
+        await signOut();
+        setGateError("Your account doesn't have console access. Contact a SUPERADMIN.");
+      }
+      // If real ADMIN/SUPERADMIN: isRealAdmin will be true on the next render → authed
     } catch {
-      // real auth rejected (bad creds against a live backend)
-      setGateError("Those credentials don't have console access.");
+      // Bad credentials
+      setGateError("Invalid email or password.");
     }
-  }, [signIn]);
+  }, [signIn, signOut]);
 
   const onSignOut = React.useCallback(async () => {
     setDemoAdmin(null);
