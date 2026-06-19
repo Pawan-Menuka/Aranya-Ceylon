@@ -410,6 +410,31 @@ model Blog {
   @@index([status, publishedAt])
 }
 
+model Recipe {
+  id          String     @id @default(cuid())
+  title       String
+  slug        String     @unique
+  dek         String     // subtitle shown on cards and in meta descriptions
+  course      String     // "Curries & Mains", "Sweet & Bakes", "Drinks", "Sides & Basics"
+  accent      String     @default("#3C3A36") // hex accent color for UI cards
+  slot        String     @default("") // CSS card slot identifier
+  featured    Boolean    @default(false)
+  prepMins    Int        @default(0)
+  cookMins    Int        @default(0)
+  serves      Int        @default(0) // 0 = "Makes 1 jar"
+  difficulty  String     @default("Easy")
+  intro       String     // intro paragraph on detail page
+  spices      String[]   // spice names for "Shop the spices" section
+  ingredients Json       // IngredientGroup[] = [{group?: string, items: string[]}]
+  method      Json       // string[] of numbered steps
+  tips        Json       // string[] of cook's tips
+  status      BlogStatus @default(PUBLISHED)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([status, course])
+}
+
 model Address {
   id         String   @id @default(cuid())
   userId     String
