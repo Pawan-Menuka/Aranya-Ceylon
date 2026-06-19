@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import type { Market, Spice } from "@/lib/types";
 import { GIFTS, GIFT_OCCASIONS, type GiftSet, giftCatalog, giftPrice, giftFmt, giftAlaCarte, giftSavePct } from "@/lib/gifts-data";
+// gifts prop: live data from backend; falls back to static GIFTS when null
 import { Reveal } from "../primitives/Reveal";
 import { Liyawel, Eyebrow } from "../primitives/Motif";
 import { Seal } from "../primitives/Seal";
@@ -133,8 +134,8 @@ function GiftHero({ market, onShop }: { market: Market; onShop: () => void }) {
   );
 }
 
-function FeaturedSet({ market, gridRef }: { market: Market; gridRef: React.RefObject<HTMLElement> }) {
-  const set = GIFTS.find((g) => g.featured) || GIFTS[0];
+function FeaturedSet({ gifts, market, gridRef }: { gifts: GiftSet[]; market: Market; gridRef: React.RefObject<HTMLElement> }) {
+  const set = gifts.find((g) => g.featured) || gifts[0];
   const [added, setAdded] = React.useState(false);
   const giftAdd = useGiftAdd();
   const onAdd = () => { giftAdd(set); setAdded(true); setTimeout(() => setAdded(false), 1300); };
@@ -223,8 +224,8 @@ function BuildYourOwn() {
   );
 }
 
-function GiftGrid({ market, gridRef }: { market: Market; gridRef: React.RefObject<HTMLElement> }) {
-  const sets = GIFTS.filter((g) => !g.featured);
+function GiftGrid({ gifts, market, gridRef }: { gifts: GiftSet[]; market: Market; gridRef: React.RefObject<HTMLElement> }) {
+  const sets = gifts.filter((g) => !g.featured);
   return (
     <section ref={gridRef as React.RefObject<HTMLDivElement>} id="sets" style={{ background: "var(--bg)", padding: "20px 0 100px", scrollMarginTop: 90 }}>
       <div className="home-section-pad" style={{ maxWidth: 1180, margin: "0 auto", padding: "0 40px" }}>
@@ -332,15 +333,16 @@ function GiftCorporate({ market }: { market: Market }) {
   );
 }
 
-export function GiftsClient() {
+export function GiftsClient({ gifts: liveGifts }: { gifts?: GiftSet[] }) {
   const { market } = useMarket();
+  const gifts = liveGifts ?? GIFTS;
   const gridRef = React.useRef<HTMLElement>(null);
   const scrollToGrid = () => { if (gridRef.current) gridRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); };
   return (
     <div data-screen-label="Gifts">
       <GiftHero market={market} onShop={scrollToGrid} />
-      <FeaturedSet market={market} gridRef={gridRef} />
-      <GiftGrid market={market} gridRef={gridRef} />
+      <FeaturedSet gifts={gifts} market={market} gridRef={gridRef} />
+      <GiftGrid gifts={gifts} market={market} gridRef={gridRef} />
       <FinishingBand />
       <GiftOccasions />
       <GiftCorporate market={market} />

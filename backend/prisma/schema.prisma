@@ -435,6 +435,29 @@ model Recipe {
   @@index([status, course])
 }
 
+model GiftSet {
+  id        String     @id @default(cuid())
+  slug      String     @unique  // matches the static id ("classic", "curry", …)
+  name      String
+  featured  Boolean    @default(false)
+  tagline   String
+  blurb     String
+  badge     String?
+  jar       String     @default("50g")
+  color     String     @default("#B5651D")
+  base      String     @default("#C2772E")
+  deep      String     @default("#7E481A")
+  surface   String     @default("#F3E7D4")
+  usd       String     // "$28.50"  — stored as formatted string to match UI
+  lkr       String     // "Rs 4,250"
+  contents  String[]   // product names matching CATALOG
+  status    BlogStatus @default(PUBLISHED)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([status, featured])
+}
+
 model Address {
   id         String   @id @default(cuid())
   userId     String

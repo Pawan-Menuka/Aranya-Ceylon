@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { resolveMarket } from "@/lib/market";
+import { GIFTS } from "@/lib/gifts-data";
+import { fetchGifts } from "@/lib/api/gifts";
 import { SiteChrome } from "@/components/SiteChrome";
 import { GiftsClient } from "@/components/marketing/GiftsClient";
 
@@ -10,11 +12,14 @@ export const metadata: Metadata = {
   alternates: { canonical: "/gifts" },
 };
 
-export default function GiftsPage() {
+export const revalidate = 3600;
+
+export default async function GiftsPage() {
   const market = resolveMarket();
+  const gifts = (await fetchGifts()) ?? GIFTS;
   return (
     <SiteChrome initialMarket={market} hero>
-      <GiftsClient />
+      <GiftsClient gifts={gifts} />
     </SiteChrome>
   );
 }
