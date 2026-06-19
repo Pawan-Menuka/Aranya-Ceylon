@@ -7,7 +7,9 @@ import { SpicePhoto } from "../primitives/SpicePhoto";
 import { useCart } from "../CartContext";
 import { useMarket } from "../MarketContext";
 import { useAuth } from "../AuthContext";
-import { createIntent, pollOrderPaid, type CheckoutInput, type PayHereIntent } from "@/lib/api/checkout";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import { createIntent, pollOrderPaid, type CheckoutInput, type PayHereIntent, type StripeIntent, type StubIntent } from "@/lib/api/checkout";
 import type { Market } from "@/lib/types";
 
 // Checkout page: guest-first single-page form.
@@ -258,6 +260,211 @@ const INTL_COUNTRIES = [
 ];
 
 // ---------------------------------------------------------------------------
+// Stripe Elements payment screen
+// Mounted after createIntent returns a clientSecret; keeps the same 2-col layout
+// but replaces the left column with a payment review + card form.
+// ---------------------------------------------------------------------------
+
+function StripePayForm({
+  orderId,
+  totalLabel,
+  onPaid,
+  onError,
+}: {
+  orderId: string;
+  totalLabel: string;
+  onPaid: () => void;
+  onError: (msg: string) => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [paying, setPaying] = React.useState(false);
+
+  const handlePay = async () => {
+    if (!stripe || !elements || paying) return;
+    setPaying(true);
+    const { error } = await stripe.confirmPayment({
+      elements,
+      redirect: "if_required",
+    });
+    if (error) {
+      onError(error.message ?? "Payment failed. Please try again.");
+      setPaying(false);
+    } else {
+      await pollOrderPaid(orderId).catch(() => false);
+      onPaid();
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <PaymentElement options={{ layout: "tabs" }} />
+      <button
+        type="button"
+        className="btn btn-intl"
+        onClick={handlePay}
+        disabled={!stripe || paying}
+        style={{ opacity: !stripe || paying ? 0.72 : 1 }}
+      >
+        {paying ? "Processing payment…" : `Pay now — ${totalLabel}`}
+      </button>
+    </div>
+  );
+}
+
+function StripePaymentScreen({
+  intent,
+  totalLabel,
+  contactSummary,
+  shippingSummary,
+  market,
+  onMarket,
+  onPaid,
+}: {
+  intent: StripeIntent;
+  totalLabel: string;
+  contactSummary: string;
+  shippingSummary: string;
+  market: Market;
+  onMarket: (m: Market) => void;
+  onPaid: () => void;
+}) {
+  const [stripeError, setStripeError] = React.useState("");
+  const stripePromise = React.useMemo(
+    () => loadStripe(intent.publishableKey),
+    [intent.publishableKey],
+  );
+  const cart = useCart();
+  const t = cart.totals;
+  const expressFee = market === "local" ? 1500 : 18;
+
+  return (
+    <div className="aranya" style={{ minHeight: "100vh", background: "var(--bg)" }}>
+      <CheckoutHeader market={market} onMarket={onMarket} />
+      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "36px 40px 90px" }}>
+        <h1 className="disp" style={{ fontSize: 44, color: "var(--brand)", margin: "0 0 26px", lineHeight: 1.02 }}>Payment</h1>
+        <div className="ck-cols">
+          <div>
+            {/* Review summary */}
+            <section style={{ background: "#FFFDF9", border: "1px solid var(--line)", borderRadius: 12, padding: "20px 24px", marginBottom: 18 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {[
+                  ["Contact", contactSummary],
+                  ["Shipping to", shippingSummary],
+                ].map(([label, val]) => (
+                  <div key={label} style={{ display: "flex", gap: 14, fontFamily: "var(--font-ui)", fontSize: 13.5 }}>
+                    <span style={{ color: "var(--muted)", fontWeight: 600, minWidth: 90 }}>{label}</span>
+                    <span style={{ color: "var(--ink)" }}>{val}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Stripe card form */}
+            <Section n="4" title="Card details" sub="Your payment is handled directly by Stripe — we never see your card number.">
+              <Elements
+                stripe={stripePromise}
+                options={{
+                  clientSecret: intent.clientSecret,
+                  appearance: {
+                    theme: "stripe",
+                    variables: {
+                      colorPrimary: "#0F6E56",
+                      colorText: "#1A1A1A",
+                      borderRadius: "8px",
+                      fontFamily: "var(--font-ui), system-ui, sans-serif",
+                    },
+                  },
+                }}
+              >
+                <StripePayForm
+                  orderId={intent.orderId}
+                  totalLabel={totalLabel}
+                  onPaid={onPaid}
+                  onError={setStripeError}
+                />
+              </Elements>
+              {stripeError && (
+                <div style={{ marginTop: 14, background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "11px 14px", fontFamily: "var(--font-ui)", fontSize: 13.5, color: "#b91c1c" }}>
+                  {stripeError}
+                </div>
+              )}
+            </Section>
+          </div>
+
+          <OrderSummary deliv="standard" expressFee={expressFee} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Stub payment screen (dev / PAYMENTS_MODE !== 'live')
+// ---------------------------------------------------------------------------
+
+function StubPaymentScreen({
+  intent,
+  totalLabel,
+  market,
+  onMarket,
+  onPaid,
+}: {
+  intent: StubIntent;
+  totalLabel: string;
+  market: Market;
+  onMarket: (m: Market) => void;
+  onPaid: () => void;
+}) {
+  const [confirming, setConfirming] = React.useState(false);
+
+  const handleConfirm = async () => {
+    setConfirming(true);
+    // Hit the stub-complete endpoint to flip the order to PAID
+    try {
+      await fetch(`/api/checkout/stub/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: intent.orderId }),
+        credentials: "include",
+      });
+    } catch { /* non-fatal */ }
+    await pollOrderPaid(intent.orderId).catch(() => false);
+    onPaid();
+  };
+
+  return (
+    <div className="aranya" style={{ minHeight: "100vh", background: "var(--bg)" }}>
+      <CheckoutHeader market={market} onMarket={onMarket} />
+      <div style={{ maxWidth: 520, margin: "0 auto", padding: "80px 40px 120px", textAlign: "center" }}>
+        <div style={{ width: 64, height: 64, borderRadius: 999, background: "rgba(180,135,60,.12)", display: "grid", placeItems: "center", margin: "0 auto 22px" }}>
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#BA7517" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 3H8l-2 4h12l-2-4z" /><path d="M2 11h20" /></svg>
+        </div>
+        <div className="eyebrow" style={{ color: "var(--muted)", justifyContent: "center", display: "flex", marginBottom: 10 }}>Stub payment mode</div>
+        <h1 className="disp" style={{ fontSize: 36, color: "var(--brand)", margin: "0 0 12px", lineHeight: 1.08 }}>Confirm test payment</h1>
+        <p style={{ fontFamily: "var(--font-ui)", fontSize: 14.5, color: "var(--muted)", margin: "0 0 28px", lineHeight: 1.65 }}>
+          Payments are in test mode. Click below to simulate a successful payment and confirm the order.
+        </p>
+        <div style={{ display: "inline-flex", gap: 24, background: "var(--surface)", padding: "16px 28px", borderRadius: 12, marginBottom: 28 }}>
+          <div><div style={{ fontFamily: "var(--font-ui)", fontSize: 11, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700, marginBottom: 3 }}>Order</div><div className="disp" style={{ fontSize: 18, color: "var(--ink)" }}>{intent.orderId.slice(0, 8)}</div></div>
+          <div style={{ width: 1, background: "var(--line)" }} />
+          <div><div style={{ fontFamily: "var(--font-ui)", fontSize: 11, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--muted)", fontWeight: 700, marginBottom: 3 }}>Total</div><div className="disp" style={{ fontSize: 18, color: "var(--ink)" }}>{totalLabel}</div></div>
+        </div>
+        <button
+          type="button"
+          className="btn btn-intl"
+          onClick={handleConfirm}
+          disabled={confirming}
+          style={{ display: "inline-flex", width: "auto", padding: "14px 36px", opacity: confirming ? 0.72 : 1 }}
+        >
+          {confirming ? "Confirming…" : "Confirm test payment"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main checkout component
 // ---------------------------------------------------------------------------
 
@@ -289,6 +496,8 @@ export function CheckoutClient() {
   const [placing, setPlacing] = React.useState(false);
   const [error, setError] = React.useState("");
   const [payhereIntent, setPayhereIntent] = React.useState<PayHereIntent | null>(null);
+  const [stripeIntent, setStripeIntent] = React.useState<StripeIntent | null>(null);
+  const [stubIntent, setStubIntent] = React.useState<StubIntent | null>(null);
   const [order, setOrder] = React.useState<{ id: string; email: string; total: string } | null>(null);
 
   // Keep email in sync when user signs in mid-session
@@ -342,12 +551,14 @@ export function CheckoutClient() {
         return; // don't clear cart yet — PayHere return_url page handles that
       }
 
-      // Stripe: poll until webhook confirms payment (real Stripe Elements integration
-      // requires @stripe/react-stripe-js — add it and use intent.clientSecret +
-      // intent.publishableKey to mount the Elements form before polling).
-      await pollOrderPaid(intent.orderId).catch(() => false);
-      setOrder({ id: intent.orderId, email, total: t.fmt(totalShown) });
-      cart.clear();
+      if (intent.provider === "stub") {
+        // Dev/test mode — show a stub confirmation screen
+        setStubIntent(intent);
+        return;
+      }
+
+      // Stripe: mount Elements form so the user can enter card details
+      setStripeIntent(intent);
       window.scrollTo({ top: 0 });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
@@ -357,6 +568,16 @@ export function CheckoutClient() {
     }
   };
 
+  const totalLabel = t.fmt(totalShown);
+
+  const onPaid = () => {
+    setOrder({ id: stripeIntent?.orderId ?? stubIntent?.orderId ?? "", email, total: totalLabel });
+    setStripeIntent(null);
+    setStubIntent(null);
+    cart.clear();
+    window.scrollTo({ top: 0 });
+  };
+
   // PayHere redirect screen
   if (payhereIntent) {
     return (
@@ -364,6 +585,34 @@ export function CheckoutClient() {
         <CheckoutHeader market={market} onMarket={setMarket} />
         <PayHereRedirectForm intent={payhereIntent} />
       </div>
+    );
+  }
+
+  // Stripe Elements payment screen
+  if (stripeIntent) {
+    return (
+      <StripePaymentScreen
+        intent={stripeIntent}
+        totalLabel={totalLabel}
+        contactSummary={[email, phone].filter(Boolean).join(" · ")}
+        shippingSummary={[firstName, lastName, line1, city, country].filter(Boolean).join(", ")}
+        market={market}
+        onMarket={setMarket}
+        onPaid={onPaid}
+      />
+    );
+  }
+
+  // Stub payment screen (test / dev mode)
+  if (stubIntent) {
+    return (
+      <StubPaymentScreen
+        intent={stubIntent}
+        totalLabel={totalLabel}
+        market={market}
+        onMarket={setMarket}
+        onPaid={onPaid}
+      />
     );
   }
 
@@ -502,7 +751,7 @@ export function CheckoutClient() {
               disabled={placing}
               style={{ marginTop: 4, opacity: placing ? 0.75 : 1 }}
             >
-              {placing ? "Placing your order…" : `Place order — ${t.fmt(totalShown)}`}
+              {placing ? "Placing your order…" : `Place order — ${totalLabel}`}
             </button>
             <p style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--muted)", textAlign: "center", margin: "12px 0 0" }}>
               By placing your order you agree to our terms &amp; privacy policy.
