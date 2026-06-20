@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { prisma } from '../index.js';
 import { sendLowStockAlert } from '../services/email.service.js';
+import { revalidateFrontend } from '../lib/revalidate.js';
 
 // --- Job 1: Publish scheduled blog posts ---
 // Runs every minute. Checks for posts where scheduledAt <= now
@@ -24,6 +25,14 @@ export function startScheduledPostsJob() {
                         data: { status: 'PUBLISHED', publishedAt: new Date() },
                     }),
                 ),
+            );
+
+            // P3-4: revalidate each newly published post so it appears immediately
+            await Promise.all(
+                due.flatMap((blog) => [
+                    revalidateFrontend(`/blog/${blog.slug}`),
+                    revalidateFrontend('/blog'),
+                ]),
             );
 
             console.log(`📝 Published ${due.length} scheduled blog post(s)`);
