@@ -80,6 +80,22 @@ export async function createIntent(req: Request, res: Response) {
         });
     }
 
+    // If the client submitted a coupon code at checkout, persist it to the cart
+    // so calculateCartTotal picks it up. Overrides any previously applied coupon.
+    if (couponCode) {
+        const coupon = await prisma.coupon.findUnique({ where: { code: couponCode } });
+        if (!coupon) {
+            return res.status(400).json({ error: 'That coupon code is not valid.' });
+        }
+        if (coupon.expiresAt && coupon.expiresAt < new Date()) {
+            return res.status(400).json({ error: 'That coupon has expired.' });
+        }
+        if (coupon.usageLimit !== null && coupon.usageCount >= coupon.usageLimit) {
+            return res.status(400).json({ error: 'That coupon has reached its usage limit.' });
+        }
+        await prisma.cart.update({ where: { id: cart.id }, data: { couponId: coupon.id } });
+    }
+
     // Calculate total server-side (applies any coupon on the cart)
     const { totalInCents, total, subtotal, shippingCost, discount, couponId, currency }
         = await calculateCartTotal(cart.id, market, shippingMethod);

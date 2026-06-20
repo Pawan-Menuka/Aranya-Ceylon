@@ -10,9 +10,18 @@ const store = vi.hoisted(() => ({
     lastOrderData: null as any,
 }));
 
+const couponStore = vi.hoisted(() => ({
+    coupon: null as any,
+    cartUpdated: null as any,
+}));
+
 vi.mock('../index.js', () => ({
     prisma: {
-        cart: { findUnique: async () => store.cart },
+        cart: {
+            findUnique: async () => store.cart,
+            update: async (args: any) => { couponStore.cartUpdated = args.data; return store.cart; },
+        },
+        coupon: { findUnique: async () => couponStore.coupon },
         order: {
             create: async (args: any) => { store.lastOrderData = args.data; return store.createdOrder; },
             update: async () => store.createdOrder,
@@ -28,6 +37,7 @@ vi.mock('../services/stripe.service.js', () => ({
 }));
 vi.mock('../services/payhere.service.js', () => ({
     buildPayHerePayload: vi.fn(() => ({ merchant_id: 'M', amount: '100.00' })),
+    PAYHERE_CHECKOUT_URL: 'https://sandbox.payhere.lk/pay/checkout',
 }));
 vi.mock('../services/cart.service.js', () => ({
     calculateCartTotal: vi.fn(async () => ({
@@ -49,7 +59,7 @@ function mockRes() {
     return res;
 }
 
-const intlAddress = { line1: '1 St', city: 'NYC', country: 'US', postalCode: '10001' };
+const intlAddress = { firstName: 'Jane', lastName: 'Doe', line1: '1 St', city: 'NYC', country: 'US', postalCode: '10001' };
 const userReq = ({ body = {}, ...rest }: any = {}) =>
     ({
         user: { userId: 'user_1' },
@@ -133,14 +143,14 @@ describe('createIntent — payment mode routing', () => {
     it('returns gateway "stub" by default (no PAYMENTS_MODE)', async () => {
         const res = mockRes();
         await createIntent(userReq(), res);
-        expect(res.body.gateway).toBe('stub');
+        expect(res.body.provider).toBe('stub');
     });
 
     it('routes INTERNATIONAL to Stripe in live mode', async () => {
         vi.stubEnv('PAYMENTS_MODE', 'live');
         const res = mockRes();
         await createIntent(userReq(), res);
-        expect(res.body.gateway).toBe('stripe');
+        expect(res.body.provider).toBe('stripe');
         expect(res.body.clientSecret).toBe('cs_1');
     });
 
@@ -149,7 +159,35 @@ describe('createIntent — payment mode routing', () => {
         store.cart = cartWith({ market: 'LOCAL', currency: 'LKR' });
         const res = mockRes();
         await createIntent(userReq({ market: 'LOCAL', body: { shippingAddress: { ...intlAddress, country: 'LK' } } }), res);
-        expect(res.body.gateway).toBe('payhere');
+        expect(res.body.provider).toBe('payhere');
+    });
+});
+
+describe('createIntent — P1-1 couponCode at checkout', () => {
+    beforeEach(() => { couponStore.coupon = null; couponStore.cartUpdated = null; });
+
+    it('returns 400 for an unknown coupon code', async () => {
+        couponStore.coupon = null;
+        const res = mockRes();
+        await createIntent(userReq({ body: { couponCode: 'BAD' } }), res);
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toMatch(/not valid/i);
+    });
+
+    it('returns 400 for an expired coupon', async () => {
+        couponStore.coupon = { id: 'c1', expiresAt: new Date('2000-01-01'), usageLimit: null, usageCount: 0 };
+        const res = mockRes();
+        await createIntent(userReq({ body: { couponCode: 'EXP' } }), res);
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toMatch(/expired/i);
+    });
+
+    it('persists a valid couponCode to the cart and proceeds', async () => {
+        couponStore.coupon = { id: 'c1', expiresAt: null, usageLimit: null, usageCount: 0 };
+        const res = mockRes();
+        await createIntent(userReq({ body: { couponCode: 'SAVE10' } }), res);
+        expect(res.statusCode).toBe(200);
+        expect(couponStore.cartUpdated).toEqual({ couponId: 'c1' });
     });
 });
 
