@@ -27,11 +27,13 @@ export const checkoutSchema = z.object({
         city: z.string().min(1),
         region: z.string().optional(),
         postalCode: z.string().optional(),
-        country: z.string().min(2).max(2), // ISO 3166-1 alpha-2
+        country: z.string().min(2).max(2).transform((v) => v.toUpperCase()), // ISO 3166-1 alpha-2
     }),
     shippingMethod: z.enum(['STANDARD', 'EXPRESS']),
     saveAddress: z.boolean().default(false),
     couponCode: z.string().optional(),
+    giftWrap: z.boolean().default(false),
+    giftNote: z.string().max(500).optional(),
 });
 
 export type AddToCartInput = z.infer<typeof addToCartSchema>;

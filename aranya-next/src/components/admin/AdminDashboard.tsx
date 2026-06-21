@@ -41,10 +41,13 @@ function useDashData(market: Market, live: DashboardData | null) {
     const liveIntl = live?.revenue?.international;
     const liveOrders = live?.orders;
 
+    // LKR converted at a fixed rate — approximate; display context makes this clear
     const localRevUsd = liveLocal?.total ? Number(liveLocal.total) / 300 : 0;
     const intlRevUsd = liveIntl?.total ? Number(liveIntl.total) : 0;
     const allRevUsd = localRevUsd + intlRevUsd;
     const totalOrders = (liveOrders?.localCount ?? 0) + (liveOrders?.intlCount ?? 0);
+    // P6-3: paid-order count (contributed to revenue) for AOV denominator
+    const paidOrders = (liveLocal?.orders ?? 0) + (liveIntl?.orders ?? 0);
 
     const last30Rev = live
       ? key === "intl" ? intlRevUsd : key === "local" ? localRevUsd : allRevUsd
@@ -63,7 +66,7 @@ function useDashData(market: Market, live: DashboardData | null) {
       todayOrders: live ? Math.round(last30Ord / 30) : Math.round(k.todayOrders * scale),
       last30Rev,
       last30Ord,
-      aov: live && totalOrders > 0 ? Math.round(allRevUsd / totalOrders) : k.aov,
+      aov: live && paidOrders > 0 ? Math.round(allRevUsd / paidOrders) : k.aov,
       pending,
       lowStockCount,
       spark7: last7v,
@@ -127,8 +130,40 @@ function RevenueCard({ d, market, setMarket, range, setRange, height = 230, titl
   );
 }
 
-function MarketDonutCard() {
-  const A = ADMIN, segs = A.MARKET_SPLIT;
+function timeSince(dateStr: string) {
+  const s = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+const AUDIT_ICON: Record<string, { icon: string; tone: string }> = {
+  ORDER_PLACED: { icon: "box", tone: "brand" },
+  ORDER_STATUS_UPDATE: { icon: "truck", tone: "slate" },
+  PRODUCT_CREATE: { icon: "tag", tone: "brand" },
+  PRODUCT_UPDATE: { icon: "tag", tone: "slate" },
+  PRODUCT_ARCHIVE: { icon: "trash", tone: "red" },
+  REFUND_ISSUED: { icon: "refund", tone: "red" },
+  BLOG_CREATE: { icon: "blog", tone: "slate" },
+  BLOG_PUBLISH: { icon: "star", tone: "brand" },
+  BLOG_UPDATE: { icon: "blog", tone: "slate" },
+  BLOG_DELETE: { icon: "trash", tone: "red" },
+  RECIPE_CREATE: { icon: "star", tone: "slate" },
+  RECIPE_UPDATE: { icon: "star", tone: "slate" },
+  GIFT_CREATE: { icon: "star", tone: "amber" },
+  GIFT_UPDATE: { icon: "star", tone: "amber" },
+};
+
+function MarketDonutCard({ live }: { live: DashboardData | null }) {
+  const A = ADMIN;
+  const liveSegs = live?.revenue
+    ? [
+        { key: "intl", label: "International (USD)", value: Number(live.revenue.international.total), color: "#BA7517" },
+        { key: "local", label: "Local (LKR ÷300 est.)", value: Number(live.revenue.local.total) / 300, color: "#0F6E56" },
+      ]
+    : null;
+  const segs = liveSegs ?? A.MARKET_SPLIT;
   const total = segs.reduce((a, s) => a + s.value, 0);
   return (
     <SectionCard title="Revenue by market" action={<span style={{ fontSize: 11.5, color: "var(--ad-faint)", fontWeight: 600 }}>Last 30 days</span>}
@@ -155,32 +190,62 @@ function MarketDonutCard() {
   );
 }
 
-function TopProductsCard({ compact }: { compact?: boolean }) {
+function TopProductsCard({ compact, live }: { compact?: boolean; live: DashboardData | null }) {
   const A = ADMIN;
+  const liveProducts = live?.topProducts;
+  const totalRev = liveProducts ? liveProducts.reduce((s, p) => s + p.revenue, 0) : 0;
   return (
     <SectionCard title="Top products" pad={false} action={<button className="ad-btn ad-btn-ghost ad-btn-sm">View all</button>}>
       <table className="ad-table flat">
-        <thead><tr><th>Product</th><th>Units</th><th>Revenue</th>{!compact && <th>30-day trend</th>}<th style={{ textAlign: "right" }}>Share</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Product</th><th>Units</th><th>Revenue</th>
+            {!compact && !liveProducts && <th>30-day trend</th>}
+            <th style={{ textAlign: "right" }}>Share</th>
+          </tr>
+        </thead>
         <tbody>
-          {A.TOP_PRODUCTS.map((p) => (
-            <tr key={p.name}>
-              <td>
-                <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-                  <span className="swatch" style={{ background: `radial-gradient(70% 70% at 50% 35%, ${p.color} 0%, ${p.color}cc 95%)` }} />
-                  <span style={{ fontWeight: 600 }}>{p.name}</span>
-                </div>
-              </td>
-              <td className="tnum" style={{ color: "var(--ad-muted)" }}>{p.units.toLocaleString()}</td>
-              <td className="tnum" style={{ fontWeight: 700 }}>{fmtUSD0(p.revUsd)}</td>
-              {!compact && <td><Spark data={p.trend} stroke={p.color} width={80} height={26} /></td>}
-              <td>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
-                  <div style={{ width: 50 }}><ShareBar value={p.share * 4} color={p.color} h={6} /></div>
-                  <span className="tnum" style={{ fontSize: 12, fontWeight: 700, width: 30, textAlign: "right" }}>{p.share}%</span>
-                </div>
-              </td>
-            </tr>
-          ))}
+          {liveProducts
+            ? liveProducts.map((p) => (
+              <tr key={p.name}>
+                <td>
+                  <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+                    <span className="swatch" style={{ background: "var(--brand)" }} />
+                    <span style={{ fontWeight: 600 }}>{p.name}</span>
+                  </div>
+                </td>
+                <td className="tnum" style={{ color: "var(--ad-muted)" }}>{p.units.toLocaleString()}</td>
+                <td className="tnum" style={{ fontWeight: 700 }}>{fmtUSD0(p.revenue)}</td>
+                <td>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
+                    <div style={{ width: 50 }}><ShareBar value={totalRev > 0 ? (p.revenue / totalRev) * 100 : 0} color="var(--brand)" h={6} /></div>
+                    <span className="tnum" style={{ fontSize: 12, fontWeight: 700, width: 30, textAlign: "right" }}>
+                      {totalRev > 0 ? Math.round((p.revenue / totalRev) * 100) : 0}%
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ))
+            : A.TOP_PRODUCTS.map((p) => (
+              <tr key={p.name}>
+                <td>
+                  <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+                    <span className="swatch" style={{ background: `radial-gradient(70% 70% at 50% 35%, ${p.color} 0%, ${p.color}cc 95%)` }} />
+                    <span style={{ fontWeight: 600 }}>{p.name}</span>
+                  </div>
+                </td>
+                <td className="tnum" style={{ color: "var(--ad-muted)" }}>{p.units.toLocaleString()}</td>
+                <td className="tnum" style={{ fontWeight: 700 }}>{fmtUSD0(p.revUsd)}</td>
+                {!compact && <td><Spark data={p.trend} stroke={p.color} width={80} height={26} /></td>}
+                <td>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
+                    <div style={{ width: 50 }}><ShareBar value={p.share * 4} color={p.color} h={6} /></div>
+                    <span className="tnum" style={{ fontSize: 12, fontWeight: 700, width: 30, textAlign: "right" }}>{p.share}%</span>
+                  </div>
+                </td>
+              </tr>
+            ))
+          }
         </tbody>
       </table>
     </SectionCard>
@@ -230,12 +295,17 @@ function LowStockCard({ onGo, live }: { onGo: () => void; live: DashboardData | 
   );
 }
 
-function WholesaleCard({ onGo }: { onGo: () => void }) {
+function WholesaleCard({ onGo, live }: { onGo: () => void; live: DashboardData | null }) {
   const A = ADMIN;
   const pending = A.WHOLESALE.filter((w) => w.status === "pending" || w.status === "review");
   return (
     <SectionCard title={<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><AIcon name="handshake" size={16} stroke="var(--warn)" />Wholesale applications</span>}
-      action={<span className="pill pending" style={{ textTransform: "none" }}>{pending.length} pending</span>}>
+      action={
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+          {live && <span style={{ fontSize: 10.5, fontWeight: 600, color: "var(--ad-faint)", letterSpacing: ".04em" }}>demo</span>}
+          <span className="pill pending" style={{ textTransform: "none" }}>{pending.length} pending</span>
+        </span>
+      }>
       <div style={{ display: "flex", flexDirection: "column" }}>
         {A.WHOLESALE.slice(0, 4).map((w) => (
           <div key={w.id} className="alert-row">
@@ -252,12 +322,17 @@ function WholesaleCard({ onGo }: { onGo: () => void }) {
   );
 }
 
-function FulfillmentCard({ onOpen }: { onOpen: () => void }) {
+function FulfillmentCard({ onOpen, live }: { onOpen: () => void; live: DashboardData | null }) {
   const A = ADMIN;
   const queue = A.ORDERS.filter((o) => o.status === "paid" || o.status === "processing").slice(0, 6);
   return (
     <SectionCard title={<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><AIcon name="truck" size={16} stroke="var(--slate)" />Fulfillment queue</span>} pad={false}
-      action={<button className="ad-btn ad-btn-ghost ad-btn-sm" onClick={onOpen}>Open orders</button>}>
+      action={
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+          {live && <span style={{ fontSize: 10.5, fontWeight: 600, color: "var(--ad-faint)", letterSpacing: ".04em" }}>demo</span>}
+          <button className="ad-btn ad-btn-ghost ad-btn-sm" onClick={onOpen}>Open orders</button>
+        </span>
+      }>
       <table className="ad-table flat">
         <tbody>
           {queue.map((o) => (
@@ -275,18 +350,25 @@ function FulfillmentCard({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-function ActivityCard() {
+function ActivityCard({ live }: { live: DashboardData | null }) {
   const A = ADMIN;
   const toneMap: Record<string, string> = { brand: "#0F6E56", amber: "#BA7517", red: "#C0492F", slate: "#5E7587" };
   const renderText = (t: string) => {
     const parts = t.split("**");
     return parts.map((p, i) => (i % 2 ? <b key={i} style={{ fontWeight: 700 }}>{p}</b> : <span key={i}>{p}</span>));
   };
+  const liveActivity = live?.recentAuditLogs?.map((e) => {
+    const info = AUDIT_ICON[e.event] ?? { icon: "audit", tone: "slate" };
+    const who = (e.actor as { name?: string } | undefined)?.name ?? e.actorRole ?? "System";
+    const label = e.event.toLowerCase().replace(/_/g, " ");
+    return { icon: info.icon, tone: info.tone, text: `**${label}**`, who, when: timeSince(e.createdAt) };
+  });
+  const activity = liveActivity ?? A.ACTIVITY;
   return (
-    <SectionCard title="Recent activity" action={<span style={{ fontSize: 11.5, color: "var(--ad-faint)", fontWeight: 600 }}>Live</span>}>
+    <SectionCard title="Recent activity" action={<span style={{ fontSize: 11.5, color: "var(--ad-faint)", fontWeight: 600 }}>{live ? "Live" : "Demo"}</span>}>
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        {A.ACTIVITY.map((a, i) => (
-          <div key={i} style={{ display: "flex", gap: 12, padding: "10px 0", borderBottom: i < A.ACTIVITY.length - 1 ? "1px solid var(--ad-line)" : 0 }}>
+        {activity.map((a, i) => (
+          <div key={i} style={{ display: "flex", gap: 12, padding: "10px 0", borderBottom: i < activity.length - 1 ? "1px solid var(--ad-line)" : 0 }}>
             <span style={{ width: 30, height: 30, borderRadius: 8, flex: "0 0 auto", display: "grid", placeItems: "center", background: toneMap[a.tone] + "18" }}>
               <AIcon name={a.icon} size={15} stroke={toneMap[a.tone]} w={1.9} />
             </span>
@@ -339,15 +421,15 @@ function DashCommand({ d, live, market, setMarket, range, setRange, go }: DashPr
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1.62fr 1fr", gap: 18, alignItems: "start" }}>
-        <TopProductsCard />
+        <TopProductsCard live={live} />
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          <WholesaleCard onGo={() => go("orders")} />
+          <WholesaleCard onGo={() => go("orders")} live={live} />
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 18, alignItems: "start" }}>
-        <FulfillmentCard onOpen={() => go("orders")} />
-        <MarketDonutCard />
-        <ActivityCard />
+        <FulfillmentCard onOpen={() => go("orders")} live={live} />
+        <MarketDonutCard live={live} />
+        <ActivityCard live={live} />
       </div>
     </div>
   );
@@ -402,12 +484,12 @@ function DashEditorial({ d, live, market, setMarket, range, go }: DashProps) {
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 18, alignItems: "start" }}>
-        <TopProductsCard />
-        <MarketDonutCard />
+        <TopProductsCard live={live} />
+        <MarketDonutCard live={live} />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, alignItems: "start" }}>
-        <FulfillmentCard onOpen={() => go("orders")} />
-        <ActivityCard />
+        <FulfillmentCard onOpen={() => go("orders")} live={live} />
+        <ActivityCard live={live} />
       </div>
     </div>
   );
@@ -441,18 +523,18 @@ function DashDense({ d, live, market, setMarket, range, setRange, go }: DashProp
       {/* chart row — chart + market split, balanced heights */}
       <div style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr", gap: 16, alignItems: "stretch" }}>
         <RevenueCard d={d} market={market} setMarket={setMarket} range={range} setRange={setRange} height={220} title="Revenue trend" />
-        <MarketDonutCard />
+        <MarketDonutCard live={live} />
       </div>
       {/* operations row — three equal queues */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, alignItems: "stretch" }}>
-        <FulfillmentCard onOpen={() => go("orders")} />
+        <FulfillmentCard onOpen={() => go("orders")} live={live} />
         <LowStockCard onGo={() => go("products")} live={live} />
-        <WholesaleCard onGo={() => go("orders")} />
+        <WholesaleCard onGo={() => go("orders")} live={live} />
       </div>
       {/* detail row — top products table + activity */}
       <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 16, alignItems: "stretch" }}>
-        <TopProductsCard compact />
-        <ActivityCard />
+        <TopProductsCard compact live={live} />
+        <ActivityCard live={live} />
       </div>
     </div>
   );
@@ -482,7 +564,7 @@ export function AdminDashboard({ go }: { go: (r: string) => void }) {
         <div>
           <div className="ad-eyebrow">{today}</div>
           <h1 className="ad-title" style={{ marginTop: 6 }}>Dashboard</h1>
-          <p className="ad-sub">Here&apos;s how Aranya Ceylon is moving today.{!live && " (demo data)"}</p>
+          <p className="ad-sub">Here&apos;s how Aranya Ceylon is moving today.{live ? " · Fulfillment and wholesale panels show sample data." : " (demo data)"}</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9 }}>

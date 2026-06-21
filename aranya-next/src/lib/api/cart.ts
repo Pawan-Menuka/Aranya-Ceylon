@@ -1,6 +1,22 @@
 import { apiFetch } from "./http";
 import type { Cart, BackendMarket } from "../types";
 
+export interface ServerTotals {
+  subtotalCents: number;
+  shippingCents: number;
+  discountCents: number;
+  giftCents: number;
+  totalCents: number;
+  subtotal: number;
+  shippingCost: number;
+  discount: number;
+  gift: number;
+  total: number;
+  shippingLabel: string;
+  currency: string;
+  couponId: string | null;
+}
+
 // Spec §6 — /cart (optionalAuth: works for guests + users). Browser-side calls
 // go through the BFF so the guestCartToken / auth cookies ride along.
 export function getCart(): Promise<{ cart: Cart; market: BackendMarket }> {
@@ -34,4 +50,15 @@ export function removeCartItem(itemId: string): Promise<void> {
 /** Merge the guest cart into the user cart on login (spec §7.4). */
 export function mergeCart(): Promise<{ cart: Cart }> {
   return apiFetch(`/cart/merge`, { method: "POST", auth: true });
+}
+
+/** Server-computed totals for the checkout order summary (authoritative). */
+export function getCartTotals(
+  shippingMethod: "STANDARD" | "EXPRESS" = "STANDARD",
+  giftWrap = false,
+): Promise<{ totals: ServerTotals }> {
+  return apiFetch(
+    `/cart/totals?shippingMethod=${shippingMethod}&giftWrap=${giftWrap}`,
+    { auth: true },
+  );
 }

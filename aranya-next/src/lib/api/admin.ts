@@ -1,4 +1,4 @@
-import { apiFetch } from "./http";
+import { apiFetch, getAccessToken } from "./http";
 import type { Order, Product } from "../types";
 
 // Admin endpoints (ADMIN / SUPERADMIN role-gated). Optimistic local state stays
@@ -247,6 +247,39 @@ export function listAuditLogs(params?: { limit?: number; cursor?: string }): Pro
   if (params?.cursor) qs.set("cursor", params.cursor);
   const s = qs.toString();
   return apiFetch(`/admin/audit-logs${s ? `?${s}` : ""}`, { auth: true });
+}
+
+// ---- categories ----
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  _count?: { products: number };
+}
+
+export function listCategories(): Promise<{ categories: Category[] }> {
+  return apiFetch(`/categories`, { auth: true });
+}
+
+// ---- image upload (multipart — bypasses apiFetch's JSON body handling) ----
+export async function uploadProductImage(
+  productId: string,
+  file: File,
+): Promise<{ images: Array<{ id: string; url: string }> }> {
+  const formData = new FormData();
+  formData.append("images", file);
+  const token = getAccessToken();
+  const res = await fetch(
+    `/api/products/${encodeURIComponent(productId)}/images`,
+    {
+      method: "POST",
+      body: formData,
+      credentials: "include",
+      headers: token ? { authorization: `Bearer ${token}` } : undefined,
+    },
+  );
+  if (!res.ok) throw new Error(`Image upload failed (${res.status})`);
+  return res.json();
 }
 
 // Fire-and-forget: attempt a backend write, swallow failures so optimistic

@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../../index.js';
 import { writeAuditLog } from '../../services/audit.service.js';
+import { revalidateFrontend } from '../../lib/revalidate.js';
 import { z } from 'zod';
 
 const giftSchema = z.object({
@@ -42,12 +43,25 @@ export async function getGift(req: Request, res: Response) {
 export async function createGift(req: Request, res: Response) {
     const data = giftSchema.parse(req.body);
 
-    const gift = await prisma.giftSet.create({ data: { ...data, badge: data.badge ?? null } });
+    let gift;
+    try {
+        gift = await prisma.giftSet.create({ data: { ...data, badge: data.badge ?? null } });
+    } catch (err) {
+        if ((err as { code?: string }).code === 'P2002') {
+            res.status(409).json({ error: 'A gift set with that slug already exists' }); return;
+        }
+        throw err;
+    }
 
     await writeAuditLog({
         req, event: 'GIFT_CREATE',
         targetType: 'GiftSet', targetId: gift.id,
     });
+
+    // P3-4: revalidate when a gift set is published immediately on create
+    if (data.status === 'PUBLISHED') {
+        await revalidateFrontend('/gifts');
+    }
 
     res.status(201).json({ gift });
 }
@@ -59,9 +73,24 @@ export async function updateGift(req: Request, res: Response) {
     const existing = await prisma.giftSet.findUnique({ where: { id } });
     if (!existing) { res.status(404).json({ error: 'Gift set not found' }); return; }
 
-    const gift = await prisma.giftSet.update({
-        where: { id },
-        data: { ...data, ...(data.badge !== undefined && { badge: data.badge ?? null }) },
+    let gift;
+    try {
+        gift = await prisma.giftSet.update({
+            where: { id },
+            data: { ...data, ...(data.badge !== undefined && { badge: data.badge ?? null }) },
+        });
+    } catch (err) {
+        if ((err as { code?: string }).code === 'P2002') {
+            res.status(409).json({ error: 'A gift set with that slug already exists' }); return;
+        }
+        throw err;
+    }
+
+    // P3-3: audit log for updates (was missing)
+    await writeAuditLog({
+        req, event: 'GIFT_UPDATE',
+        targetType: 'GiftSet', targetId: id,
+        diff: { before: existing, after: gift },
     });
 
     await revalidateFrontend('/gifts');
@@ -82,14 +111,8 @@ export async function deleteGift(req: Request, res: Response) {
         targetType: 'GiftSet', targetId: id,
     });
 
-    res.json({ ok: true });
-}
+    // P3-4: revalidate on delete
+    await revalidateFrontend('/gifts');
 
-async function revalidateFrontend(path: string) {
-    const secret = process.env.REVALIDATION_SECRET;
-    const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
-    if (!secret) return;
-    try {
-        await fetch(`${baseUrl}/api/revalidate?secret=${secret}&path=${encodeURIComponent(path)}`);
-    } catch { /* non-fatal */ }
+    res.json({ ok: true });
 }

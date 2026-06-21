@@ -105,6 +105,13 @@ export async function uploadProductImages(req: Request, res: Response) {
         return res.status(400).json({ error: 'No images provided' });
     }
 
+    const product = await prisma.product.findUnique({ where: { id }, select: { id: true } });
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+
+    // Compute the next position after any existing images to avoid collisions.
+    const existing = await prisma.productImage.aggregate({ where: { productId: id }, _max: { position: true } });
+    const basePosition = (existing._max.position ?? -1) + 1;
+
     const uploads = await Promise.all(
         files.map((file, index) =>
             uploadImage(file.buffer, 'aranya-ceylon/products').then((result) =>
@@ -112,7 +119,8 @@ export async function uploadProductImages(req: Request, res: Response) {
                     data: {
                         productId: id,
                         url: result.url,
-                        position: index,
+                        publicId: result.publicId,
+                        position: basePosition + index,
                     },
                 }),
             ),

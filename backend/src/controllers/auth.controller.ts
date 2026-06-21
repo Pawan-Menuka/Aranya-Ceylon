@@ -153,12 +153,9 @@ export async function getMe(req: Request, res: Response) {
 
 export async function patchMe(req: Request, res: Response) {
     const { name } = req.body as { name?: string };
-    const update: { name?: string } = {};
-    if (name !== undefined) update.name = String(name).trim();
-
     const user = await prisma.user.update({
         where: { id: req.user!.userId },
-        data: update,
+        data: { ...(name !== undefined && { name: name.trim() }) },
         select: { id: true, name: true, email: true, role: true, verified: true, createdAt: true },
     });
     return res.json({ user });
@@ -177,10 +174,6 @@ export async function listAddresses(req: Request, res: Response) {
 export async function createAddress(req: Request, res: Response) {
     const { label, line1, line2, city, country, postalCode, isDefault } =
         req.body as { label?: string; line1: string; line2?: string; city: string; country: string; postalCode?: string; isDefault?: boolean };
-
-    if (!line1 || !city || !country) {
-        return res.status(400).json({ error: 'line1, city, and country are required.' });
-    }
 
     const userId = req.user!.userId;
 
@@ -205,7 +198,6 @@ export async function updateAddress(req: Request, res: Response) {
 
     const { label, line1, line2, city, country, postalCode, isDefault } =
         req.body as { label?: string; line1?: string; line2?: string; city?: string; country?: string; postalCode?: string; isDefault?: boolean };
-
     const address = await prisma.$transaction(async (tx) => {
         if (isDefault) {
             await tx.address.updateMany({ where: { userId }, data: { isDefault: false } });

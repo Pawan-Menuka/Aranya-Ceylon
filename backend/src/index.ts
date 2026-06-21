@@ -72,11 +72,14 @@ app.use(cors({
         if (origin && _allowedOrigins.includes(origin)) return cb(null, true);
         // Development only: allow any origin, incl. file:// pages (null origin)
         if (isDev) return cb(null, true);
-        cb(new Error('CORS: origin not allowed'));
+        // Tag the error so the global handler returns 403 instead of 500
+        const err = new Error('CORS: origin not allowed') as Error & { status?: number };
+        err.status = 403;
+        cb(err);
     },
     credentials: true,
 }));
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json({ limit: '512kb' })); // 10kb was too small for admin blog/recipe bodies
 app.use(cookieParser());
 app.use(resolveMarket);
 
@@ -120,7 +123,13 @@ app.use((_req, res) => {
     res.status(404).json({ error: 'Route not found' });
 });
 
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: Error & { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    // Use the status the error was tagged with (e.g. 403 for CORS), default 500
+    const status = typeof err.status === 'number' ? err.status : 500;
+    if (status < 500) {
+        // Client errors: log at debug level, surface the message
+        return res.status(status).json({ error: err.message });
+    }
     console.error('[ERROR]', err);
     // Never leak internals (message/stack) outside development
     res.status(500).json({

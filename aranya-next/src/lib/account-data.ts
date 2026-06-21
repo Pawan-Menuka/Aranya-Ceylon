@@ -42,6 +42,7 @@ export interface OrderLineItem {
   surface: string;
   usd: number; // line unit price (base × mult)
   lkr: number;
+  backendIds?: { productId: string; variantId: string };
 }
 
 function L(key: string, weight: string, form: string, qty: number): OrderLineItem {
@@ -226,6 +227,9 @@ export function toAccountOrder(order: Order): AccountOrder {
     const unitPriceNum = parseFloat(it.unitPrice || "0");
     const weightGrams = it.variant?.weight ?? 100;
     const weightStr = weightGrams < 100 ? "50g" : weightGrams > 100 ? "250g" : "100g";
+    const backendIds = it.product?.id && it.variant?.id
+      ? { productId: it.product.id, variantId: it.variant.id }
+      : undefined;
     return {
       key: `${order.id}-${idx}`,
       name: it.product?.name ?? "Spice",
@@ -239,6 +243,7 @@ export function toAccountOrder(order: Order): AccountOrder {
       surface: pal.surface,
       usd: order.currency === "USD" ? unitPriceNum : unitPriceNum / 148,
       lkr: order.currency === "LKR" ? unitPriceNum : unitPriceNum * 148,
+      backendIds,
     };
   });
 

@@ -8,6 +8,7 @@ import { Stars } from "../primitives/Stars";
 import { Badge } from "../primitives/Badge";
 import { pdContent, pdPrice } from "@/lib/pd-content";
 import { useCart } from "../CartContext";
+import { addToWishlist, removeFromWishlist } from "@/lib/api/wishlist";
 
 // Product-detail buy side (ported from product-detail.jsx):
 // Breadcrumb · Gallery · Qty · BuyBox.
@@ -87,6 +88,19 @@ export function BuyBox({ spice, market, product }: { spice: Spice; market: Marke
   const [q, setQ] = React.useState(1);
   const [saved, setSaved] = React.useState(false);
   const [added, setAdded] = React.useState(false);
+
+  // P6-7: sync wishlist heart with the backend when a product id is available
+  const toggleSaved = () => {
+    if (!product?.id) { setSaved((s) => !s); return; }
+    if (saved) {
+      setSaved(false);
+      removeFromWishlist(product.id).catch(() => setSaved(true));
+    } else {
+      setSaved(true);
+      addToWishlist(product.id).catch(() => setSaved(false));
+    }
+  };
+
   const onAdd = () => {
     const backendIds = product
       ? (() => {
@@ -101,7 +115,15 @@ export function BuyBox({ spice, market, product }: { spice: Spice; market: Marke
   };
   const isLocal = market === "local";
   const accent = isLocal ? "var(--brand)" : "var(--accent)";
-  const weights = ["50g", "100g", "250g"];
+  // P6-8: derive available weights from the backend product variants when possible
+  const wantCurrency = isLocal ? "LKR" : "USD";
+  const weights = product?.variants
+    ? [...new Set(
+        product.variants
+          .filter((v) => v.currency === wantCurrency || v.market === "BOTH")
+          .map((v) => `${v.weight}g`),
+      )].sort((a, b) => parseInt(a) - parseInt(b))
+    : ["50g", "100g", "250g"];
 
   return (
     <div className="aranya" style={{ maxWidth: 480 }}>
@@ -154,7 +176,7 @@ export function BuyBox({ spice, market, product }: { spice: Spice; market: Marke
         <button onClick={onAdd} className={isLocal ? "btn btn-local" : "btn btn-intl"} style={{ flex: 1 }}>
           {added ? "Added to basket ✓" : "Add to Cart — " + pdPrice(spice, market, weight)}
         </button>
-        <button onClick={() => setSaved(!saved)} aria-label="Save" style={{ width: 46, height: 46, flex: "0 0 auto", borderRadius: 6, border: "1.5px solid " + (saved ? accent : "var(--line)"), background: "#fff", cursor: "pointer", display: "grid", placeItems: "center" }}>
+        <button onClick={toggleSaved} aria-label="Save" style={{ width: 46, height: 46, flex: "0 0 auto", borderRadius: 6, border: "1.5px solid " + (saved ? accent : "var(--line)"), background: "#fff", cursor: "pointer", display: "grid", placeItems: "center" }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill={saved ? accent : "none"} stroke={saved ? accent : "var(--muted)"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
           </svg>

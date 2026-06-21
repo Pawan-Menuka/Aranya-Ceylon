@@ -30,12 +30,12 @@ export async function getDashboard(_req: Request, res: Response) {
         // Order counts
         prisma.order.count({ where: { market: 'LOCAL', createdAt: { gte: thirtyDaysAgo } } }),
         prisma.order.count({ where: { market: 'INTERNATIONAL', createdAt: { gte: thirtyDaysAgo } } }),
-        // Top products by order count
+        // Top products by paid-order revenue (with product name join)
         prisma.orderItem.groupBy({
             by: ['productId'],
-            _count: { productId: true },
-            _sum: { quantity: true },
-            orderBy: { _count: { productId: 'desc' } },
+            where: { order: { status: { in: ['PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED'] }, createdAt: { gte: thirtyDaysAgo } } },
+            _sum: { quantity: true, unitPrice: true },
+            orderBy: { _sum: { unitPrice: 'desc' } },
             take: 5,
         }),
         // Orders needing action
@@ -55,6 +55,24 @@ export async function getDashboard(_req: Request, res: Response) {
         }),
     ]);
 
+    // Resolve product names for the top-products list in one extra query.
+    const productIds = topProducts.map((p) => p.productId);
+    const productNames = productIds.length
+        ? await prisma.product.findMany({
+            where: { id: { in: productIds } },
+            select: { id: true, name: true, slug: true },
+        })
+        : [];
+    const nameById = Object.fromEntries(productNames.map((p) => [p.id, p]));
+
+    const topProductsWithNames = topProducts.map((p) => ({
+        productId: p.productId,
+        name: nameById[p.productId]?.name ?? p.productId,
+        slug: nameById[p.productId]?.slug ?? '',
+        units: p._sum.quantity ?? 0,
+        revenue: Number(p._sum.unitPrice ?? 0),
+    }));
+
     return res.json({
         revenue: {
             local: { total: localRevenue._sum.total, currency: 'LKR', orders: localRevenue._count },
@@ -65,7 +83,7 @@ export async function getDashboard(_req: Request, res: Response) {
             intlCount: intlOrderCount,
             pendingFulfilment,
         },
-        topProducts,
+        topProducts: topProductsWithNames,
         lowStockVariants,
         recentAuditLogs,
     });

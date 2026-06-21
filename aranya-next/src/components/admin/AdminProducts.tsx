@@ -4,7 +4,7 @@ import * as React from "react";
 import { ADMIN, type AdminProduct } from "@/lib/admin-data";
 import { AIcon, Pill, StockMeter, FlagRow } from "./AdminPrimitives";
 import { ShareBar } from "./AdminCharts";
-import { listAdminProducts, createAdminProduct, updateAdminProduct, bestEffort } from "@/lib/api/admin";
+import { listAdminProducts, createAdminProduct, updateAdminProduct, listCategories, uploadProductImage, bestEffort, type Category, type AdminProductInput } from "@/lib/api/admin";
 import type { Product } from "@/lib/types";
 import { paletteFor } from "@/lib/spice-data";
 
@@ -34,6 +34,27 @@ function backendProductToAdmin(p: Product): AdminProduct {
     featured: p.featured ?? false,
     _backendId: p.id,
   } as AdminProduct & { _backendId: string };
+}
+
+// Price-string parsers (match the display format from backendProductToAdmin)
+function parseUsd(s: string) { return parseFloat(s.replace(/[^0-9.]/g, "")) || 0; }
+function parseLkr(s: string) { return parseFloat(s.replace(/[^0-9.,]/g, "").replace(/,/g, "")) || 0; }
+function toSlug(name: string) { return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
+
+// Build the variant array required by createProductSchema from the editor UI values.
+function buildVariants(p: AdminProduct): NonNullable<AdminProductInput["variants"]> {
+  const usd = parseUsd(p.usd);
+  const lkr = parseLkr(p.lkr);
+  const weights = p.weights.length ? p.weights : ["100g"];
+  const skuBase = (p.sku || toSlug(p.name)).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || "SKU";
+  const perSlot = Math.max(0, Math.floor(p.stock / (weights.length * ((usd > 0 ? 1 : 0) + (lkr > 0 ? 1 : 0)) || 1)));
+  return weights.flatMap((w) => {
+    const grams = parseInt(w) || 100;
+    const rows: NonNullable<AdminProductInput["variants"]> = [];
+    if (usd > 0) rows.push({ sku: `${skuBase}${grams}U`, weight: grams, price: usd, currency: "USD", market: "INTERNATIONAL", stock: perSlot });
+    if (lkr > 0) rows.push({ sku: `${skuBase}${grams}L`, weight: grams, price: lkr, currency: "LKR", market: "LOCAL", stock: perSlot });
+    return rows;
+  });
 }
 
 // Aranya Ceylon — ADMIN Products (ported from admin-products.jsx).
@@ -95,7 +116,14 @@ function ProductsTable({ rows, onOpen, onToggle }: {
 
 type EditDraft = Partial<AdminProduct>;
 
-function ProductEditor({ product, onClose, onSave }: { product: EditDraft; onClose: () => void; onSave: (p: AdminProduct) => void }) {
+function ProductEditor({
+  product, onClose, onSave, categories,
+}: {
+  product: EditDraft;
+  onClose: () => void;
+  onSave: (p: AdminProduct, extra: { description: string; categoryId: string }) => void;
+  categories: Category[];
+}) {
   const isNew = !product.sku;
   const [p, setP] = React.useState<AdminProduct>(() => ({
     name: "", latin: "", slug: "", sku: "", category: "Whole Spices", usd: "$0.00", lkr: "Rs 0",
@@ -105,6 +133,34 @@ function ProductEditor({ product, onClose, onSave }: { product: EditDraft; onClo
     ...product,
   } as AdminProduct));
   const set = <K extends keyof AdminProduct>(k: K, v: AdminProduct[K]) => setP((x) => ({ ...x, [k]: v }));
+  const [description, setDescription] = React.useState<string>(product.latin ?? "");
+  const [categoryId, setCategoryId] = React.useState<string>("");
+  const [slugTouched, setSlugTouched] = React.useState(!isNew);
+  const [uploadedImages, setUploadedImages] = React.useState<string[]>([]);
+  const [uploading, setUploading] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const backendId = (p as AdminProduct & { _backendId?: string })._backendId;
+
+  React.useEffect(() => {
+    if (categories.length > 0) {
+      const match = categories.find((c) => c.name === p.category) ?? categories[0];
+      setCategoryId(match.id);
+    }
+  }, [categories]);
+
+  React.useEffect(() => {
+    if (!slugTouched) setP((x) => ({ ...x, slug: toSlug(x.name) }));
+  }, [p.name, slugTouched]);
+
+  const handleUpload = async (file: File) => {
+    if (!backendId) return;
+    setUploading(true);
+    try {
+      const { images } = await uploadProductImage(backendId, file);
+      setUploadedImages((prev) => [...prev, ...images.map((img) => img.url)]);
+    } catch { /* surface as empty state */ } finally { setUploading(false); }
+  };
+
   React.useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", esc);
@@ -131,16 +187,25 @@ function ProductEditor({ product, onClose, onSave }: { product: EditDraft; onClo
                 <span style={{ position: "absolute", left: 7, bottom: 6, fontSize: 8, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.6)", fontWeight: 700 }}>Cover</span>
               </div>
               {[0, 1].map((i) => (
-                <div key={i} style={{ width: 96, height: 96, borderRadius: 12, flex: "0 0 auto", border: "1.5px solid var(--ad-line-2)", background: "var(--ad-soft)", display: "grid", placeItems: "center" }}>
-                  <span className="swatch" style={{ width: 30, height: 30, background: `radial-gradient(70% 70% at 50% 35%, ${p.base}88, ${p.deep}88)`, opacity: 0.5 }} />
+                <div key={i} style={{ width: 96, height: 96, borderRadius: 12, flex: "0 0 auto", border: "1.5px solid var(--ad-line-2)", background: "var(--ad-soft)", display: "grid", placeItems: "center", overflow: "hidden" }}>
+                  {uploadedImages[i]
+                    ? <img src={uploadedImages[i]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <span className="swatch" style={{ width: 30, height: 30, background: `radial-gradient(70% 70% at 50% 35%, ${p.base}88, ${p.deep}88)`, opacity: 0.5 }} />
+                  }
                 </div>
               ))}
-              <button style={{ width: 96, height: 96, borderRadius: 12, flex: "0 0 auto", border: "1.5px dashed var(--ad-line-2)", background: "#fff", display: "grid", placeItems: "center", cursor: "pointer" }}>
+              <button
+                style={{ width: 96, height: 96, borderRadius: 12, flex: "0 0 auto", border: "1.5px dashed var(--ad-line-2)", background: "#fff", display: "grid", placeItems: "center", cursor: backendId ? "pointer" : "not-allowed", opacity: backendId ? 1 : 0.5 }}
+                onClick={() => !uploading && backendId && fileInputRef.current?.click()}
+                title={backendId ? "Upload image" : "Save the product first to enable image upload"}
+                disabled={uploading}
+              >
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
-                  <AIcon name="image" size={20} stroke="var(--ad-faint)" />
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--ad-faint)" }}>Upload</span>
+                  <AIcon name="image" size={20} stroke={uploading ? "var(--amber)" : "var(--ad-faint)"} />
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--ad-faint)" }}>{uploading ? "…" : "Upload"}</span>
                 </div>
               </button>
+              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) { void handleUpload(f); e.target.value = ""; } }} />
             </div>
             <div className="ad-hint" style={{ marginTop: 8 }}>JPG or PNG, square, ≥1200px. Drag to reorder; first image is the cover.</div>
           </div>
@@ -149,17 +214,25 @@ function ProductEditor({ product, onClose, onSave }: { product: EditDraft; onClo
 
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div className="ad-field"><label className="ad-label">Product name</label><input className="ad-input" value={p.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Ceylon Cinnamon" /></div>
+            <div className="ad-field"><label className="ad-label">URL slug</label><input className="ad-input" value={p.slug} onChange={(e) => { setSlugTouched(true); set("slug", e.target.value); }} placeholder="e.g. ceylon-cinnamon" /></div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div className="ad-field"><label className="ad-label">Botanical name</label><input className="ad-input" value={p.latin} onChange={(e) => set("latin", e.target.value)} placeholder="Cinnamomum verum" /></div>
               <div className="ad-field"><label className="ad-label">SKU</label><input className="ad-input" value={p.sku} onChange={(e) => set("sku", e.target.value)} placeholder="AC-CIN" /></div>
             </div>
             <div className="ad-field">
               <label className="ad-label">Category</label>
-              <select className="ad-select" value={p.category} onChange={(e) => set("category", e.target.value)}>
-                {["Whole Spices", "Ground & Powders", "Gift Sets"].map((c) => <option key={c}>{c}</option>)}
+              <select className="ad-select" value={categoryId} onChange={(e) => {
+                setCategoryId(e.target.value);
+                const cat = categories.find((c) => c.id === e.target.value);
+                if (cat) set("category", cat.name);
+              }}>
+                {(categories.length > 0
+                  ? categories
+                  : [{ id: "", name: "Whole Spices" }, { id: "", name: "Ground & Powders" }, { id: "", name: "Gift Sets" }]
+                ).map((c) => <option key={c.id || c.name} value={c.id}>{c.name}</option>)}
               </select>
             </div>
-            <div className="ad-field"><label className="ad-label">Description</label><textarea className="ad-textarea" placeholder="Long-form description shown on the product page…" defaultValue={isNew ? "" : "Hand-rolled true cinnamon from the hill forests above Matale — pale, paper-thin quills that dissolve to silk, honeyed and floral with a whisper of clove."} /></div>
+            <div className="ad-field"><label className="ad-label">Description</label><textarea className="ad-textarea" placeholder="Long-form description shown on the product page…" value={description} onChange={(e) => setDescription(e.target.value)} /></div>
           </div>
 
           <hr className="ad-hr" />
@@ -203,7 +276,7 @@ function ProductEditor({ product, onClose, onSave }: { product: EditDraft; onClo
         <div style={{ padding: "16px 24px", borderTop: "1px solid var(--ad-line)", display: "flex", gap: 10, background: "var(--ad-card)" }}>
           {!isNew && <button className="ad-btn ad-btn-danger ad-btn-sm"><AIcon name="trash" size={15} stroke="var(--neg)" /></button>}
           <button className="ad-btn ad-btn-ghost" style={{ marginLeft: "auto" }} onClick={onClose}>Cancel</button>
-          <button className="ad-btn ad-btn-green" onClick={() => onSave(p)}><AIcon name="check" size={16} stroke="#fff" />{isNew ? "Create product" : "Save changes"}</button>
+          <button className="ad-btn ad-btn-green" onClick={() => onSave(p, { description, categoryId })}><AIcon name="check" size={16} stroke="#fff" />{isNew ? "Create product" : "Save changes"}</button>
         </div>
       </aside>
     </>
@@ -215,11 +288,13 @@ export function AdminProducts() {
   const [tab, setTab] = React.useState("all");
   const [q, setQ] = React.useState("");
   const [edit, setEdit] = React.useState<EditDraft | null>(null);
+  const [categories, setCategories] = React.useState<Category[]>([]);
 
   React.useEffect(() => {
     listAdminProducts().then(({ products }) => {
       if (products?.length) setRows(products.map(backendProductToAdmin));
     }).catch(() => { /* keep demo data */ });
+    listCategories().then(({ categories: cats }) => setCategories(cats)).catch(() => {});
   }, []);
 
   const filtered = React.useMemo(() => rows.filter((p) => {
@@ -235,16 +310,27 @@ export function AdminProducts() {
     setRows((prev) => prev.map((x) => (x.sku === p.sku ? { ...x, visible: next } : x)));
     if (backendId) bestEffort(updateAdminProduct(backendId, { status: next ? "ACTIVE" : "ARCHIVED" }));
   };
-  const save = (p: AdminProduct) => {
+  const save = (p: AdminProduct, extra: { description: string; categoryId: string }) => {
     const backendId = (p as AdminProduct & { _backendId?: string })._backendId;
+    const slug = p.slug || toSlug(p.name);
+    const desc = extra.description || p.latin || "Premium Ceylon spice.";
+    const catId = extra.categoryId || categories[0]?.id || "";
     setRows((prev) => {
       const exists = prev.find((x) => x.sku === p.sku);
       if (exists && backendId) {
-        bestEffort(updateAdminProduct(backendId, { name: p.name, featured: p.featured }));
+        bestEffort(updateAdminProduct(backendId, {
+          name: p.name,
+          description: desc || undefined,
+          featured: p.featured,
+          status: p.visible ? "ACTIVE" : "ARCHIVED",
+        }));
         return prev.map((x) => (x.sku === p.sku ? { ...x, ...p } : x));
       }
-      bestEffort(createAdminProduct({ name: p.name, description: p.latin, featured: p.featured }));
-      return [{ ...p }, ...prev];
+      const variants = buildVariants(p);
+      if (catId && variants.length > 0) {
+        bestEffort(createAdminProduct({ name: p.name, slug, description: desc, categoryId: catId, featured: p.featured, variants }));
+      }
+      return [{ ...p, slug }, ...prev];
     });
     setEdit(null);
   };
@@ -274,7 +360,7 @@ export function AdminProducts() {
         </div>
       </div>
       <ProductsTable rows={filtered} onOpen={setEdit} onToggle={toggle} />
-      {edit && <ProductEditor product={edit} onClose={() => setEdit(null)} onSave={save} />}
+      {edit && <ProductEditor product={edit} onClose={() => setEdit(null)} onSave={save} categories={categories} />}
     </div>
   );
 }
