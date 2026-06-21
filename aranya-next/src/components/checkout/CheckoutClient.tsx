@@ -10,6 +10,7 @@ import { useAuth } from "../AuthContext";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { createIntent, pollOrderPaid, type CheckoutInput, type PayHereIntent, type StripeIntent, type StubIntent } from "@/lib/api/checkout";
+import { getCartTotals, type ServerTotals } from "@/lib/api/cart";
 import type { Market } from "@/lib/types";
 
 // Checkout page: guest-first single-page form.
@@ -136,12 +137,20 @@ function SumRow({ label, val, accent }: { label: string; val: string; accent?: b
   );
 }
 
-function OrderSummary({ deliv, expressFee }: { deliv: string; expressFee: number }) {
+function OrderSummary({ serverTotals }: { serverTotals: ServerTotals | null }) {
   const cart = useCart();
   const items = cart.items;
   const t = cart.totals;
-  const shipShown = deliv === "express" ? expressFee : t.ship;
-  const totalShown = t.subtotal - t.discount + t.gift + shipShown;
+
+  // Use server totals when available (authoritative); fall back to client estimates
+  const sub = serverTotals?.subtotal ?? t.subtotal;
+  const disc = serverTotals?.discount ?? t.discount;
+  const gift = serverTotals?.gift ?? t.gift;
+  const ship = serverTotals?.shippingCost ?? t.ship;
+  const total = serverTotals !== null
+    ? serverTotals.total
+    : (t.subtotal - t.discount + t.gift + t.ship);
+
   return (
     <div style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12, padding: "24px 24px 26px", position: "sticky", top: 24 }}>
       <h3 className="disp" style={{ fontSize: 23, color: "var(--ink)", margin: "0 0 18px" }}>Order summary</h3>
@@ -161,14 +170,14 @@ function OrderSummary({ deliv, expressFee }: { deliv: string; expressFee: number
         ))}
       </div>
       <div style={{ borderTop: "1px solid var(--line)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
-        <SumRow label="Subtotal" val={t.fmt(t.subtotal)} />
-        {t.discount > 0 && <SumRow label={"Discount (" + cart.promo + ")"} val={"−" + t.fmt(t.discount)} accent />}
-        {t.gift > 0 && <SumRow label="Gift wrapping" val={t.fmt(t.gift)} />}
-        <SumRow label="Shipping" val={shipShown === 0 ? "Free" : t.fmt(shipShown)} />
+        <SumRow label="Subtotal" val={t.fmt(sub)} />
+        {disc > 0 && <SumRow label={"Discount (" + cart.promo + ")"} val={"−" + t.fmt(disc)} accent />}
+        {gift > 0 && <SumRow label="Gift wrapping" val={t.fmt(gift)} />}
+        <SumRow label="Shipping" val={ship === 0 ? "Free" : t.fmt(ship)} />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
         <span className="disp" style={{ fontSize: 22, color: "var(--ink)", fontWeight: 600 }}>Total</span>
-        <span className="disp" style={{ fontSize: 30, color: "var(--ink)", fontWeight: 600 }}>{t.fmt(totalShown)}</span>
+        <span className="disp" style={{ fontSize: 30, color: "var(--ink)", fontWeight: 600 }}>{t.fmt(total)}</span>
       </div>
       {cart.giftNote && (
         <div style={{ marginTop: 16, padding: "12px 14px", background: "#fff", border: "1px dashed var(--line)", borderRadius: 8 }}>
@@ -320,6 +329,7 @@ function StripePaymentScreen({
   market,
   onMarket,
   onPaid,
+  serverTotals,
 }: {
   intent: StripeIntent;
   totalLabel: string;
@@ -328,16 +338,13 @@ function StripePaymentScreen({
   market: Market;
   onMarket: (m: Market) => void;
   onPaid: () => void;
+  serverTotals: ServerTotals | null;
 }) {
   const [stripeError, setStripeError] = React.useState("");
   const stripePromise = React.useMemo(
     () => loadStripe(intent.publishableKey),
     [intent.publishableKey],
   );
-  const cart = useCart();
-  const t = cart.totals;
-  const expressFee = market === "local" ? 1500 : 18;
-
   return (
     <div className="aranya" style={{ minHeight: "100vh", background: "var(--bg)" }}>
       <CheckoutHeader market={market} onMarket={onMarket} />
@@ -392,7 +399,7 @@ function StripePaymentScreen({
             </Section>
           </div>
 
-          <OrderSummary deliv="standard" expressFee={expressFee} />
+          <OrderSummary serverTotals={serverTotals} />
         </div>
       </div>
     </div>
@@ -499,6 +506,7 @@ export function CheckoutClient() {
   const [stripeIntent, setStripeIntent] = React.useState<StripeIntent | null>(null);
   const [stubIntent, setStubIntent] = React.useState<StubIntent | null>(null);
   const [order, setOrder] = React.useState<{ id: string; email: string; total: string } | null>(null);
+  const [serverTotals, setServerTotals] = React.useState<ServerTotals | null>(null);
 
   // Keep email in sync when user signs in mid-session
   React.useEffect(() => {
@@ -511,10 +519,18 @@ export function CheckoutClient() {
     if (market === "local" && pay !== "card") setPay("card");
   }, [market, pay]);
 
-  const expressFee = market === "local" ? 1500 : 18;
+  // Fetch server-authoritative totals whenever delivery method, market, or cart changes
+  React.useEffect(() => {
+    let cancelled = false;
+    getCartTotals(deliv.toUpperCase() as "STANDARD" | "EXPRESS", cart.giftWrap)
+      .then(({ totals }) => { if (!cancelled) setServerTotals(totals); })
+      .catch(() => { /* fall back to client estimates */ });
+    return () => { cancelled = true; };
+  }, [deliv, market, cart.count, cart.giftWrap]);
+
   const t = cart.totals;
-  const shipShown = deliv === "express" ? expressFee : t.ship;
-  const totalShown = t.subtotal - t.discount + t.gift + shipShown;
+  const expressFee = market === "local" ? 1500 : 18; // for DeliveryOptions label fallback
+  const totalFallback = t.subtotal - t.discount + t.gift + (deliv === "express" ? expressFee : t.ship);
 
   const placeOrder = async () => {
     if (placing) return;
@@ -541,6 +557,8 @@ export function CheckoutClient() {
         },
         shippingMethod: deliv.toUpperCase() as "STANDARD" | "EXPRESS",
         couponCode: cart.promo || undefined,
+        giftWrap: cart.giftWrap || undefined,
+        giftNote: cart.giftNote || undefined,
       };
 
       const intent = await createIntent(payload);
@@ -568,7 +586,7 @@ export function CheckoutClient() {
     }
   };
 
-  const totalLabel = t.fmt(totalShown);
+  const totalLabel = serverTotals ? t.fmt(serverTotals.total) : t.fmt(totalFallback);
 
   const onPaid = () => {
     setOrder({ id: stripeIntent?.orderId ?? stubIntent?.orderId ?? "", email, total: totalLabel });
@@ -599,6 +617,7 @@ export function CheckoutClient() {
         market={market}
         onMarket={setMarket}
         onPaid={onPaid}
+        serverTotals={serverTotals}
       />
     );
   }
@@ -641,7 +660,9 @@ export function CheckoutClient() {
     );
   }
 
-  const standardLabel = t.freeShip ? "Free" : t.fmt(cart.config().ship);
+  const standardLabel = (deliv === "standard" && serverTotals)
+    ? (serverTotals.shippingCost === 0 ? "Free" : t.fmt(serverTotals.shippingCost))
+    : (t.freeShip ? "Free" : t.fmt(cart.config().ship));
   const localDistricts = [
     { value: "Colombo", label: "Colombo" }, { value: "Gampaha", label: "Gampaha" },
     { value: "Kalutara", label: "Kalutara" }, { value: "Kandy", label: "Kandy" },
@@ -758,7 +779,7 @@ export function CheckoutClient() {
             </p>
           </div>
 
-          <OrderSummary deliv={deliv} expressFee={expressFee} />
+          <OrderSummary serverTotals={serverTotals} />
         </div>
       </div>
     </div>

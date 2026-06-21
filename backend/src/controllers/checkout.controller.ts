@@ -19,7 +19,7 @@ export async function createIntent(req: Request, res: Response) {
     const guestToken = req.cookies?.[GUEST_TOKEN_COOKIE];
     const market = req.market!; // 'LOCAL' | 'INTERNATIONAL'
 
-    const { shippingAddress, shippingMethod, saveAddress, customerPhone, guestEmail, couponCode }
+    const { shippingAddress, shippingMethod, saveAddress, customerPhone, guestEmail, couponCode, giftWrap, giftNote }
         = checkoutSchema.parse(req.body);
 
     // Guests must supply an email for the order confirmation
@@ -96,9 +96,9 @@ export async function createIntent(req: Request, res: Response) {
         await prisma.cart.update({ where: { id: cart.id }, data: { couponId: coupon.id } });
     }
 
-    // Calculate total server-side (applies any coupon on the cart)
+    // Calculate total server-side (applies any coupon on the cart, and gift wrap pricing)
     const { totalInCents, total, subtotal, shippingCost, discount, couponId, currency }
-        = await calculateCartTotal(cart.id, market, shippingMethod);
+        = await calculateCartTotal(cart.id, market, shippingMethod, giftWrap);
 
     // Create the order in PENDING state — permanently stamps market + currency
     const order = await prisma.order.create({
@@ -111,7 +111,11 @@ export async function createIntent(req: Request, res: Response) {
             shippingCost: shippingCost.toFixed(2),
             discount: discount.toFixed(2),
             couponId,
-            shippingAddress,                     // JSON snapshot — never mutated after creation
+            shippingAddress: {                   // JSON snapshot — never mutated after creation
+                ...shippingAddress,
+                ...(giftWrap ? { giftWrap: true } : {}),
+                ...(giftNote ? { giftNote } : {}),
+            },
             market,
             currency: currency as Currency,
             items: {

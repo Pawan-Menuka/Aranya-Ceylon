@@ -23,6 +23,8 @@ export interface CheckoutInput {
   shippingMethod: "STANDARD" | "EXPRESS";
   saveAddress?: boolean;
   couponCode?: string;
+  giftWrap?: boolean;
+  giftNote?: string;
 }
 
 export interface StripeIntent {

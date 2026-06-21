@@ -20,6 +20,9 @@ const LOCAL_SHIPPING_RATES_CENTS = {
     EXPRESS: { cost: 65000, label: 'Express delivery (1–2 days)' },
 };
 
+// Gift wrap add-on cost in smallest currency units (LKR cents / USD cents).
+const GIFT_WRAP_CENTS = { LOCAL: 40000, INTERNATIONAL: 450 }; // Rs 400 / $4.50
+
 // Convert a Decimal/number money value to an exact integer number of cents.
 function toCents(value: Prisma.Decimal | number | string): number {
     return Math.round(Number(value) * 100);
@@ -179,6 +182,7 @@ export async function calculateCartTotal(
     cartId: string,
     market: Market,
     shippingMethod: 'STANDARD' | 'EXPRESS' = 'STANDARD',
+    giftWrap: boolean = false,
 ) {
     const cart = await prisma.cart.findUnique({
         where: { id: cartId },
@@ -212,19 +216,24 @@ export async function calculateCartTotal(
         }
     }
 
-    const totalCents = Math.max(subtotalCents - discountCents, 0) + shipping.cost;
+    const giftCents = giftWrap
+        ? (market === 'LOCAL' ? GIFT_WRAP_CENTS.LOCAL : GIFT_WRAP_CENTS.INTERNATIONAL)
+        : 0;
+    const totalCents = Math.max(subtotalCents - discountCents, 0) + shipping.cost + giftCents;
 
     return {
         // Authoritative integer-cents figures
         subtotalCents,
         shippingCents: shipping.cost,
         discountCents,
+        giftCents,
         totalCents,
         totalInCents: totalCents, // Stripe/PayHere want integer smallest-units
         // 2dp numbers for display / Decimal storage
         subtotal: subtotalCents / 100,
         shippingCost: shipping.cost / 100,
         discount: discountCents / 100,
+        gift: giftCents / 100,
         total: totalCents / 100,
         shippingLabel: shipping.label,
         currency,

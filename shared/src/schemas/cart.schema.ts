@@ -32,6 +32,8 @@ export const checkoutSchema = z.object({
     shippingMethod: z.enum(['STANDARD', 'EXPRESS']),
     saveAddress: z.boolean().default(false),
     couponCode: z.string().optional(),
+    giftWrap: z.boolean().default(false),
+    giftNote: z.string().max(500).optional(),
 });
 
 export type AddToCartInput = z.infer<typeof addToCartSchema>;

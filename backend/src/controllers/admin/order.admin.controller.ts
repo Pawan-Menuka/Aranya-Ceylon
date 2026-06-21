@@ -116,18 +116,22 @@ export async function refundOrder(req: Request, res: Response) {
         return res.status(400).json({ error: 'Only PAID or PROCESSING orders can be refunded' });
     }
 
-    // International orders: refund via Stripe
-    // Local orders with PayHere: manual refund process (PayHere has no API refund)
-    if (order.market === 'INTERNATIONAL' && order.paymentIntentId) {
-        await stripe.refunds.create({ payment_intent: order.paymentIntentId });
-    }
+    // Step 1: Atomically claim the refund in the DB before touching any gateway.
+    // updateMany with the status guard means only one concurrent attempt succeeds;
+    // a second concurrent call (or retry) will see count === 0 and bail safely.
+    const { count } = await prisma.$transaction(async (tx) => {
+        const result = await tx.order.updateMany({
+            where: { id, status: { in: ['PAID', 'PROCESSING'] } },
+            data: { status: 'REFUNDED' },
+        });
 
-    await prisma.$transaction(async (tx) => {
-        await tx.order.update({ where: { id }, data: { status: 'REFUNDED' } });
+        if (result.count === 0) return result; // already claimed — skip side-effects
+
         await tx.orderEvent.create({
             data: { orderId: id, status: 'REFUNDED', note: 'Refund issued by admin' },
         });
-        // Restore stock
+
+        // Restore stock in the same transaction so it can't diverge from the status flip
         await Promise.all(
             order.items.map((item) =>
                 tx.variant.update({
@@ -136,7 +140,25 @@ export async function refundOrder(req: Request, res: Response) {
                 }),
             ),
         );
+
+        return result;
     });
+
+    if (count === 0) {
+        return res.status(409).json({
+            error: 'Order is not in a refundable state — it may have already been refunded.',
+        });
+    }
+
+    // Step 2: Issue the Stripe refund after the DB is committed.
+    // The idempotency key ensures a retry never creates a duplicate refund.
+    // Local (PayHere) orders have no API refund — those are handled manually.
+    if (order.market === 'INTERNATIONAL' && order.paymentIntentId) {
+        await stripe.refunds.create(
+            { payment_intent: order.paymentIntentId },
+            { idempotencyKey: `refund-${order.id}` },
+        );
+    }
 
     await writeAuditLog({
         req,

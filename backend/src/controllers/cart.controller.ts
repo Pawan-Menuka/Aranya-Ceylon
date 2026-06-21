@@ -88,6 +88,26 @@ export async function removeItem(req: Request, res: Response) {
     return res.status(204).send();
 }
 
+// --- Get server-computed cart totals (for checkout display) ---
+export async function getCartTotals(req: Request, res: Response) {
+    const userId = req.user?.userId;
+    const guestToken = req.cookies?.[GUEST_TOKEN_COOKIE];
+    const market = req.market!;
+    const shippingMethod = (['STANDARD', 'EXPRESS'].includes(String(req.query.shippingMethod))
+        ? (req.query.shippingMethod as 'STANDARD' | 'EXPRESS')
+        : 'STANDARD');
+    const giftWrap = req.query.giftWrap === 'true';
+
+    const result = await cartService.getOrCreateCart(userId, guestToken);
+
+    if ('newGuestToken' in result && result.newGuestToken) {
+        res.cookie(GUEST_TOKEN_COOKIE, result.newGuestToken, guestCookieOptions);
+    }
+
+    const totals = await cartService.calculateCartTotal(result.id, market, shippingMethod, giftWrap);
+    return res.json({ totals });
+}
+
 // --- Apply coupon ---
 const COUPON_ERROR_MESSAGES: Record<string, string> = {
     COUPON_NOT_FOUND: 'That coupon code is not valid.',
