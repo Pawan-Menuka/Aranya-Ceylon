@@ -2,7 +2,9 @@ import type { Request, Response } from 'express';
 import { prisma } from '../index.js';
 
 export async function listRecipes(req: Request, res: Response) {
-    const course = req.query.course as string | undefined;
+    // Coerce to a single string — a duplicated param makes req.query.course an array.
+    const rawCourse = req.query.course;
+    const course = Array.isArray(rawCourse) ? rawCourse[0] : (rawCourse as string | undefined);
 
     const recipes = await prisma.recipe.findMany({
         where: {
@@ -10,6 +12,7 @@ export async function listRecipes(req: Request, res: Response) {
             ...(course && course !== 'All' ? { course } : {}),
         },
         orderBy: [{ featured: 'desc' }, { createdAt: 'asc' }],
+        take: 100,
     });
 
     return res.json({ recipes });

@@ -38,11 +38,35 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Build frontend
-        run: pnpm --filter @aranya/frontend build
-
       - name: Validate Prisma schema
         run: pnpm --filter @aranya/backend exec prisma validate
 
       - name: Security audit
         run: pnpm audit --audit-level=high
+
+  frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: aranya-next/package-lock.json
+
+      - name: Install dependencies
+        working-directory: aranya-next
+        run: npm ci
+
+      - name: Type check
+        working-directory: aranya-next
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: aranya-next
+        run: npm run lint
+
+      - name: Build
+        working-directory: aranya-next
+        run: npm run build

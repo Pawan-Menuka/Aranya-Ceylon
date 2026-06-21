@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../../index.js';
 import { writeAuditLog } from '../../services/audit.service.js';
+import { revalidateFrontend } from '../../lib/revalidate.js';
 import { z } from 'zod';
 
 const ingredientGroupSchema = z.object({
@@ -49,12 +50,26 @@ export async function getRecipe(req: Request, res: Response) {
 export async function createRecipe(req: Request, res: Response) {
     const data = recipeSchema.parse(req.body);
 
-    const recipe = await prisma.recipe.create({ data });
+    let recipe;
+    try {
+        recipe = await prisma.recipe.create({ data });
+    } catch (err) {
+        if ((err as { code?: string }).code === 'P2002') {
+            res.status(409).json({ error: 'A recipe with that slug already exists' }); return;
+        }
+        throw err;
+    }
 
     await writeAuditLog({
         req, event: 'RECIPE_CREATE',
         targetType: 'Recipe', targetId: recipe.id,
     });
+
+    // P3-4: revalidate when a recipe is published immediately on create
+    if (data.status === 'PUBLISHED') {
+        await revalidateFrontend(`/recipes/${recipe.slug}`);
+        await revalidateFrontend('/recipes');
+    }
 
     res.status(201).json({ recipe });
 }
@@ -66,7 +81,22 @@ export async function updateRecipe(req: Request, res: Response) {
     const existing = await prisma.recipe.findUnique({ where: { id } });
     if (!existing) { res.status(404).json({ error: 'Recipe not found' }); return; }
 
-    const recipe = await prisma.recipe.update({ where: { id }, data });
+    let recipe;
+    try {
+        recipe = await prisma.recipe.update({ where: { id }, data });
+    } catch (err) {
+        if ((err as { code?: string }).code === 'P2002') {
+            res.status(409).json({ error: 'A recipe with that slug already exists' }); return;
+        }
+        throw err;
+    }
+
+    // P3-3: audit log for updates (was missing)
+    await writeAuditLog({
+        req, event: 'RECIPE_UPDATE',
+        targetType: 'Recipe', targetId: id,
+        diff: { before: existing, after: recipe },
+    });
 
     await revalidateFrontend(`/recipes/${recipe.slug}`);
     await revalidateFrontend('/recipes');
@@ -87,14 +117,9 @@ export async function deleteRecipe(req: Request, res: Response) {
         targetType: 'Recipe', targetId: id,
     });
 
-    res.json({ ok: true });
-}
+    // P3-4: revalidate on delete
+    await revalidateFrontend(`/recipes/${existing.slug}`);
+    await revalidateFrontend('/recipes');
 
-async function revalidateFrontend(path: string) {
-    const secret = process.env.REVALIDATION_SECRET;
-    const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
-    if (!secret) return;
-    try {
-        await fetch(`${baseUrl}/api/revalidate?secret=${secret}&path=${encodeURIComponent(path)}`);
-    } catch { /* non-fatal */ }
+    res.json({ ok: true });
 }

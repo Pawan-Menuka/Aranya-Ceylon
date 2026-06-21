@@ -171,6 +171,7 @@ model ProductImage {
   productId  String
   product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   url        String   // Cloudinary CDN URL
+  publicId   String?  // Cloudinary public_id (needed for deleteImage)
   altText    String?
   position   Int      @default(0) // Display order
   createdAt  DateTime @default(now())

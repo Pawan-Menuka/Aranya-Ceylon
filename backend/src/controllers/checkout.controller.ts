@@ -19,7 +19,7 @@ export async function createIntent(req: Request, res: Response) {
     const guestToken = req.cookies?.[GUEST_TOKEN_COOKIE];
     const market = req.market!; // 'LOCAL' | 'INTERNATIONAL'
 
-    const { shippingAddress, shippingMethod, saveAddress, customerPhone, guestEmail, couponCode }
+    const { shippingAddress, shippingMethod, saveAddress, customerPhone, guestEmail, couponCode, giftWrap, giftNote }
         = checkoutSchema.parse(req.body);
 
     // Guests must supply an email for the order confirmation
@@ -80,9 +80,25 @@ export async function createIntent(req: Request, res: Response) {
         });
     }
 
-    // Calculate total server-side (applies any coupon on the cart)
+    // If the client submitted a coupon code at checkout, persist it to the cart
+    // so calculateCartTotal picks it up. Overrides any previously applied coupon.
+    if (couponCode) {
+        const coupon = await prisma.coupon.findUnique({ where: { code: couponCode } });
+        if (!coupon) {
+            return res.status(400).json({ error: 'That coupon code is not valid.' });
+        }
+        if (coupon.expiresAt && coupon.expiresAt < new Date()) {
+            return res.status(400).json({ error: 'That coupon has expired.' });
+        }
+        if (coupon.usageLimit !== null && coupon.usageCount >= coupon.usageLimit) {
+            return res.status(400).json({ error: 'That coupon has reached its usage limit.' });
+        }
+        await prisma.cart.update({ where: { id: cart.id }, data: { couponId: coupon.id } });
+    }
+
+    // Calculate total server-side (applies any coupon on the cart, and gift wrap pricing)
     const { totalInCents, total, subtotal, shippingCost, discount, couponId, currency }
-        = await calculateCartTotal(cart.id, market, shippingMethod);
+        = await calculateCartTotal(cart.id, market, shippingMethod, giftWrap);
 
     // Create the order in PENDING state — permanently stamps market + currency
     const order = await prisma.order.create({
@@ -95,7 +111,11 @@ export async function createIntent(req: Request, res: Response) {
             shippingCost: shippingCost.toFixed(2),
             discount: discount.toFixed(2),
             couponId,
-            shippingAddress,                     // JSON snapshot — never mutated after creation
+            shippingAddress: {                   // JSON snapshot — never mutated after creation
+                ...shippingAddress,
+                ...(giftWrap ? { giftWrap: true } : {}),
+                ...(giftNote ? { giftNote } : {}),
+            },
             market,
             currency: currency as Currency,
             items: {

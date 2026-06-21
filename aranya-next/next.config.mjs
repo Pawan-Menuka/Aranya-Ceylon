@@ -1,10 +1,28 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Hero frames + product photography are served from a CDN/R2 in production.
-  // Add the host here when NEXT_PUBLIC_ASSETS_URL points off-origin.
   images: {
-    remotePatterns: [],
+    remotePatterns: [
+      // Cloudinary CDN: product images uploaded via the admin panel
+      { protocol: 'https', hostname: 'res.cloudinary.com' },
+    ],
+  },
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains; preload',
+          },
+        ],
+      },
+    ];
   },
 };
 

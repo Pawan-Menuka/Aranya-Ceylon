@@ -2,6 +2,7 @@ import { prisma } from '../index.js';
 import { Prisma } from '@prisma/client';
 import type { Market } from '@prisma/client';
 import type { CreateProductInput, UpdateProductInput, ProductFilterInput } from '@aranya/shared';
+import { deleteImage } from './cloudinary.service.js';
 
 // ----------------------------------------------------------------
 // MARKET FILTER HELPER
@@ -133,12 +134,19 @@ export async function listProducts(
         ...marketFilter(market),
         ...(category && { category: { slug: category } }),
         ...(featured !== undefined && { featured }),
-        // Price filters scoped to market-relevant variants only
-        ...(minPrice !== undefined && {
-            variants: { some: { price: { gte: minPrice }, ...variantMarketFilter(market) } },
-        }),
-        ...(maxPrice !== undefined && {
-            variants: { some: { price: { lte: maxPrice }, ...variantMarketFilter(market) } },
+        // Price filters scoped to market-relevant variants only.
+        // Both bounds must be in a single `variants` key — two separate spreads would
+        // overwrite each other, dropping minPrice when both are present (object key collision).
+        ...((minPrice !== undefined || maxPrice !== undefined) && {
+            variants: {
+                some: {
+                    price: {
+                        ...(minPrice !== undefined && { gte: minPrice }),
+                        ...(maxPrice !== undefined && { lte: maxPrice }),
+                    },
+                    ...variantMarketFilter(market),
+                },
+            },
         }),
     };
 
@@ -357,10 +365,22 @@ export async function updateProduct(id: string, data: UpdateProductInput) {
 
 // --- Soft delete (archive) product (admin only) ---
 export async function archiveProduct(id: string) {
-    return prisma.product.update({
+    const images = await prisma.productImage.findMany({
+        where: { productId: id, publicId: { not: null } },
+        select: { publicId: true },
+    });
+
+    const product = await prisma.product.update({
         where: { id },
         data: { status: 'ARCHIVED' },
     });
+
+    // Best-effort Cloudinary cleanup — don't fail the archive if this errors.
+    await Promise.allSettled(
+        images.map((img) => deleteImage(img.publicId!)),
+    );
+
+    return product;
 }
 
 // --- Admin: list ALL products across both markets ---

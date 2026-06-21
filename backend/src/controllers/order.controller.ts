@@ -7,8 +7,8 @@ import { prisma } from '../index.js';
 const orderInclude = {
     items: {
         include: {
-            product: { select: { name: true, slug: true, images: { take: 1, orderBy: { position: 'asc' } } } },
-            variant: { select: { weight: true, currency: true } },
+            product: { select: { id: true, name: true, slug: true, images: { take: 1, orderBy: { position: 'asc' } } } },
+            variant: { select: { id: true, weight: true, currency: true } },
         },
     },
     timeline: { orderBy: { createdAt: 'asc' } },

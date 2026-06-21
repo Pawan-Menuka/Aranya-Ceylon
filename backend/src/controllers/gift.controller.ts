@@ -11,6 +11,7 @@ export async function listGifts(req: Request, res: Response) {
             ...(featured !== undefined && { featured }),
         },
         orderBy: [{ featured: 'desc' }, { createdAt: 'asc' }],
+        take: 100,
     });
 
     res.json({ gifts });

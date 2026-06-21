@@ -10,6 +10,7 @@ const router = Router();
 router.use(asyncHandler(optionalAuth));
 
 router.get('/', asyncHandler(cartController.getCart));
+router.get('/totals', asyncHandler(cartController.getCartTotals));
 router.post('/items', asyncHandler(cartController.addItem));
 router.patch('/items/:itemId', asyncHandler(cartController.updateItem));
 router.delete('/items/:itemId', asyncHandler(cartController.removeItem));

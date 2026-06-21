@@ -20,6 +20,9 @@ const LOCAL_SHIPPING_RATES_CENTS = {
     EXPRESS: { cost: 65000, label: 'Express delivery (1–2 days)' },
 };
 
+// Gift wrap add-on cost in smallest currency units (LKR cents / USD cents).
+const GIFT_WRAP_CENTS = { LOCAL: 40000, INTERNATIONAL: 450 }; // Rs 400 / $4.50
+
 // Convert a Decimal/number money value to an exact integer number of cents.
 function toCents(value: Prisma.Decimal | number | string): number {
     return Math.round(Number(value) * 100);
@@ -91,7 +94,13 @@ export async function addToCart(
     });
 
     if (!variant) throw new Error('VARIANT_NOT_FOUND_FOR_MARKET');
-    if (variant.stock < data.quantity) throw new Error('INSUFFICIENT_STOCK');
+
+    // P1-2: validate against existing cart qty so repeated adds can't exceed stock
+    const existing = await prisma.cartItem.findUnique({
+        where: { cartId_variantId: { cartId, variantId: data.variantId } },
+        select: { quantity: true },
+    });
+    if (variant.stock < (existing?.quantity ?? 0) + data.quantity) throw new Error('INSUFFICIENT_STOCK');
 
     // Upsert: if same variant already in cart, increment quantity
     return prisma.cartItem.upsert({
@@ -119,10 +128,23 @@ export async function updateCartItem(
     data: UpdateCartItemInput,
 ) {
     if (data.quantity === 0) {
-        return prisma.cartItem.delete({
-            where: { id: itemId, cartId }, // cartId prevents IDOR
-        });
+        // P1-4: treat "already gone" as success (idempotent remove)
+        try {
+            return await prisma.cartItem.delete({ where: { id: itemId, cartId } });
+        } catch (err) {
+            if ((err as { code?: string }).code === 'P2025') return null;
+            throw err;
+        }
     }
+
+    // P1-3: validate stock before updating quantity
+    const item = await prisma.cartItem.findUnique({
+        where: { id: itemId, cartId },
+        include: { variant: { select: { stock: true } } },
+    });
+    // P1-4: missing/foreign item → caller gets null and the controller sends 404
+    if (!item) return null;
+    if (item.variant.stock < data.quantity) throw new Error('INSUFFICIENT_STOCK');
 
     return prisma.cartItem.update({
         where: { id: itemId, cartId },
@@ -179,6 +201,7 @@ export async function calculateCartTotal(
     cartId: string,
     market: Market,
     shippingMethod: 'STANDARD' | 'EXPRESS' = 'STANDARD',
+    giftWrap: boolean = false,
 ) {
     const cart = await prisma.cart.findUnique({
         where: { id: cartId },
@@ -212,19 +235,24 @@ export async function calculateCartTotal(
         }
     }
 
-    const totalCents = Math.max(subtotalCents - discountCents, 0) + shipping.cost;
+    const giftCents = giftWrap
+        ? (market === 'LOCAL' ? GIFT_WRAP_CENTS.LOCAL : GIFT_WRAP_CENTS.INTERNATIONAL)
+        : 0;
+    const totalCents = Math.max(subtotalCents - discountCents, 0) + shipping.cost + giftCents;
 
     return {
         // Authoritative integer-cents figures
         subtotalCents,
         shippingCents: shipping.cost,
         discountCents,
+        giftCents,
         totalCents,
         totalInCents: totalCents, // Stripe/PayHere want integer smallest-units
         // 2dp numbers for display / Decimal storage
         subtotal: subtotalCents / 100,
         shippingCost: shipping.cost / 100,
         discount: discountCents / 100,
+        gift: giftCents / 100,
         total: totalCents / 100,
         shippingLabel: shipping.label,
         currency,

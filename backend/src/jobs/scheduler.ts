@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { prisma } from '../index.js';
 import { sendLowStockAlert } from '../services/email.service.js';
+import { revalidateFrontend } from '../lib/revalidate.js';
 
 // --- Job 1: Publish scheduled blog posts ---
 // Runs every minute. Checks for posts where scheduledAt <= now
@@ -24,6 +25,14 @@ export function startScheduledPostsJob() {
                         data: { status: 'PUBLISHED', publishedAt: new Date() },
                     }),
                 ),
+            );
+
+            // P3-4: revalidate each newly published post so it appears immediately
+            await Promise.all(
+                due.flatMap((blog) => [
+                    revalidateFrontend(`/blog/${blog.slug}`),
+                    revalidateFrontend('/blog'),
+                ]),
             );
 
             console.log(`📝 Published ${due.length} scheduled blog post(s)`);
@@ -107,11 +116,28 @@ export function startStaleOrderCancellationJob() {
     });
 }
 
+// --- Job 5: Prune expired / used refresh tokens ---
+// Runs daily at 3am. Tokens are removed on use or detected reuse, but lapsed
+// sessions never trigger a delete, so the Token table grows unboundedly otherwise.
+export function startTokenPruningJob() {
+    cron.schedule('0 3 * * *', async () => {
+        try {
+            const { count } = await prisma.token.deleteMany({
+                where: { expiresAt: { lt: new Date() } },
+            });
+            if (count > 0) console.log(`🔑 Pruned ${count} expired refresh token(s)`);
+        } catch (err) {
+            console.error('[CRON] Token pruning job failed:', err);
+        }
+    });
+}
+
 // Start all jobs
 export function startAllJobs() {
     startScheduledPostsJob();
     startCartExpiryJob();
     startLowStockAlertJob();
     startStaleOrderCancellationJob();
+    startTokenPruningJob();
     console.log('⏰ Cron jobs started');
 }

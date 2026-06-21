@@ -52,7 +52,9 @@ export function buildPayHerePayload(params: {
     const currency = 'LKR';
     const hash = generatePayHereHash(params.orderId, amountFormatted, currency);
 
-    const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+    // FRONTEND_URL may be a comma-separated CORS list — take the first (primary) origin
+    const [firstOrigin = 'http://localhost:3000'] = (process.env.FRONTEND_URL ?? 'http://localhost:3000').split(',');
+    const baseUrl = firstOrigin.trim();
 
     return {
         merchant_id: MERCHANT_ID,
