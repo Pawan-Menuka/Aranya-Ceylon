@@ -133,12 +133,19 @@ export async function listProducts(
         ...marketFilter(market),
         ...(category && { category: { slug: category } }),
         ...(featured !== undefined && { featured }),
-        // Price filters scoped to market-relevant variants only
-        ...(minPrice !== undefined && {
-            variants: { some: { price: { gte: minPrice }, ...variantMarketFilter(market) } },
-        }),
-        ...(maxPrice !== undefined && {
-            variants: { some: { price: { lte: maxPrice }, ...variantMarketFilter(market) } },
+        // Price filters scoped to market-relevant variants only.
+        // Both bounds must be in a single `variants` key — two separate spreads would
+        // overwrite each other, dropping minPrice when both are present (object key collision).
+        ...((minPrice !== undefined || maxPrice !== undefined) && {
+            variants: {
+                some: {
+                    price: {
+                        ...(minPrice !== undefined && { gte: minPrice }),
+                        ...(maxPrice !== undefined && { lte: maxPrice }),
+                    },
+                    ...variantMarketFilter(market),
+                },
+            },
         }),
     };
 

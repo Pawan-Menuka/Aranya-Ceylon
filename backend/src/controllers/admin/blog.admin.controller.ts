@@ -37,14 +37,22 @@ export async function getBlog(req: Request, res: Response) {
 export async function createBlog(req: Request, res: Response) {
     const data = createBlogSchema.parse(req.body);
 
-    const blog = await prisma.blog.create({
-        data: {
-            ...data,
-            authorId: req.user!.userId,
-            publishedAt: data.status === 'PUBLISHED' ? new Date() : undefined,
-            scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : undefined,
-        },
-    });
+    let blog;
+    try {
+        blog = await prisma.blog.create({
+            data: {
+                ...data,
+                authorId: req.user!.userId,
+                publishedAt: data.status === 'PUBLISHED' ? new Date() : undefined,
+                scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : undefined,
+            },
+        });
+    } catch (err) {
+        if ((err as { code?: string }).code === 'P2002') {
+            return res.status(409).json({ error: 'A blog post with that slug already exists' });
+        }
+        throw err;
+    }
 
     // P3-6: use BLOG_PUBLISH only when actually publishing; drafts/scheduled get BLOG_CREATE
     await writeAuditLog({
@@ -69,16 +77,24 @@ export async function updateBlog(req: Request, res: Response) {
     const before = await prisma.blog.findUnique({ where: { id } });
     if (!before) return res.status(404).json({ error: 'Blog not found' });
 
-    const blog = await prisma.blog.update({
-        where: { id },
-        data: {
-            ...data,
-            ...(data.scheduledAt ? { scheduledAt: new Date(data.scheduledAt) } : {}),
-            ...(data.status === 'PUBLISHED' && !before.publishedAt
-                ? { publishedAt: new Date() }
-                : {}),
-        },
-    });
+    let blog;
+    try {
+        blog = await prisma.blog.update({
+            where: { id },
+            data: {
+                ...data,
+                ...(data.scheduledAt ? { scheduledAt: new Date(data.scheduledAt) } : {}),
+                ...(data.status === 'PUBLISHED' && !before.publishedAt
+                    ? { publishedAt: new Date() }
+                    : {}),
+            },
+        });
+    } catch (err) {
+        if ((err as { code?: string }).code === 'P2002') {
+            return res.status(409).json({ error: 'A blog post with that slug already exists' });
+        }
+        throw err;
+    }
 
     // P3-3: audit log for updates (was missing entirely)
     await writeAuditLog({

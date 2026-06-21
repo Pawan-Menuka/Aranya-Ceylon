@@ -74,6 +74,7 @@ export async function updateItem(req: Request, res: Response) {
     const data = updateCartItemSchema.parse(req.body);
     const item = await cartService.updateCartItem(cart.id, req.params.itemId!, data);
 
+    if (item === null) return res.status(404).json({ error: 'Cart item not found' });
     return res.json({ item });
 }
 

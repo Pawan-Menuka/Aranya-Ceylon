@@ -50,7 +50,15 @@ export async function getRecipe(req: Request, res: Response) {
 export async function createRecipe(req: Request, res: Response) {
     const data = recipeSchema.parse(req.body);
 
-    const recipe = await prisma.recipe.create({ data });
+    let recipe;
+    try {
+        recipe = await prisma.recipe.create({ data });
+    } catch (err) {
+        if ((err as { code?: string }).code === 'P2002') {
+            res.status(409).json({ error: 'A recipe with that slug already exists' }); return;
+        }
+        throw err;
+    }
 
     await writeAuditLog({
         req, event: 'RECIPE_CREATE',
@@ -73,7 +81,15 @@ export async function updateRecipe(req: Request, res: Response) {
     const existing = await prisma.recipe.findUnique({ where: { id } });
     if (!existing) { res.status(404).json({ error: 'Recipe not found' }); return; }
 
-    const recipe = await prisma.recipe.update({ where: { id }, data });
+    let recipe;
+    try {
+        recipe = await prisma.recipe.update({ where: { id }, data });
+    } catch (err) {
+        if ((err as { code?: string }).code === 'P2002') {
+            res.status(409).json({ error: 'A recipe with that slug already exists' }); return;
+        }
+        throw err;
+    }
 
     // P3-3: audit log for updates (was missing)
     await writeAuditLog({

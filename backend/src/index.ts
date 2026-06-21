@@ -76,7 +76,7 @@ app.use(cors({
     },
     credentials: true,
 }));
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json({ limit: '512kb' })); // 10kb was too small for admin blog/recipe bodies
 app.use(cookieParser());
 app.use(resolveMarket);
 

@@ -80,10 +80,11 @@ export async function updateOrderStatus(req: Request, res: Response) {
         return updated;
     });
 
-    // Send shipping email if status changed to SHIPPED
-    if (status === 'SHIPPED' && trackingNumber && order.user?.email) {
+    // P3-5: send shipping email — fall back to guestEmail so guest orders are notified
+    const shippingRecipient = order.user?.email ?? (order as { guestEmail?: string | null }).guestEmail ?? null;
+    if (status === 'SHIPPED' && trackingNumber && shippingRecipient) {
         await sendShippingNotification({
-            to: order.user.email,
+            to: shippingRecipient,
             orderId: id,
             trackingNumber,
             market: order.market,

@@ -43,7 +43,15 @@ export async function getGift(req: Request, res: Response) {
 export async function createGift(req: Request, res: Response) {
     const data = giftSchema.parse(req.body);
 
-    const gift = await prisma.giftSet.create({ data: { ...data, badge: data.badge ?? null } });
+    let gift;
+    try {
+        gift = await prisma.giftSet.create({ data: { ...data, badge: data.badge ?? null } });
+    } catch (err) {
+        if ((err as { code?: string }).code === 'P2002') {
+            res.status(409).json({ error: 'A gift set with that slug already exists' }); return;
+        }
+        throw err;
+    }
 
     await writeAuditLog({
         req, event: 'GIFT_CREATE',
@@ -65,10 +73,18 @@ export async function updateGift(req: Request, res: Response) {
     const existing = await prisma.giftSet.findUnique({ where: { id } });
     if (!existing) { res.status(404).json({ error: 'Gift set not found' }); return; }
 
-    const gift = await prisma.giftSet.update({
-        where: { id },
-        data: { ...data, ...(data.badge !== undefined && { badge: data.badge ?? null }) },
-    });
+    let gift;
+    try {
+        gift = await prisma.giftSet.update({
+            where: { id },
+            data: { ...data, ...(data.badge !== undefined && { badge: data.badge ?? null }) },
+        });
+    } catch (err) {
+        if ((err as { code?: string }).code === 'P2002') {
+            res.status(409).json({ error: 'A gift set with that slug already exists' }); return;
+        }
+        throw err;
+    }
 
     // P3-3: audit log for updates (was missing)
     await writeAuditLog({

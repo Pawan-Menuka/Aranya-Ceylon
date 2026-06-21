@@ -94,7 +94,13 @@ export async function addToCart(
     });
 
     if (!variant) throw new Error('VARIANT_NOT_FOUND_FOR_MARKET');
-    if (variant.stock < data.quantity) throw new Error('INSUFFICIENT_STOCK');
+
+    // P1-2: validate against existing cart qty so repeated adds can't exceed stock
+    const existing = await prisma.cartItem.findUnique({
+        where: { cartId_variantId: { cartId, variantId: data.variantId } },
+        select: { quantity: true },
+    });
+    if (variant.stock < (existing?.quantity ?? 0) + data.quantity) throw new Error('INSUFFICIENT_STOCK');
 
     // Upsert: if same variant already in cart, increment quantity
     return prisma.cartItem.upsert({
@@ -122,10 +128,23 @@ export async function updateCartItem(
     data: UpdateCartItemInput,
 ) {
     if (data.quantity === 0) {
-        return prisma.cartItem.delete({
-            where: { id: itemId, cartId }, // cartId prevents IDOR
-        });
+        // P1-4: treat "already gone" as success (idempotent remove)
+        try {
+            return await prisma.cartItem.delete({ where: { id: itemId, cartId } });
+        } catch (err) {
+            if ((err as { code?: string }).code === 'P2025') return null;
+            throw err;
+        }
     }
+
+    // P1-3: validate stock before updating quantity
+    const item = await prisma.cartItem.findUnique({
+        where: { id: itemId, cartId },
+        include: { variant: { select: { stock: true } } },
+    });
+    // P1-4: missing/foreign item → caller gets null and the controller sends 404
+    if (!item) return null;
+    if (item.variant.stock < data.quantity) throw new Error('INSUFFICIENT_STOCK');
 
     return prisma.cartItem.update({
         where: { id: itemId, cartId },
