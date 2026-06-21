@@ -139,7 +139,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             : [...s.items, line];
           return { ...s, items };
         });
-        // Sync to backend when we have real IDs (fire-and-forget, optimistic).
+        // Sync to backend when we have real IDs; revert on failure.
         if (backendIds) {
           addCartItem({ productId: backendIds.productId, variantId: backendIds.variantId, quantity: qty })
             .then((res) => {
@@ -152,24 +152,33 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                 }));
               }
             })
-            .catch(() => { /* optimistic — local state stays */ });
+            .catch(() => {
+              // Backend rejected (e.g. out-of-stock) — remove the optimistic line.
+              setState((s) => ({ ...s, items: s.items.filter((i) => i.id !== line.id) }));
+            });
         }
       },
       inc: (id) => {
         setState((s) => {
           const item = s.items.find((i) => i.id === id);
+          const prevQty = item?.qty ?? 1;
           if (item?.backendItemId) {
-            updateCartItem(item.backendItemId, item.qty + 1).catch(() => {});
+            updateCartItem(item.backendItemId, prevQty + 1).catch(() => {
+              setState((prev) => ({ ...prev, items: prev.items.map((i) => (i.id === id ? { ...i, qty: prevQty } : i)) }));
+            });
           }
-          return { ...s, items: s.items.map((i) => (i.id === id ? { ...i, qty: i.qty + 1 } : i)) };
+          return { ...s, items: s.items.map((i) => (i.id === id ? { ...i, qty: prevQty + 1 } : i)) };
         });
       },
       dec: (id) => {
         setState((s) => {
           const item = s.items.find((i) => i.id === id);
-          const newQty = Math.max(1, (item?.qty ?? 1) - 1);
+          const prevQty = item?.qty ?? 1;
+          const newQty = Math.max(1, prevQty - 1);
           if (item?.backendItemId) {
-            updateCartItem(item.backendItemId, newQty).catch(() => {});
+            updateCartItem(item.backendItemId, newQty).catch(() => {
+              setState((prev) => ({ ...prev, items: prev.items.map((i) => (i.id === id ? { ...i, qty: prevQty } : i)) }));
+            });
           }
           return { ...s, items: s.items.map((i) => (i.id === id ? { ...i, qty: newQty } : i)) };
         });
@@ -177,9 +186,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       setQty: (id, qty) => {
         setState((s) => {
           const item = s.items.find((i) => i.id === id);
+          const prevQty = item?.qty ?? 1;
           const newQty = Math.max(1, qty);
           if (item?.backendItemId) {
-            updateCartItem(item.backendItemId, newQty).catch(() => {});
+            updateCartItem(item.backendItemId, newQty).catch(() => {
+              setState((prev) => ({ ...prev, items: prev.items.map((i) => (i.id === id ? { ...i, qty: prevQty } : i)) }));
+            });
           }
           return { ...s, items: s.items.map((i) => (i.id === id ? { ...i, qty: newQty } : i)) };
         });
@@ -188,7 +200,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         setState((s) => {
           const item = s.items.find((i) => i.id === id);
           if (item?.backendItemId) {
-            removeCartItem(item.backendItemId).catch(() => {});
+            removeCartItem(item.backendItemId).catch(() => {
+              // Restore the item if the backend remove failed.
+              setState((prev) => {
+                if (prev.items.some((i) => i.id === id)) return prev;
+                return { ...prev, items: [...prev.items, item] };
+              });
+            });
           }
           return { ...s, items: s.items.filter((i) => i.id !== id) };
         });

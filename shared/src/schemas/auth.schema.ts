@@ -30,8 +30,34 @@ export const resetPasswordSchema = z.object({
         .regex(/[^A-Za-z0-9]/),
 });
 
+export const patchMeSchema = z.object({
+    name: z.string().min(2).max(100).optional(),
+});
+
+const addressFields = {
+    label: z.string().max(50).optional(),
+    line1: z.string().min(1).max(200),
+    line2: z.string().max(200).optional(),
+    city: z.string().min(1).max(100),
+    country: z.string().length(2).transform((v) => v.toUpperCase()),
+    postalCode: z.string().max(20).optional(),
+    isDefault: z.boolean().optional(),
+};
+
+export const createAddressSchema = z.object(addressFields);
+
+export const updateAddressSchema = z.object({
+    ...addressFields,
+    line1: addressFields.line1.optional(),
+    city: addressFields.city.optional(),
+    country: z.string().length(2).transform((v) => v.toUpperCase()).optional(),
+});
+
 // TypeScript types auto-derived from Zod schemas
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+export type PatchMeInput = z.infer<typeof patchMeSchema>;
+export type CreateAddressInput = z.infer<typeof createAddressSchema>;
+export type UpdateAddressInput = z.infer<typeof updateAddressSchema>;

@@ -422,10 +422,24 @@ export function AccountDashboard() {
   const open = (o: AccountOrder) => { setOpenOrder(o.id); setView("detail"); window.scrollTo({ top: 0, behavior: "smooth" }); };
   const reorder = (o: AccountOrder) => {
     o.items.forEach((it) => {
-      const base = ACCOUNT_SPICES[it.key];
-      if (!base) return;
-      const spice = { name: base.name, latin: base.latin, origin: "Sri Lanka", color: base.color, base: base.base, deep: base.deep, surface: base.surface, rating: 4.8, reviews: 120, badge: "In Stock", usd: "$" + base.usd.toFixed(2), lkr: "Rs " + base.lkr.toLocaleString("en-US"), weights: ["50g", "100g", "250g"], slug: it.key };
-      cart.add(spice, it.weight, it.form, it.qty);
+      const staticBase = ACCOUNT_SPICES[it.key];
+      const spice = {
+        name: staticBase?.name ?? it.name,
+        latin: staticBase?.latin ?? "",
+        origin: "Sri Lanka",
+        color: it.color,
+        base: it.base,
+        deep: it.deep,
+        surface: it.surface,
+        rating: 4.8,
+        reviews: 120,
+        badge: "In Stock" as const,
+        usd: "$" + it.usd.toFixed(2),
+        lkr: "Rs " + it.lkr.toLocaleString("en-US"),
+        weights: ["50g", "100g", "250g"],
+        slug: it.key,
+      };
+      cart.add(spice, it.weight, it.form, it.qty, it.backendIds);
     });
     cart.openCart();
   };

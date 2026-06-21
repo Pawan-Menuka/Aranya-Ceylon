@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { validate } from '../middleware/validate.js';
 import { authLimiter, loginLimiter } from '../middleware/rateLimit.js';
-import { registerSchema, loginSchema } from '@aranya/shared';
+import { registerSchema, loginSchema, patchMeSchema, createAddressSchema, updateAddressSchema } from '@aranya/shared';
 
 const router = Router();
 
@@ -15,12 +15,12 @@ router.post('/refresh', authLimiter, asyncHandler(refresh));
 router.post('/logout', authLimiter, asyncHandler(logout));
 router.post('/logout-all', asyncHandler(requireAuth), asyncHandler(logoutAll));
 router.get('/me', asyncHandler(requireAuth), asyncHandler(getMe));
-router.patch('/me', asyncHandler(requireAuth), asyncHandler(patchMe));
+router.patch('/me', asyncHandler(requireAuth), validate(patchMeSchema), asyncHandler(patchMe));
 
 // Addresses
 router.get('/me/addresses', asyncHandler(requireAuth), asyncHandler(listAddresses));
-router.post('/me/addresses', asyncHandler(requireAuth), asyncHandler(createAddress));
-router.patch('/me/addresses/:id', asyncHandler(requireAuth), asyncHandler(updateAddress));
+router.post('/me/addresses', asyncHandler(requireAuth), validate(createAddressSchema), asyncHandler(createAddress));
+router.patch('/me/addresses/:id', asyncHandler(requireAuth), validate(updateAddressSchema), asyncHandler(updateAddress));
 router.delete('/me/addresses/:id', asyncHandler(requireAuth), asyncHandler(deleteAddress));
 
 export default router;

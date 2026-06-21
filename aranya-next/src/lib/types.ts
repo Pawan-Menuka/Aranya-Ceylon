@@ -77,8 +77,8 @@ export interface Blog {
 export interface OrderItem {
   quantity: number;
   unitPrice: string;
-  product: { name: string; slug: string };
-  variant: { weight: number };
+  product: { id?: string; name: string; slug: string };
+  variant: { id?: string; weight: number };
 }
 export interface OrderTimelineEntry {
   status: string;
