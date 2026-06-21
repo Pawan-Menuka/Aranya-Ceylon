@@ -2,6 +2,7 @@ import { prisma } from '../index.js';
 import { Prisma } from '@prisma/client';
 import type { Market } from '@prisma/client';
 import type { CreateProductInput, UpdateProductInput, ProductFilterInput } from '@aranya/shared';
+import { deleteImage } from './cloudinary.service.js';
 
 // ----------------------------------------------------------------
 // MARKET FILTER HELPER
@@ -364,10 +365,22 @@ export async function updateProduct(id: string, data: UpdateProductInput) {
 
 // --- Soft delete (archive) product (admin only) ---
 export async function archiveProduct(id: string) {
-    return prisma.product.update({
+    const images = await prisma.productImage.findMany({
+        where: { productId: id, publicId: { not: null } },
+        select: { publicId: true },
+    });
+
+    const product = await prisma.product.update({
         where: { id },
         data: { status: 'ARCHIVED' },
     });
+
+    // Best-effort Cloudinary cleanup — don't fail the archive if this errors.
+    await Promise.allSettled(
+        images.map((img) => deleteImage(img.publicId!)),
+    );
+
+    return product;
 }
 
 // --- Admin: list ALL products across both markets ---

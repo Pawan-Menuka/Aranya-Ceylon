@@ -342,7 +342,7 @@ function StripePaymentScreen({
 }) {
   const [stripeError, setStripeError] = React.useState("");
   const stripePromise = React.useMemo(
-    () => loadStripe(intent.publishableKey),
+    () => intent.publishableKey ? loadStripe(intent.publishableKey) : null,
     [intent.publishableKey],
   );
   return (

@@ -3,6 +3,7 @@ import { prisma } from '../index.js';
 import { Prisma } from '@prisma/client';
 
 export async function listWishlist(req: Request, res: Response) {
+    const market = req.market ?? 'INTERNATIONAL';
     const items = await prisma.wishlistItem.findMany({
         where: { userId: req.user!.userId },
         include: {
@@ -10,7 +11,10 @@ export async function listWishlist(req: Request, res: Response) {
                 select: {
                     id: true, name: true, slug: true, description: true,
                     featured: true, market: true, color: true, latin: true,
-                    variants: { select: { id: true, weight: true, price: true, currency: true, market: true, stock: true } },
+                    variants: {
+                        where: { market: { in: [market, 'BOTH'] } },
+                        select: { id: true, weight: true, price: true, currency: true, market: true, stock: true },
+                    },
                     category: { select: { id: true, name: true, slug: true } },
                 },
             },

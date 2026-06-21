@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // A product variant on create. market/currency are optional (default BOTH/LKR
 // preserves prior behaviour) so the admin can author per-market variants.
-const variantInput = z.object({
+const variantShape = z.object({
     weight: z.number().int().positive(),
     price: z.number().positive(),
     sku: z.string().min(1),
@@ -10,6 +10,17 @@ const variantInput = z.object({
     market: z.enum(['LOCAL', 'INTERNATIONAL', 'BOTH']).default('BOTH'),
     currency: z.enum(['LKR', 'USD', 'EUR', 'GBP']).default('LKR'),
 });
+
+function refineVariantMarket<T extends { market: string; currency: string }>(v: T, ctx: z.RefinementCtx) {
+    if (v.market === 'LOCAL' && v.currency !== 'LKR') {
+        ctx.addIssue({ code: 'custom', path: ['currency'], message: 'LOCAL variants must use LKR' });
+    }
+    if (v.market === 'INTERNATIONAL' && v.currency === 'LKR') {
+        ctx.addIssue({ code: 'custom', path: ['currency'], message: 'INTERNATIONAL variants must not use LKR' });
+    }
+}
+
+const variantInput = variantShape.superRefine(refineVariantMarket);
 
 export const createProductSchema = z.object({
     name: z.string().min(2).max(200),
@@ -36,7 +47,7 @@ export const updateProductSchema = z.object({
     latin: z.string().optional().nullable(),
     originLabel: z.string().optional().nullable(),
     color: z.string().optional().nullable(),
-    variants: z.array(variantInput.extend({ id: z.string().optional() })).min(1).optional(),
+    variants: z.array(variantShape.extend({ id: z.string().optional() }).superRefine(refineVariantMarket)).min(1).optional(),
 });
 
 export const productFilterSchema = z.object({
@@ -44,10 +55,14 @@ export const productFilterSchema = z.object({
     limit: z.coerce.number().min(1).max(100).default(12),
     category: z.string().optional(),
     featured: z.coerce.boolean().optional(),
-    minPrice: z.coerce.number().optional(),
-    maxPrice: z.coerce.number().optional(),
+    minPrice: z.coerce.number().min(0).optional(),
+    maxPrice: z.coerce.number().min(0).optional(),
     sort: z.enum(['newest', 'price_asc', 'price_desc', 'bestselling']).default('newest'),
     search: z.string().optional(),
+}).superRefine((v, ctx) => {
+    if (v.minPrice !== undefined && v.maxPrice !== undefined && v.minPrice > v.maxPrice) {
+        ctx.addIssue({ code: 'custom', path: ['minPrice'], message: 'minPrice must be ≤ maxPrice' });
+    }
 });
 
 export type CreateProductInput = z.infer<typeof createProductSchema>;
