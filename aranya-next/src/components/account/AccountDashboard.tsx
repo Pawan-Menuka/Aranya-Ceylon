@@ -327,16 +327,9 @@ function ProfileView({ market, userName, userEmail }: { market: Market; userName
         </button>
       </div>
       </form>
-      <div style={{ background: "#FFFDF9", border: "1px solid var(--line)", borderRadius: 14, padding: "26px 28px", marginBottom: 18 }}>
-        <h2 className="disp" style={{ fontSize: 23, color: "var(--ink)", margin: "0 0 18px" }}>Password</h2>
-        <div style={{ display: "grid", gap: 14 }}>
-          <ProfileField label="Current password" value="" type="password" />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <ProfileField label="New password" value="" type="password" />
-            <ProfileField label="Confirm new password" value="" type="password" />
-          </div>
-        </div>
-        <button className="btn btn-ghost" style={{ width: "auto", padding: "12px 24px", marginTop: 20 }}>Update password</button>
+      <div style={{ background: "#FFFDF9", border: "1px solid var(--line)", borderRadius: 14, padding: "26px 28px", marginBottom: 18, opacity: 0.6 }}>
+        <h2 className="disp" style={{ fontSize: 23, color: "var(--ink)", margin: "0 0 6px" }}>Password</h2>
+        <p style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--muted)", margin: "0 0 0" }}>Password changes are not yet available. Use &ldquo;Forgot password&rdquo; on the sign-in screen to reset.</p>
       </div>
       <div style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 14, padding: "22px 28px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>
