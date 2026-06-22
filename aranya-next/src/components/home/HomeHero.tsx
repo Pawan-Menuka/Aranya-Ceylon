@@ -1,19 +1,34 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
-import { Seal } from "../primitives/Seal";
 import { Icon } from "../primitives/Icon";
 import { useMarket } from "../MarketContext";
+import HeroTextOverlay from "./HeroTextOverlay";
 
 // Homepage hero: 300vh pinned scroll-driven frame sequence (AranyaHero design)
 // + entrance choreography + amber spice-dust canvas + kinetic letter-spacing.
 // Frames are served from /public/hero/{desktop,mobile}/frame_0001.jpg … 0192.jpg.
 const TOTAL_FRAMES = 192;
-const SCROLL_MULTIPLIER = 5; // hero scroll room = SCROLL_MULTIPLIER × 100vh (more room = slower pace)
+// Hero pinned-scroll budget, expressed in units of 100vh:
+//   FRAME_SCROLL = distance over which the 192 frames play (keeps the playback pace).
+//   FRAME_HOLD   = extra distance that HOLDS on the final frame before the hero un-pins.
+// Total wrapper height = (FRAME_SCROLL + FRAME_HOLD + 1) × 100vh; the +1 is the sticky
+// 100vh viewport itself, which is subtracted out to form the 0→1 scroll span.
+const FRAME_SCROLL = 4;   // 400vh of frame playback (unchanged pace)
+const FRAME_HOLD = 1.6;   // 160vh holding on the last frame before scrolling on
+const SCROLL_MULTIPLIER = FRAME_SCROLL + FRAME_HOLD + 1;
+// Fraction of the 0→1 scroll reserved as the final-frame hold tail.
+const FRAME_HOLD_TAIL = FRAME_HOLD / (FRAME_SCROLL + FRAME_HOLD);
 const SMOOTHING = 0.08;      // lerp factor: lower = smoother/floatier, higher = snappier
 const framePath = (index: number, isMobile: boolean) =>
   `/hero/${isMobile ? "mobile" : "desktop"}/frame_${String(index + 1).padStart(4, "0")}.webp`;
+
+// Map raw scroll progress (0→1) to a frame target index. Frames reach the last one
+// at progress === (1 - FRAME_HOLD_TAIL), then stay pinned on it through the tail.
+function frameTarget(p: number) {
+  const fp = Math.min(1, Math.max(0, p) / (1 - FRAME_HOLD_TAIL));
+  return Math.min(TOTAL_FRAMES - 1, Math.max(0, fp * (TOTAL_FRAMES - 1)));
+}
 
 function smooth(a: number, b: number, x: number) {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -179,10 +194,10 @@ function HeroFrames({ progress }: { progress: number }) {
   // Continuous render loop — glides toward the scroll target instead of jumping.
   React.useEffect(() => {
     let running = true;
-    let rendered = progressRef.current * (TOTAL_FRAMES - 1);
+    let rendered = frameTarget(progressRef.current);
     const tick = () => {
       if (!running) return;
-      const target = Math.min(TOTAL_FRAMES - 1, Math.max(0, progressRef.current * (TOTAL_FRAMES - 1)));
+      const target = frameTarget(progressRef.current);
       // Lerp: move a fraction of the remaining distance each frame.
       rendered += (target - rendered) * SMOOTHING;
       const idx = Math.round(rendered);
@@ -237,10 +252,7 @@ export function HomeHero({ dust = true }: { dust?: boolean }) {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const brandFade = 1 - smooth(0.4, 0.74, p);
   const scrollFade = 1 - smooth(0.02, 0.12, p);
-  const track = (0.14 + smooth(0, 0.74, p) * 0.16).toFixed(3);
-  const lift = (smooth(0, 0.74, p) * 36).toFixed(1);
 
   return (
     <div ref={wrapRef} data-hero data-screen-label="Hero" style={{ height: `${SCROLL_MULTIPLIER * 100}vh`, position: "relative" }}>
@@ -250,23 +262,8 @@ export function HomeHero({ dust = true }: { dust?: boolean }) {
         <HeroDust progress={p} enabled={dust} />
         <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 180, background: "linear-gradient(180deg, transparent, var(--bg))", opacity: smooth(0.88, 1, p) }} />
 
-        {/* brand overlay — choreographed entrance, kinetic on scroll */}
-        <div style={{ position: "absolute", left: 0, right: 0, top: "50%", transform: `translateY(calc(-50% - ${lift}px))`, display: "flex", flexDirection: "column", alignItems: "center", opacity: brandFade, pointerEvents: "none" }}>
-          <div className="hero-anim-seal"><Seal size={62} tone="light" /></div>
-          <div className="hero-anim-rule" style={{ width: 44, height: 1.5, background: "var(--accent)", margin: "26px 0 22px" }} />
-          <div className="disp" aria-label="ARANYA" style={{ fontSize: "clamp(48px,7vw,92px)", fontWeight: 600, color: "#FDFAF5", letterSpacing: track + "em", lineHeight: 1, textIndent: track + "em", whiteSpace: "nowrap" }}>
-            {"ARANYA".split("").map((ch, i) => (
-              <span key={i} className="hero-letter" aria-hidden="true" style={{ display: "inline-block", animationDelay: 0.7 + i * 0.07 + "s" }}>{ch}</span>
-            ))}
-          </div>
-          <div className="disp hero-anim-ceylon" style={{ fontStyle: "italic", fontSize: "clamp(16px,2.2vw,24px)", color: "var(--accent)", letterSpacing: ".34em", marginTop: 16, textIndent: ".34em" }}>CEYLON</div>
-          <div className="hero-anim-rule2" style={{ width: 44, height: 1.5, background: "var(--accent)", margin: "22px 0 0" }} />
-          <p className="hero-anim-tag" style={{ fontFamily: "var(--font-ui)", fontSize: 13, letterSpacing: ".04em", color: "rgba(253,250,245,.7)", marginTop: 22 }}>Spice, as the forest intended.</p>
-          <Link href="/products" className="btn btn-intl hero-anim-cta" style={{ width: "auto", padding: "14px 32px", marginTop: 28, fontSize: 13, letterSpacing: ".1em", textTransform: "uppercase", display: "inline-flex", alignItems: "center", gap: 10, pointerEvents: brandFade > 0.4 ? "auto" : "none" }}>
-            Discover our spices
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-          </Link>
-        </div>
+        {/* brand text layer — eases in as the frame sequence plays, then holds */}
+        <HeroTextOverlay progress={p} holdTail={FRAME_HOLD_TAIL} ctaHref="/products" />
 
         {/* scroll indicator */}
         <div style={{ position: "absolute", left: 0, right: 0, bottom: 30, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: scrollFade, pointerEvents: "none" }}>
