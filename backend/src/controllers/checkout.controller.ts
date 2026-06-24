@@ -97,7 +97,7 @@ export async function createIntent(req: Request, res: Response) {
     }
 
     // Calculate total server-side (applies any coupon on the cart, and gift wrap pricing)
-    const { totalInCents, total, subtotal, shippingCost, discount, couponId, currency }
+    const { totalInCents, total, shippingCost, discount, couponId, currency }
         = await calculateCartTotal(cart.id, market, shippingMethod, giftWrap);
 
     // Create the order in PENDING state — permanently stamps market + currency
