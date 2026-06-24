@@ -27,15 +27,15 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
         <LP>We only collect what we need to mill, pack, ship and support your order:</LP>
         <LH>You give us</LH>
         <LUL items={[
-          <span><b style={ink}>Contact &amp; delivery details</b> — name, email, phone, billing and shipping address.</span>,
-          <span><b style={ink}>Order details</b> — the spices you buy, gift messages, and your chosen market (USD international or LKR local).</span>,
-          <span><b style={ink}>Account details</b> — if you create one: a password (stored encrypted) and saved preferences such as your wishlist and Harvest Club points.</span>,
-          <span><b style={ink}>Messages</b> — anything you send us by email, contact form or WhatsApp.</span>,
+          <span key="contact"><b style={ink}>Contact &amp; delivery details</b> — name, email, phone, billing and shipping address.</span>,
+          <span key="order"><b style={ink}>Order details</b> — the spices you buy, gift messages, and your chosen market (USD international or LKR local).</span>,
+          <span key="account"><b style={ink}>Account details</b> — if you create one: a password (stored encrypted) and saved preferences such as your wishlist and Harvest Club points.</span>,
+          <span key="messages"><b style={ink}>Messages</b> — anything you send us by email, contact form or WhatsApp.</span>,
         ]} />
         <LH>We collect automatically</LH>
         <LUL items={[
-          <span><b style={ink}>Device &amp; usage data</b> — IP address, browser, pages viewed and referring links, to keep the store secure and improve it.</span>,
-          <span><b style={ink}>Cookies</b> — small files that remember your cart, market and preferences. See our <Link href="/cookies" style={linkStyle}>Cookie Policy</Link>.</span>,
+          <span key="device"><b style={ink}>Device &amp; usage data</b> — IP address, browser, pages viewed and referring links, to keep the store secure and improve it.</span>,
+          <span key="cookies"><b style={ink}>Cookies</b> — small files that remember your cart, market and preferences. See our <Link href="/cookies" style={linkStyle}>Cookie Policy</Link>.</span>,
         ]} />
         <LCallout icon="shield">We never collect your full card number. Payments are handled directly by our PCI-compliant payment processor — we only see the result and the last four digits.</LCallout>
       </>
@@ -64,10 +64,10 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       <>
         <LP>We do not sell your personal information. We share it only with the partners who help us run the store, and only the data they need:</LP>
         <LUL items={[
-          <span><b style={ink}>Payment processors</b> — to take payment securely.</span>,
-          <span><b style={ink}>Couriers &amp; logistics</b> — to deliver your parcel and, for international orders, to clear customs.</span>,
-          <span><b style={ink}>Technology providers</b> — hosting, email and analytics that operate the site on our behalf under contract.</span>,
-          <span><b style={ink}>Authorities</b> — where the law requires it, or to protect our rights and the safety of others.</span>,
+          <span key="payment"><b style={ink}>Payment processors</b> — to take payment securely.</span>,
+          <span key="couriers"><b style={ink}>Couriers &amp; logistics</b> — to deliver your parcel and, for international orders, to clear customs.</span>,
+          <span key="tech"><b style={ink}>Technology providers</b> — hosting, email and analytics that operate the site on our behalf under contract.</span>,
+          <span key="authorities"><b style={ink}>Authorities</b> — where the law requires it, or to protect our rights and the safety of others.</span>,
         ]} />
         <LP>If Aranya is ever involved in a merger or acquisition, your information may transfer to the successor under the same protections set out here.</LP>
       </>
@@ -268,9 +268,9 @@ export const COOKIES_SECTIONS: LegalSection[] = [
       <>
         <LP>A few partners may set cookies when you use the store, governed by their own privacy notices:</LP>
         <LUL items={[
-          <span><b style={ink}>Payment providers</b> — to process payments securely and help prevent fraud.</span>,
-          <span><b style={ink}>Analytics providers</b> — to give us aggregate, privacy-respecting usage statistics.</span>,
-          <span><b style={ink}>Social &amp; media embeds</b> — if a page includes content such as a video or social post.</span>,
+          <span key="payment"><b style={ink}>Payment providers</b> — to process payments securely and help prevent fraud.</span>,
+          <span key="analytics"><b style={ink}>Analytics providers</b> — to give us aggregate, privacy-respecting usage statistics.</span>,
+          <span key="embeds"><b style={ink}>Social &amp; media embeds</b> — if a page includes content such as a video or social post.</span>,
         ]} />
         <LP>We don&rsquo;t control these cookies. Please review each provider&rsquo;s policy for details of how they use data.</LP>
       </>

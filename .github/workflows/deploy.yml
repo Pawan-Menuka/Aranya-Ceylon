@@ -26,6 +26,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build shared package
+        run: pnpm --filter @aranya/shared build
+
+      - name: Generate Prisma client
+        run: pnpm --filter @aranya/backend exec prisma generate
+
       - name: Run database migrations
         run: pnpm --filter @aranya/backend exec prisma migrate deploy
         # migrate deploy applies existing migration files only —
