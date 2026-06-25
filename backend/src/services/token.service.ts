@@ -129,3 +129,53 @@ export async function revokeAllUserTokens(userId: string) {
         where: { userId, type: 'REFRESH' },
     });
 }
+
+// How long an email-verification link stays valid
+const EMAIL_VERIFY_TOKEN_EXPIRY_HOURS = 24;
+
+// --- Issue a single-use email-verification token ---
+// Same opaque-token + SHA-256-hash pattern as refresh tokens: the plaintext
+// goes only into the emailed link, the DB stores only its hash.
+export async function issueEmailVerificationToken(userId: string): Promise<string> {
+    const plaintext = createId() + createId(); // 48 random chars
+
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + EMAIL_VERIFY_TOKEN_EXPIRY_HOURS);
+
+    await prisma.token.create({
+        data: {
+            userId,
+            tokenHash: hashToken(plaintext),
+            type: 'EMAIL_VERIFY',
+            expiresAt,
+        },
+    });
+
+    return plaintext;
+}
+
+// --- Consume an email-verification token ---
+// Marks the user verified and burns the token (single-use). Throws on any
+// invalid/expired/already-used token so the caller can show a neutral result.
+export async function verifyEmailToken(plaintext: string): Promise<void> {
+    if (!plaintext) throw new Error('INVALID_VERIFICATION_TOKEN');
+
+    const record = await prisma.token.findUnique({
+        where: { tokenHash: hashToken(plaintext) },
+    });
+
+    if (!record || record.type !== 'EMAIL_VERIFY' || record.usedAt !== null) {
+        throw new Error('INVALID_VERIFICATION_TOKEN');
+    }
+
+    if (record.expiresAt < new Date()) {
+        await prisma.token.delete({ where: { id: record.id } });
+        throw new Error('VERIFICATION_TOKEN_EXPIRED');
+    }
+
+    // Flip verified + burn the token atomically so a replayed link can't re-run.
+    await prisma.$transaction([
+        prisma.user.update({ where: { id: record.userId }, data: { verified: true } }),
+        prisma.token.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
+    ]);
+}

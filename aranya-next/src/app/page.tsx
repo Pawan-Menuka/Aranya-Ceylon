@@ -1,4 +1,5 @@
 import { resolveMarket } from "@/lib/market";
+import { jsonLdHtml } from "@/lib/json-ld";
 import { getFeatured, getBestsellers } from "@/lib/api/products";
 import { SPICES, toSpice } from "@/lib/spice-data";
 import { HomePage } from "@/components/home/HomePage";
@@ -45,7 +46,7 @@ export default async function Page() {
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />
       <HomePage initialMarket={market} featured={featured} bestsellers={bestsellers} ticker={ticker} />
     </>
   );
