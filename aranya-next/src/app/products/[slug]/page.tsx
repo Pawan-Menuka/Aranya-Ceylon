@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { jsonLdHtml } from "@/lib/json-ld";
 import { notFound } from "next/navigation";
 import { resolveMarket } from "@/lib/market";
 import { getProduct, listProducts } from "@/lib/api/products";
@@ -88,7 +89,7 @@ export default async function ProductPage({ params }: { params: { slug: string }
 
   return (
     <SiteChrome initialMarket={market}>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />
       <ProductDetail spice={spice} related={related} product={product} />
     </SiteChrome>
   );

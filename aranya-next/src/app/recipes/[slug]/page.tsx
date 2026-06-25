@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { jsonLdHtml } from "@/lib/json-ld";
 import { notFound } from "next/navigation";
 import { resolveMarket } from "@/lib/market";
 import { RECIPES, getRecipe, recipeTotal } from "@/lib/recipes-data";
@@ -52,7 +53,7 @@ export default async function RecipeDetailPage({ params }: { params: { slug: str
 
   return (
     <SiteChrome initialMarket={market} hero>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />
       <RecipeDetailClient recipe={recipe} related={related} />
     </SiteChrome>
   );

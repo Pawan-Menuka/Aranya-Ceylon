@@ -2,7 +2,8 @@ import type { Request, Response } from 'express';
 import { hash, verify } from '@node-rs/bcrypt';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../index.js';
-import { issueTokenPair, rotateRefreshToken, revokeTokenFamily, revokeAllUserTokens } from '../services/token.service.js';
+import { issueTokenPair, rotateRefreshToken, revokeTokenFamily, revokeAllUserTokens, issueEmailVerificationToken, verifyEmailToken } from '../services/token.service.js';
+import { sendVerificationEmail } from '../services/email.service.js';
 import type { RegisterInput, LoginInput } from '@aranya/shared';
 
 const BCRYPT_ROUNDS = 12;
@@ -41,7 +42,7 @@ export async function register(req: Request, res: Response) {
     const passwordHash = await hash(password, BCRYPT_ROUNDS);
 
     try {
-        await prisma.user.create({
+        const user = await prisma.user.create({
             data: {
                 name,
                 email,
@@ -50,7 +51,22 @@ export async function register(req: Request, res: Response) {
                 verified: process.env.NODE_ENV === 'development',
             },
         });
-        // TODO (roadmap): send verification email via Resend here.
+
+        // Send the verification email for accounts that aren't auto-verified.
+        // Fire-and-forget: keeping it OUT of the awaited path preserves both the
+        // response latency and the neutral, timing-flat anti-enumeration profile
+        // (a slow mail send must not make "new email" distinguishable). Failures
+        // are logged, never surfaced — registration still succeeds.
+        if (user && !user.verified) {
+            void (async () => {
+                try {
+                    const token = await issueEmailVerificationToken(user.id);
+                    await sendVerificationEmail({ to: user.email, token });
+                } catch (mailErr) {
+                    console.error('[register] verification email failed:', mailErr);
+                }
+            })();
+        }
     } catch (err) {
         // P2002 = unique violation on email → already registered. Swallow it and
         // return the identical neutral response. Re-throw anything else.
@@ -60,6 +76,23 @@ export async function register(req: Request, res: Response) {
     }
 
     return res.status(201).json({ message: NEUTRAL_REGISTER_MESSAGE });
+}
+
+// --- Verify email ---
+// GET /auth/verify?token=… — clicked from the verification email. Marks the
+// account verified, then redirects to the storefront with a result flag.
+// Always redirects (never leaks token validity in the body); a bad/expired
+// token just lands on ?verified=0.
+export async function verifyEmail(req: Request, res: Response) {
+    const token = typeof req.query.token === 'string' ? req.query.token : '';
+    const frontend = (process.env.FRONTEND_URL ?? 'http://localhost:3000').split(',')[0]!.trim();
+
+    try {
+        await verifyEmailToken(token);
+        return res.redirect(`${frontend}/login?verified=1`);
+    } catch {
+        return res.redirect(`${frontend}/login?verified=0`);
+    }
 }
 
 // --- Login ---
