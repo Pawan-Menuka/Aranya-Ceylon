@@ -1,4 +1,7 @@
 import 'dotenv/config';
+// Validate environment FIRST — importing this exits the process in production
+// if a required secret is missing/weak, before any server or DB setup runs.
+import { env } from './config/env.js';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -21,6 +24,7 @@ import recipeRoutes from './routes/recipe.routes.js';
 import giftRoutes from './routes/gift.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
 import { resolveMarket } from './middleware/market.js';
+import { globalLimiter } from './middleware/rateLimit.js';
 import adminRoutes from './routes/admin.routes.js';
 import contactRoutes from './routes/contact.routes.js';
 import wholesaleRoutes from './routes/wholesale.routes.js';
@@ -47,7 +51,7 @@ if (process.env.NODE_ENV === 'production') {
 neonConfig.webSocketConstructor = ws;
 
 // 2. Prisma 7 Neon adapter — manages its own connection pool internally.
-const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaNeon({ connectionString: env.DATABASE_URL });
 
 export const prisma = new PrismaClient({
     adapter,
@@ -82,6 +86,10 @@ app.use(cors({
 app.use(express.json({ limit: '512kb' })); // 10kb was too small for admin blog/recipe bodies
 app.use(cookieParser());
 app.use(resolveMarket);
+
+// Global IP rate limit on all browser-facing routes below. Mounted AFTER the
+// webhook routes (above) so payment-gateway retries are never throttled.
+app.use(globalLimiter);
 
 // --- Routes ---
 app.use('/auth', authRoutes);

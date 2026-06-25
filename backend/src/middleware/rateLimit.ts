@@ -28,3 +28,38 @@ export const authLimiter = rateLimit({
     legacyHeaders: false,
     ...json429('Too many requests. Please slow down and try again shortly.'),
 });
+
+// Global baseline limiter applied to every API route (mounted in index.ts).
+// Generous enough for normal browsing — a product page fires several API calls —
+// but caps scripted abuse on the endpoints that previously had no limiter at all
+// (cart, products, etc.). Webhooks are mounted ABOVE this in index.ts and are
+// intentionally exempt: payment gateways legitimately retry. /health is skipped
+// so uptime monitors aren't throttled.
+export const globalLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    limit: 120,          // 120 requests per IP per minute
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    skip: (req: { path?: string }) => req.path === '/health',
+    ...json429('Too many requests. Please slow down.'),
+});
+
+// Tight limiter for checkout: POST /checkout/create-intent creates a Stripe
+// PaymentIntent (an external, billable API call) and is reachable by guests.
+// Without this, the endpoint can be hammered to run up gateway cost / noise.
+export const checkoutLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 20,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    ...json429('Too many checkout attempts. Please wait a moment and try again.'),
+});
+
+// Anti-spam limiter for the public, unauthenticated contact form.
+export const contactLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    limit: 5,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    ...json429('Too many messages sent. Please try again later.'),
+});
