@@ -1,4 +1,5 @@
 import type { GiftSet } from "@/lib/gifts-data";
+import { formatMoney } from "@/lib/money";
 
 // Server-side only — called from Next.js server components.
 // Falls back gracefully when backend is unavailable so ISR/SSG never fails.
@@ -18,8 +19,8 @@ interface ApiGiftSet {
   base: string;
   deep: string;
   surface: string;
-  usd: string;
-  lkr: string;
+  usd: string; // Prisma Decimal serialised as a numeric string, e.g. "28.50"
+  lkr: string; // e.g. "4250"
   contents: string[];
   status: string;
   createdAt: string;
@@ -39,8 +40,10 @@ function toGiftSet(g: ApiGiftSet): GiftSet {
     base: g.base,
     deep: g.deep,
     surface: g.surface,
-    usd: g.usd,
-    lkr: g.lkr,
+    // Format the Decimal price into the display strings the storefront UI
+    // expects ("$28.50" / "Rs 4,250") — same helper products use.
+    usd: formatMoney(g.usd, "USD"),
+    lkr: formatMoney(g.lkr, "LKR"),
     contents: g.contents,
   };
 }

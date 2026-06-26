@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { jsonLdHtml } from "@/lib/json-ld";
 import { notFound } from "next/navigation";
 import { resolveMarket } from "@/lib/market";
 import { getBlogPost } from "@/lib/api/blog";
@@ -59,7 +60,7 @@ export default async function ArticlePage({ params }: { params: { slug: string }
 
   return (
     <SiteChrome initialMarket={market} hero>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />
       <ArticleClient post={post} blocks={blocks} related={related} />
     </SiteChrome>
   );

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import * as productController from '../controllers/product.controller.js';
 import { requireAuth, requireRole } from '../middleware/authenticate.js';
-import { uploadMiddleware } from '../middleware/upload.js';
+import { uploadMiddleware, validateImageContent } from '../middleware/upload.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 const router = Router();
 
@@ -29,6 +29,7 @@ router.patch('/:id',
 router.post('/:id/images',
     asyncHandler(requireAuth), requireRole('ADMIN', 'SUPERADMIN'),
     uploadMiddleware.array('images', 10),
+    validateImageContent, // reject spoofed Content-Type by checking magic bytes
     asyncHandler(productController.uploadProductImages),
 );
 router.delete('/:id',

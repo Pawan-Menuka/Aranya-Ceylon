@@ -8,6 +8,7 @@ import { Stars } from "../primitives/Stars";
 import { Icon } from "../primitives/Icon";
 import { CardCFinal } from "../cards/Cards";
 import { pdContent, PD_REVIEWS } from "@/lib/pd-content";
+import { sanitizeHtml } from "@/lib/sanitize";
 
 // Product-detail editorial sections (ported from product-detail-2.jsx):
 // ForestStory · FlavourProfile · Pairings · ReviewsBlock · Related.
@@ -22,7 +23,7 @@ export function ForestStory({ spice }: { spice: Spice }) {
         <h2 className="disp" style={{ fontSize: 44, color: "var(--brand)", textAlign: "center", margin: "18px 0 52px", lineHeight: 1.06 }}>{c.storyTitle}</h2>
         <div className="pd-two" style={{ alignItems: "start", maxWidth: 980, margin: "0 auto" }}>
           {c.story.map((p, i) => (
-            <p key={i} className="prose" style={{ fontSize: 17.5, color: "var(--ink)", margin: 0 }} dangerouslySetInnerHTML={{ __html: p }} />
+            <p key={i} className="prose" style={{ fontSize: 17.5, color: "var(--ink)", margin: 0 }} dangerouslySetInnerHTML={{ __html: sanitizeHtml(p) }} />
           ))}
         </div>
         <figure style={{ maxWidth: 760, margin: "60px auto 0", textAlign: "center" }}>

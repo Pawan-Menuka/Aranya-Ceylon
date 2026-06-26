@@ -1,0 +1,40 @@
+# Dependency update automation. Complements the (report-only) `pnpm audit` step
+# in CI: audit tells you a vuln exists, Dependabot opens the PR that fixes it.
+#
+# Note the dual lockfile layout:
+#   - the pnpm workspace at the repo root (pnpm-lock.yaml) covers backend,
+#     shared, and aranya-next's package.json
+#   - aranya-next also keeps its own package-lock.json, used by the npm-based
+#     `frontend` CI job — so it gets a second entry to keep that lockfile current
+version: 2
+updates:
+  # pnpm workspace (backend + shared + aranya-next)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      # One PR per week for routine patch/minor bumps to keep noise low.
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # aranya-next's standalone npm lockfile (frontend CI job uses `npm ci`)
+  - package-ecosystem: "npm"
+    directory: "/aranya-next"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions used by the CI / Deploy workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

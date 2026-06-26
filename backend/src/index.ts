@@ -1,4 +1,7 @@
 import 'dotenv/config';
+// Validate environment FIRST — importing this exits the process in production
+// if a required secret is missing/weak, before any server or DB setup runs.
+import { env } from './config/env.js';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -21,6 +24,8 @@ import recipeRoutes from './routes/recipe.routes.js';
 import giftRoutes from './routes/gift.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
 import { resolveMarket } from './middleware/market.js';
+import { globalLimiter } from './middleware/rateLimit.js';
+import { requestTimeout } from './middleware/timeout.js';
 import adminRoutes from './routes/admin.routes.js';
 import contactRoutes from './routes/contact.routes.js';
 import wholesaleRoutes from './routes/wholesale.routes.js';
@@ -47,7 +52,7 @@ if (process.env.NODE_ENV === 'production') {
 neonConfig.webSocketConstructor = ws;
 
 // 2. Prisma 7 Neon adapter — manages its own connection pool internally.
-const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaNeon({ connectionString: env.DATABASE_URL });
 
 export const prisma = new PrismaClient({
     adapter,
@@ -82,6 +87,13 @@ app.use(cors({
 app.use(express.json({ limit: '512kb' })); // 10kb was too small for admin blog/recipe bodies
 app.use(cookieParser());
 app.use(resolveMarket);
+// 30s per-request inactivity timeout on all browser-facing routes. Mounted
+// AFTER the webhook routes (above) so gateway deliveries are never cut off.
+app.use(requestTimeout(30_000));
+
+// Global IP rate limit on all browser-facing routes below. Mounted AFTER the
+// webhook routes (above) so payment-gateway retries are never throttled.
+app.use(globalLimiter);
 
 // --- Routes ---
 app.use('/auth', authRoutes);
@@ -156,6 +168,13 @@ connectDB().then(() => {
         // flag (e.g. only run on instance 0) so jobs don't double-fire.
         startAllJobs(); // Start after DB connection confirmed
     });
+
+    // Connection-level timeouts (slow-loris / dead-peer protection).
+    // keepAliveTimeout is raised above the typical proxy idle timeout so the
+    // upstream (Railway) closes first — avoids spurious 502s on reused sockets —
+    // and headersTimeout is kept just above it (Node requires headers >= keepAlive).
+    server.keepAliveTimeout = 65_000;
+    server.headersTimeout = 66_000;
 
     // --- Graceful shutdown ---
     // PaaS platforms send SIGTERM on rolling restarts/deploys. Stop accepting

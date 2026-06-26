@@ -1,6 +1,10 @@
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY!);
+// Placeholder fallback so the module imports without a key (mirrors
+// stripe.service). Real sends only happen with a real RESEND_API_KEY; callers
+// (e.g. register's verification email) wrap sends in try/catch, so a missing key
+// degrades to a logged error rather than crashing the process at import.
+const resend = new Resend(process.env.RESEND_API_KEY ?? 're_stub_unused_key');
 const FROM = process.env.EMAIL_FROM ?? 'orders@aranyaceylon.com';
 
 // --- Order confirmation ---
@@ -27,6 +31,27 @@ export async function sendOrderConfirmation(params: {
                 : 'Your order will be dispatched within 2–3 business days via DHL or FedEx.'
             }</p>
             <p>Track your order at <a href="${process.env.FRONTEND_URL}/account/orders">aranyaceylon.com</a></p>
+        `,
+    });
+}
+
+// --- Email verification ---
+// Link points at the API's GET /auth/verify, which marks the account verified
+// and then redirects the browser back to the storefront.
+export async function sendVerificationEmail(params: { to: string; token: string }) {
+    const { to, token } = params;
+    const apiUrl = process.env.API_URL ?? 'http://localhost:4000';
+    const verifyUrl = `${apiUrl}/auth/verify?token=${encodeURIComponent(token)}`;
+
+    await resend.emails.send({
+        from: FROM,
+        to,
+        subject: 'Verify your Aranya Ceylon email',
+        html: `
+            <h2>Welcome to Aranya Ceylon</h2>
+            <p>Please confirm your email address to activate your account.</p>
+            <p><a href="${verifyUrl}">Verify my email</a></p>
+            <p>This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.</p>
         `,
     });
 }
