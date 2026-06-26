@@ -39,7 +39,9 @@ const PORT = process.env.PORT ?? 4000;
 // Behind a reverse proxy (Render/Railway/Fly/Nginx) the client IP arrives in
 // X-Forwarded-For. Trust the first hop so rate limiting keys on the real IP.
 if (process.env.NODE_ENV === 'production') {
-    app.set('trust proxy', 1);
+    // Number of proxy hops in front of the app: Railway alone = 1, with
+    // Cloudflare added = 2. Configurable so adding Cloudflare is a config change.
+    app.set('trust proxy', env.TRUST_PROXY);
 }
 
 // 1. Connect via Neon's serverless driver (#28). The previous node-postgres

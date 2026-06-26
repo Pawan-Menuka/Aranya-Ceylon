@@ -42,6 +42,13 @@ const envSchema = z
         PAYMENTS_MODE: z.enum(['stub', 'live']).default('stub'),
         ENABLE_DEV_ROUTES: z.string().optional(),
 
+        // Proxy / client-IP resolution. TRUST_PROXY is the number of proxy hops
+        // in front of the app (Railway alone = 1; with Cloudflare added = 2).
+        // TRUST_CLOUDFLARE=true makes rate limiting + audit logs key on the
+        // CF-Connecting-IP header (the real client) instead of an edge IP.
+        TRUST_PROXY: z.coerce.number().int().min(0).default(1),
+        TRUST_CLOUDFLARE: z.string().optional().transform((v) => v === 'true'),
+
         // Payment gateways — required only when PAYMENTS_MODE=live (see superRefine).
         STRIPE_SECRET_KEY: z.string().optional(),
         STRIPE_WEBHOOK_SECRET: z.string().optional(),
