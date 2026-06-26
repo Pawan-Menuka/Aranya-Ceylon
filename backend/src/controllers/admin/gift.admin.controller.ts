@@ -16,8 +16,10 @@ const giftSchema = z.object({
     base: z.string().default('#C2772E'),
     deep: z.string().default('#7E481A'),
     surface: z.string().default('#F3E7D4'),
-    usd: z.string().min(1),
-    lkr: z.string().min(1),
+    // Prices stored as Decimal; coerce so a numeric string from the form is
+    // accepted and validated as a positive number.
+    usd: z.coerce.number().positive(),
+    lkr: z.coerce.number().positive(),
     contents: z.array(z.string()).min(1),
     status: z.enum(['DRAFT', 'PUBLISHED']).default('DRAFT'),
 });
