@@ -448,8 +448,8 @@ model GiftSet {
   base      String     @default("#C2772E")
   deep      String     @default("#7E481A")
   surface   String     @default("#F3E7D4")
-  usd       String     // "$28.50"  — stored as formatted string to match UI
-  lkr       String     // "Rs 4,250"
+  usd       Decimal    @db.Decimal(10, 2) // price in USD — formatted at render
+  lkr       Decimal    @db.Decimal(10, 2) // price in LKR — formatted at render
   contents  String[]   // product names matching CATALOG
   status    BlogStatus @default(PUBLISHED)
   createdAt DateTime   @default(now())

@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import { GIFTS } from "@/lib/gifts-data";
+import { parsePrice } from "@/lib/catalog-data";
+import { formatMoney } from "@/lib/money";
 import { AIcon, Pill, FlagRow } from "./AdminPrimitives";
 import {
   listAdminGifts, createGift, updateGift, deleteGift,
@@ -24,8 +26,10 @@ function staticRows(): AdminGiftSet[] {
     name: g.name,
     featured: g.featured,
     badge: g.badge ?? null,
-    usd: g.usd,
-    lkr: g.lkr,
+    // Demo GIFTS carry formatted strings ("$28.50"); parse to the numeric-string
+    // shape the live API now returns so display + editing are consistent.
+    usd: String(parsePrice(g.usd)),
+    lkr: String(parsePrice(g.lkr)),
     jar: g.jar,
     status: "PUBLISHED",
     contents: g.contents,
@@ -73,7 +77,7 @@ function GiftTable({ rows, onOpen }: { rows: AdminGiftSet[]; onOpen: (g: AdminGi
               </td>
               <td><ContentsPills contents={g.contents} /></td>
               <td style={{ color: "var(--ad-muted)", whiteSpace: "nowrap", fontFamily: "var(--font-ui)", fontSize: 13 }}>
-                {g.usd} · {g.lkr}
+                {formatMoney(g.usd, "USD")} · {formatMoney(g.lkr, "LKR")}
               </td>
               <td><Pill status={g.status.toLowerCase()} /></td>
               <td style={{ textAlign: "right" }}><AIcon name="chevronR" size={16} stroke="var(--ad-faint)" /></td>
@@ -161,10 +165,10 @@ function GiftEditor({ gift, onClose, onSave, onDelete }: {
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div className="ad-field"><label className="ad-label">Price (USD)</label>
-              <input className="ad-input" value={usd} onChange={(e) => setUsd(e.target.value)} placeholder="$28.50" />
+              <input type="number" min="0" step="0.01" className="ad-input" value={usd} onChange={(e) => setUsd(e.target.value)} placeholder="28.50" />
             </div>
             <div className="ad-field"><label className="ad-label">Price (LKR)</label>
-              <input className="ad-input" value={lkr} onChange={(e) => setLkr(e.target.value)} placeholder="Rs 4,250" />
+              <input type="number" min="0" step="1" className="ad-input" value={lkr} onChange={(e) => setLkr(e.target.value)} placeholder="4250" />
             </div>
           </div>
 
