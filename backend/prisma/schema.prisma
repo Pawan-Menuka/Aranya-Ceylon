@@ -310,8 +310,7 @@ model Coupon {
   expiresAt      DateTime?
 
   orders         Order[]
-
-  @@index([code])
+  // No @@index([code]) — @unique already creates an index used by lookups.
 }
 
 model Subscription {
@@ -353,7 +352,7 @@ model Token {
   usedAt     DateTime? // Set on use — enforces single-use
   createdAt  DateTime  @default(now())
 
-  @@index([tokenHash])
+  // No @@index([tokenHash]) — @unique already creates an index used by lookups.
   @@index([userId, type])
 }
 
@@ -482,6 +481,5 @@ model Newsletter {
   unsubscribeToken  String   @unique
   source            String?  // e.g. 'homepage', 'checkout'
   createdAt         DateTime @default(now())
-
-  @@index([email])
+  // No @@index([email]) — @unique already creates an index used by lookups.
 }
