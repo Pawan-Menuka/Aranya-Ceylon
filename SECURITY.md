@@ -51,6 +51,12 @@ front of the storefront and API**, which delivers most of them at once.
 - **IP block / allow lists** — use WAF custom rules / IP Access Rules if you ever
   need to block a specific abuser or allowlist admin access.
 - **TLS** — set SSL/TLS mode to "Full (strict)".
+- **Real client IP** — once the API is proxied through Cloudflare there are two
+  proxy hops, so set `TRUST_PROXY=2` and `TRUST_CLOUDFLARE=true` in Railway.
+  Otherwise the in-app rate limiters and audit logs key on a Cloudflare edge IP
+  instead of the real client (collapsing per-client limiting). Also lock the
+  origin to only accept Cloudflare traffic so the `CF-Connecting-IP` header can't
+  be spoofed by hitting the origin directly.
 
 ### Railway (API host)
 - **Secrets** — set every variable from `backend/.env.example` in the service

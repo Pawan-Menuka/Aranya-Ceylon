@@ -1,9 +1,12 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import type { Request } from 'express';
+import { getClientIp } from '../lib/clientIp.js';
 
 // ── Rate limiters (#10) ─────────────────────────────────────────────
 // Protect auth endpoints from brute-force and registration spam.
-// NOTE: behind a proxy (Render/Railway/Fly/Nginx) set `app.set('trust proxy', 1)`
-// so the limiter keys on the real client IP, not the proxy's — done in index.ts.
+// NOTE: behind a proxy (Render/Railway/Fly/Nginx) set TRUST_PROXY (hop count)
+// and, when fronted by Cloudflare, TRUST_CLOUDFLARE=true so the limiter keys on
+// the real client IP, not an edge IP — see lib/clientIp.ts + index.ts.
 
 const json429 = (message: string) => ({
     handler: (_req: unknown, res: { status: (n: number) => { json: (b: unknown) => void } }) => {
@@ -11,12 +14,18 @@ const json429 = (message: string) => ({
     },
 });
 
+// All limiters key on the resolved client IP. ipKeyGenerator normalises IPv6
+// (grouping a /64) so a single client can't sidestep limits by rotating within
+// its address block.
+const keyGenerator = (req: Request) => ipKeyGenerator(getClientIp(req));
+
 // Tight limiter for login: brute-force protection on credentials.
 export const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     limit: 10,                // 10 attempts per IP per window
     standardHeaders: 'draft-7',
     legacyHeaders: false,
+    keyGenerator,
     ...json429('Too many login attempts. Please try again in a few minutes.'),
 });
 
@@ -26,6 +35,7 @@ export const authLimiter = rateLimit({
     limit: 50,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
+    keyGenerator,
     ...json429('Too many requests. Please slow down and try again shortly.'),
 });
 
@@ -40,6 +50,7 @@ export const globalLimiter = rateLimit({
     limit: 120,          // 120 requests per IP per minute
     standardHeaders: 'draft-7',
     legacyHeaders: false,
+    keyGenerator,
     skip: (req: { path?: string }) => req.path === '/health',
     ...json429('Too many requests. Please slow down.'),
 });
@@ -52,6 +63,7 @@ export const checkoutLimiter = rateLimit({
     limit: 20,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
+    keyGenerator,
     ...json429('Too many checkout attempts. Please wait a moment and try again.'),
 });
 
@@ -61,5 +73,6 @@ export const contactLimiter = rateLimit({
     limit: 5,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
+    keyGenerator,
     ...json429('Too many messages sent. Please try again later.'),
 });

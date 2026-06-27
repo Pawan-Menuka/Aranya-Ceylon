@@ -1,5 +1,6 @@
 import { prisma } from '../index.js';
 import type { Request } from 'express';
+import { getClientIp } from '../lib/clientIp.js';
 
 type AuditEvent =
     | 'ORDER_STATUS_UPDATE'
@@ -44,9 +45,7 @@ export async function writeAuditLog(params: {
             targetType,
             targetId,
             diff: diff ?? undefined,
-            ip: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
-                ?? req.socket.remoteAddress
-                ?? 'unknown',
+            ip: getClientIp(req),
             userAgent: req.headers['user-agent'] ?? 'unknown',
         },
     });
