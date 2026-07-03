@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { SignJWT } from 'jose';
 import { asyncHandler } from '../middleware/asyncHandler.js';
+import { env } from '../config/env.js';
 
 const router = Router();
-const COOKIE_SECRET = new TextEncoder().encode(process.env.COOKIE_SECRET!);
+const COOKIE_SECRET = new TextEncoder().encode(env.COOKIE_SECRET);
 
 router.post('/override', asyncHandler(async (req, res) => {
     const { market } = req.body;
