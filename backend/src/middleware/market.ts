@@ -1,7 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import { jwtVerify } from 'jose';
+import { env } from '../config/env.js';
 
-const COOKIE_SECRET = new TextEncoder().encode(process.env.COOKIE_SECRET!);
+const COOKIE_SECRET = new TextEncoder().encode(env.COOKIE_SECRET);
 
 declare global {
     namespace Express {

@@ -32,7 +32,10 @@ export function middleware(request: NextRequest) {
         `frame-src https://js.stripe.com https://hooks.stripe.com`,
         `frame-ancestors 'none'`,
         `base-uri 'self'`,
-        `form-action 'self'`,
+        // Local-market checkout submits a hidden form to PayHere's hosted page.
+        // Without these origins, 'self' blocks the redirect and LKR payment dies
+        // in the browser before it starts.
+        `form-action 'self' https://sandbox.payhere.lk https://www.payhere.lk`,
         `object-src 'none'`,
         // Only force https for subresources in production (dev is http localhost).
         ...(isDev ? [] : ["upgrade-insecure-requests"]),

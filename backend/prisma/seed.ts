@@ -323,22 +323,40 @@ async function main() {
     console.log('✅ Products created:', cinnamon.name, blackPepper.name, ceylonTea.name);
 
     // -- Admin user --
+    // Credentials come from the environment so no publicly-known password ever
+    // ships in source (SEC-03). In production the password is mandatory; locally
+    // a clearly-insecure default is used and printed so devs can log in.
+    const isProd = process.env.NODE_ENV === 'production';
+    const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@aranyaceylon.com';
+    const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? (isProd ? '' : 'dev-only-admin-change-me');
+
+    if (!adminPassword) {
+        throw new Error(
+            'SEED_ADMIN_PASSWORD is required to seed the admin user in production. ' +
+            'Set it (and optionally SEED_ADMIN_EMAIL) before running the seed.',
+        );
+    }
+
     const { hash } = await import('@node-rs/bcrypt');
-    const adminHash = await hash('Admin@123!', 12);
+    const adminHash = await hash(adminPassword, 12);
 
     await prisma.user.upsert({
-        where: { email: 'admin@aranyaceylon.com' },
+        where: { email: adminEmail },
         update: {},
         create: {
             name: 'Aranya Admin',
-            email: 'admin@aranyaceylon.com',
+            email: adminEmail,
             passwordHash: adminHash,
             role: 'ADMIN',
             verified: true,
         },
     });
 
-    console.log('✅ Admin user created: admin@aranyaceylon.com / Admin@123!');
+    // Never print the password. In dev, surface only the throwaway default.
+    console.log(`✅ Admin user created: ${adminEmail}`);
+    if (!isProd && !process.env.SEED_ADMIN_PASSWORD) {
+        console.log('   (dev default password: dev-only-admin-change-me — set SEED_ADMIN_PASSWORD to override)');
+    }
 
     // -- Sample blog post --
     await prisma.blog.upsert({
@@ -348,7 +366,7 @@ async function main() {
             title: 'Why Ceylon Cinnamon Is Completely Different From What You Buy at the Supermarket',
             slug: 'why-ceylon-cinnamon-is-different',
             content: '# The Two Cinnamons\n\nMost cinnamon sold globally is **cassia** (*Cinnamomum cassia*), grown in China and Indonesia...',
-            authorId: (await prisma.user.findUnique({ where: { email: 'admin@aranyaceylon.com' } }))!.id,
+            authorId: (await prisma.user.findUnique({ where: { email: adminEmail } }))!.id,
             tags: ['cinnamon', 'ceylon', 'spice-guide'],
             status: BlogStatus.PUBLISHED,
             publishedAt: new Date(),
