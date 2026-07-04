@@ -5,6 +5,7 @@ import { ADMIN, type AdminProduct } from "@/lib/admin-data";
 import { AIcon, Pill, StockMeter, FlagRow } from "./AdminPrimitives";
 import { ShareBar } from "./AdminCharts";
 import { listAdminProducts, createAdminProduct, updateAdminProduct, listCategories, uploadProductImage, bestEffort, type Category, type AdminProductInput } from "@/lib/api/admin";
+import { exportCsv } from "@/lib/csv";
 import type { Product } from "@/lib/types";
 import { paletteFor } from "@/lib/spice-data";
 
@@ -328,7 +329,9 @@ export function AdminProducts() {
       }
       const variants = buildVariants(p);
       if (catId && variants.length > 0) {
-        bestEffort(createAdminProduct({ name: p.name, slug, description: desc, categoryId: catId, featured: p.featured, variants }));
+        // Send status so a product created as visible actually goes ACTIVE and
+        // reaches the storefront, instead of being stuck DRAFT forever (BUG-08).
+        bestEffort(createAdminProduct({ name: p.name, slug, description: desc, categoryId: catId, featured: p.featured, status: p.visible ? "ACTIVE" : "DRAFT", variants }));
       }
       return [{ ...p, slug }, ...prev];
     });
@@ -336,6 +339,15 @@ export function AdminProducts() {
   };
 
   const lowCount = rows.filter((p) => p.stock < (p.category === "Gift Sets" ? 10 : 25)).length;
+
+  const exportProducts = () => {
+    exportCsv(
+      `products-${new Date().toISOString().slice(0, 10)}`,
+      ["Name", "SKU", "Category", "Stock", "Visible"],
+      filtered.map((p) => ({ name: p.name, sku: p.sku, category: p.category, stock: p.stock, visible: p.visible ? "Yes" : "No" })),
+      ["name", "sku", "category", "stock", "visible"],
+    );
+  };
 
   return (
     <div>
@@ -346,7 +358,7 @@ export function AdminProducts() {
           <p className="ad-sub">{rows.length} products · <b style={{ color: "var(--neg)" }}>{lowCount} need restocking</b></p>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <button className="ad-btn ad-btn-ghost ad-btn-sm"><AIcon name="download" size={15} stroke="var(--ad-muted)" />Export</button>
+          <button className="ad-btn ad-btn-ghost ad-btn-sm" onClick={exportProducts}><AIcon name="download" size={15} stroke="var(--ad-muted)" />Export</button>
           <button className="ad-btn ad-btn-amber" onClick={() => setEdit({})}><AIcon name="plus" size={16} stroke="#fff" />New product</button>
         </div>
       </div>

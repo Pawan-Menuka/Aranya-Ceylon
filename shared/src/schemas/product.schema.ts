@@ -29,6 +29,10 @@ export const createProductSchema = z.object({
     categoryId: z.string().min(1),
     certifications: z.array(z.string()).default([]),
     featured: z.boolean().default(false),
+    // Lifecycle status. Without this, admin-created products were stuck DRAFT
+    // forever and could never appear on the storefront (public queries filter
+    // status=ACTIVE) — BUG-08. Defaults to DRAFT to preserve prior behaviour.
+    status: z.enum(['DRAFT', 'ACTIVE', 'ARCHIVED']).default('DRAFT'),
     latin: z.string().optional().nullable(),
     originLabel: z.string().optional().nullable(),
     color: z.string().optional().nullable(),
@@ -44,6 +48,8 @@ export const updateProductSchema = z.object({
     categoryId: z.string().min(1).optional(),
     certifications: z.array(z.string()).optional(),
     featured: z.boolean().optional(),
+    // Lets the admin console's active/archive toggle actually take effect (BUG-08).
+    status: z.enum(['DRAFT', 'ACTIVE', 'ARCHIVED']).optional(),
     latin: z.string().optional().nullable(),
     originLabel: z.string().optional().nullable(),
     color: z.string().optional().nullable(),

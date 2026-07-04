@@ -3,7 +3,7 @@
 import * as React from "react";
 import { ADMIN, type AdminBlogPost } from "@/lib/admin-data";
 import { AIcon, Pill, FlagRow } from "./AdminPrimitives";
-import { createBlog, updateBlog, listAdminBlogs, bestEffort, type BlogPublishMode, type AdminBlogPost as ApiBlogPost } from "@/lib/api/admin";
+import { createBlog, updateBlog, getAdminBlog, listAdminBlogs, type BlogPublishMode, type AdminBlogPost as ApiBlogPost } from "@/lib/api/admin";
 
 function backendBlogToAdmin(b: ApiBlogPost): AdminBlogPost {
   const statusMap: Record<string, string> = { DRAFT: "Draft", SCHEDULED: "Scheduled", PUBLISHED: "Published" };
@@ -73,7 +73,8 @@ function BlogTable({ rows, onOpen }: { rows: AdminBlogPost[]; onOpen: (p: AdminB
 
 type BlogDraft = Partial<AdminBlogPost>;
 
-function BlogEditor({ post, onClose, onSave }: { post: BlogDraft; onClose: () => void; onSave: (p: AdminBlogPost) => void }) {
+type BlogSavePayload = AdminBlogPost & { content?: string; seoDesc?: string };
+function BlogEditor({ post, onClose, onSave }: { post: BlogDraft; onClose: () => void; onSave: (p: BlogSavePayload) => void }) {
   const isNew = !post.slug;
   const [p, setP] = React.useState<AdminBlogPost>(() => ({
     slug: "", title: "", category: "Sourcing", author: "Devika R.", role: "Head of Sourcing",
@@ -81,12 +82,29 @@ function BlogEditor({ post, onClose, onSave }: { post: BlogDraft; onClose: () =>
     ...post,
   } as AdminBlogPost));
   const [publishMode, setPublishMode] = React.useState<BlogPublishMode>(post.status === "Scheduled" ? "schedule" : post.status === "Published" ? "now" : "draft");
+  // Body + excerpt are real, controlled fields now (previously uncontrolled
+  // textareas whose text was discarded, so posts saved with empty content and
+  // failed backend validation — BUG-09a).
+  const [content, setContent] = React.useState("");
+  const [excerpt, setExcerpt] = React.useState("");
   const set = <K extends keyof AdminBlogPost>(k: K, v: AdminBlogPost[K]) => setP((x) => ({ ...x, [k]: v }));
   React.useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, [onClose]);
+
+  // Load the full post (content + seo) when editing an existing row — the list
+  // endpoint doesn't return content, so without this an edit would blank it out.
+  const backendId = (post as BlogDraft & { _backendId?: string })._backendId;
+  React.useEffect(() => {
+    if (!backendId) return;
+    let alive = true;
+    getAdminBlog(backendId)
+      .then(({ blog }) => { if (alive) { setContent(blog.content ?? ""); setExcerpt(blog.seoDesc ?? ""); } })
+      .catch(() => { /* keep empty — offline/demo */ });
+    return () => { alive = false; };
+  }, [backendId]);
 
   return (
     <>
@@ -109,7 +127,7 @@ function BlogEditor({ post, onClose, onSave }: { post: BlogDraft; onClose: () =>
           </div>
 
           <div className="ad-field"><label className="ad-label">Title</label><input className="ad-input" value={p.title} onChange={(e) => set("title", e.target.value)} placeholder="A compelling headline…" /></div>
-          <div className="ad-field"><label className="ad-label">Excerpt / dek</label><textarea className="ad-textarea" placeholder="One or two sentences that sell the read…" defaultValue={isNew ? "" : "Once you've tasted a hand-rolled Ceylon quill dissolve to silk in warm milk, the hard cassia in most kitchens never tastes the same again."} /></div>
+          <div className="ad-field"><label className="ad-label">Excerpt / dek</label><textarea className="ad-textarea" placeholder="One or two sentences that sell the read…" value={excerpt} onChange={(e) => setExcerpt(e.target.value)} /></div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div className="ad-field">
@@ -131,7 +149,7 @@ function BlogEditor({ post, onClose, onSave }: { post: BlogDraft; onClose: () =>
               <div style={{ display: "flex", gap: 2, padding: "7px 8px", borderBottom: "1px solid var(--ad-line)", background: "var(--ad-soft)" }}>
                 {["B", "i", "H", "❝", "🔗", "▦"].map((b, i) => <button key={i} style={{ width: 30, height: 28, border: 0, background: "transparent", borderRadius: 6, cursor: "pointer", fontWeight: i === 0 ? 800 : 600, fontStyle: i === 1 ? "italic" : "normal", color: "var(--ad-muted)", fontSize: 13 }}>{b}</button>)}
               </div>
-              <textarea className="ad-textarea" style={{ border: 0, borderRadius: 0, minHeight: 160, fontFamily: "var(--font-read)", fontSize: 15 }} placeholder="Write the story…" defaultValue={isNew ? "" : "There is a moment, the first time you steep a real Ceylon quill in hot milk, when you realise you have been lied to for years. The bark does not just flavour the milk — it perfumes it, honeyed and floral, with a whisper of clove and citrus underneath."} />
+              <textarea className="ad-textarea" style={{ border: 0, borderRadius: 0, minHeight: 160, fontFamily: "var(--font-read)", fontSize: 15 }} placeholder="Write the story…" value={content} onChange={(e) => setContent(e.target.value)} />
             </div>
           </div>
 
@@ -162,7 +180,7 @@ function BlogEditor({ post, onClose, onSave }: { post: BlogDraft; onClose: () =>
           {!isNew && <button className="ad-btn ad-btn-danger ad-btn-sm"><AIcon name="trash" size={15} stroke="var(--neg)" /></button>}
           <button className="ad-btn ad-btn-ghost ad-btn-sm"><AIcon name="external" size={15} stroke="var(--ad-muted)" />Preview</button>
           <button className="ad-btn ad-btn-ghost" style={{ marginLeft: "auto" }} onClick={onClose}>Cancel</button>
-          <button className="ad-btn ad-btn-green" onClick={() => onSave({ ...p, status: publishMode === "now" ? "Published" : publishMode === "schedule" ? "Scheduled" : "Draft" })}>
+          <button className="ad-btn ad-btn-green" onClick={() => onSave({ ...p, content, seoDesc: excerpt, status: publishMode === "now" ? "Published" : publishMode === "schedule" ? "Scheduled" : "Draft" })}>
             <AIcon name="check" size={16} stroke="#fff" />{publishMode === "now" ? "Publish" : publishMode === "schedule" ? "Schedule" : "Save draft"}
           </button>
         </div>
@@ -176,6 +194,7 @@ export function AdminBlog() {
   const [tab, setTab] = React.useState("all");
   const [q, setQ] = React.useState("");
   const [edit, setEdit] = React.useState<BlogDraft | null>(null);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     listAdminBlogs().then(({ blogs }) => {
@@ -195,18 +214,27 @@ export function AdminBlog() {
     return c;
   }, [rows]);
 
-  const save = (p: AdminBlogPost) => {
+  const save = (p: AdminBlogPost & { content?: string; seoDesc?: string }) => {
     const statusMap: Record<string, "DRAFT" | "SCHEDULED" | "PUBLISHED"> = { Draft: "DRAFT", Scheduled: "SCHEDULED", Published: "PUBLISHED" };
     const apiStatus = statusMap[p.status] ?? "DRAFT";
     const slug = p.slug || (p.title || "untitled").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     const backendId = (p as AdminBlogPost & { _backendId?: string })._backendId;
+    const content = p.content ?? "";
+    setSaveError(null);
+    // Guard the min-length the backend enforces so a too-short body surfaces here
+    // instead of being sent and silently rejected.
+    if (content.trim().length < 10) {
+      setSaveError("Add at least a short body (10+ characters) before saving.");
+      return;
+    }
     setRows((prev) => {
       const exists = prev.find((x) => x.slug === p.slug);
+      const blogPayload = { title: p.title, slug, content, status: apiStatus, tags: [p.category], ...(p.seoDesc ? { seoDesc: p.seoDesc } : {}) };
       if (exists && backendId) {
-        bestEffort(updateBlog(backendId, { title: p.title, slug, status: apiStatus, tags: [p.category] }));
+        updateBlog(backendId, blogPayload).catch(() => setSaveError("Couldn't save changes to the server. They may not be persisted."));
         return prev.map((x) => (x.slug === p.slug ? { ...x, ...p } : x));
       }
-      bestEffort(createBlog({ title: p.title, slug, content: "", status: apiStatus, tags: [p.category] }));
+      createBlog(blogPayload).catch(() => setSaveError("Couldn't create the post on the server. It may not be persisted."));
       return exists ? prev.map((x) => (x.slug === p.slug ? { ...x, ...p } : x)) : [{ ...p, slug, views: 0, date: "Jun 4, 2026" }, ...prev];
     });
     setEdit(null);
@@ -222,6 +250,12 @@ export function AdminBlog() {
         </div>
         <button className="ad-btn ad-btn-amber" onClick={() => setEdit({})}><AIcon name="plus" size={16} stroke="#fff" />Write post</button>
       </div>
+      {saveError && (
+        <div role="alert" style={{ margin: "0 0 16px", padding: "11px 14px", borderRadius: 9, background: "rgba(192,83,31,.1)", border: "1px solid rgba(192,83,31,.35)", color: "var(--neg, #C0531F)", fontSize: 13, fontWeight: 600, display: "flex", justifyContent: "space-between", gap: 12 }}>
+          <span>{saveError}</span>
+          <button onClick={() => setSaveError(null)} style={{ background: "none", border: 0, cursor: "pointer", color: "inherit", fontWeight: 700 }}>Dismiss</button>
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
         <div className="ad-seg">
           {BLOG_TABS.map((t) => <button key={t.key} className={tab === t.key ? "on" : ""} onClick={() => setTab(t.key)}>{t.label}<span style={{ marginLeft: 6, opacity: 0.55 }}>{counts[t.key]}</span></button>)}

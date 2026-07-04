@@ -4,6 +4,7 @@ import * as React from "react";
 import { ADMIN, type AdminOrder, type AdminMarket } from "@/lib/admin-data";
 import { AIcon, Pill, MarketTag, Avatar } from "./AdminPrimitives";
 import { updateOrderStatus, refundOrder, listAdminOrders, bestEffort } from "@/lib/api/admin";
+import { exportCsv } from "@/lib/csv";
 import type { Order } from "@/lib/types";
 
 function backendOrderToAdmin(order: Order): AdminOrder {
@@ -287,6 +288,7 @@ export function AdminOrders() {
   const [q, setQ] = React.useState("");
   const [orders, setOrders] = React.useState<AdminOrder[]>(() => ADMIN.ORDERS.map((o) => ({ ...o })));
   const [open, setOpen] = React.useState<AdminOrder | null>(null);
+  const [actionError, setActionError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     listAdminOrders().then(({ items }) => {
@@ -312,9 +314,33 @@ export function AdminOrders() {
     setOpen((cur) => (cur && cur.id === o.id ? { ...cur, status } : cur));
     bestEffort(updateOrderStatus(o.id, { status: status.toUpperCase() }));
   };
-  const refund = (o: AdminOrder) => {
-    setStatus(o, "refunded");
-    bestEffort(refundOrder(o.id));
+  const refund = async (o: AdminOrder) => {
+    // Do NOT PATCH the status to REFUNDED first: that flips the order out of
+    // PAID/PROCESSING, so the refund endpoint's guard rejects with 409 and no
+    // Stripe refund / stock restore happens (BUG-07). Call the refund endpoint
+    // only — it performs the status change, stock restore and gateway refund
+    // atomically — and surface failures instead of swallowing them.
+    const prevStatus = o.status;
+    setActionError(null);
+    setOrders((prev) => prev.map((x) => (x.id === o.id ? { ...x, status: "refunded" } : x)));
+    setOpen((cur) => (cur && cur.id === o.id ? { ...cur, status: "refunded" } : cur));
+    try {
+      await refundOrder(o.id);
+    } catch (e) {
+      // Roll back the optimistic change and tell the admin it didn't happen.
+      setOrders((prev) => prev.map((x) => (x.id === o.id ? { ...x, status: prevStatus } : x)));
+      setOpen((cur) => (cur && cur.id === o.id ? { ...cur, status: prevStatus } : cur));
+      setActionError((e as Error)?.message || "Refund failed — the order was not refunded.");
+    }
+  };
+
+  const exportOrders = () => {
+    exportCsv(
+      `orders-${new Date().toISOString().slice(0, 10)}`,
+      ["Order", "Customer", "Email", "Market", "Status", "Total"],
+      filtered as unknown as Array<Record<string, unknown>>,
+      ["id", "customer", "email", "market", "status", "total"],
+    );
   };
 
   const pendingCount = (counts.paid || 0) + (counts.processing || 0);
@@ -328,10 +354,16 @@ export function AdminOrders() {
           <p className="ad-sub">{orders.length} orders · <b style={{ color: "var(--warn)" }}>{pendingCount} awaiting fulfillment</b></p>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <button className="ad-btn ad-btn-ghost ad-btn-sm"><AIcon name="download" size={15} stroke="var(--ad-muted)" />Export CSV</button>
+          <button className="ad-btn ad-btn-ghost ad-btn-sm" onClick={exportOrders}><AIcon name="download" size={15} stroke="var(--ad-muted)" />Export CSV</button>
           <button className="ad-btn ad-btn-ghost ad-btn-sm"><AIcon name="filter" size={15} stroke="var(--ad-muted)" />Filters</button>
         </div>
       </div>
+      {actionError && (
+        <div role="alert" style={{ margin: "0 0 16px", padding: "11px 14px", borderRadius: 9, background: "rgba(192,83,31,.1)", border: "1px solid rgba(192,83,31,.35)", color: "var(--neg, #C0531F)", fontSize: 13, fontWeight: 600, display: "flex", justifyContent: "space-between", gap: 12 }}>
+          <span>{actionError}</span>
+          <button onClick={() => setActionError(null)} style={{ background: "none", border: 0, cursor: "pointer", color: "inherit", fontWeight: 700 }}>Dismiss</button>
+        </div>
+      )}
       <OrdersToolbar tab={tab} setTab={setTab} market={market} setMarket={setMarket} q={q} setQ={setQ} counts={counts} />
       <OrdersTable orders={filtered} onOpen={setOpen} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, fontSize: 12.5, color: "var(--ad-faint)" }}>

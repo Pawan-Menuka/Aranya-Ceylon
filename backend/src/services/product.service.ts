@@ -315,6 +315,7 @@ export async function updateProduct(id: string, data: UpdateProductInput) {
                 ...(fields.description && { description: fields.description }),
                 ...(fields.categoryId && { categoryId: fields.categoryId }),
                 ...(fields.featured !== undefined && { featured: fields.featured }),
+                ...(fields.status && { status: fields.status }),
                 ...(fields.certifications && { certifications: fields.certifications }),
                 ...(fields.latin !== undefined && { latin: fields.latin }),
                 ...(fields.originLabel !== undefined && { originLabel: fields.originLabel }),
