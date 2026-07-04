@@ -96,6 +96,80 @@ function makeId(): string {
     return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
 }
 
+// "$28.50" -> 28.5 ; "Rs 4,250" -> 4250
+function parseMoney(s: string): number {
+    return parseFloat(String(s).replace(/[^0-9.]/g, '')) || 0;
+}
+
+// Each gift set is backed by a real (but DRAFT, so catalog-hidden) Product with
+// one Variant per market. This lets gift boxes flow through the exact same
+// cart -> checkout -> stock -> order pipeline as any product, so they are
+// actually purchasable and charged correctly. The link is by slug convention:
+// the backing product's slug is `gift-<giftSlug>` (resolved in gift.controller).
+const GIFT_BACKING_STOCK = 999;
+async function seedGiftProducts(now: string) {
+    console.log('🎁 Seeding gift backing products…');
+
+    // A dedicated category keeps gift products grouped and easy to identify.
+    const catRows = await sql`
+        INSERT INTO "Category" ("id", "name", "slug")
+        VALUES (${makeId()}, 'Gift Sets', 'gift-sets')
+        ON CONFLICT ("slug") DO UPDATE SET "name" = EXCLUDED."name"
+        RETURNING "id"
+    ` as { id: string }[];
+    const categoryId = catRows[0].id;
+
+    for (const g of GIFTS) {
+        const productSlug = `gift-${g.slug}`;
+        const totalGrams = g.contents.length * (parseInt(g.jar, 10) || 50);
+
+        const prodRows = await sql`
+            INSERT INTO "Product" (
+                "id", "name", "slug", "description", "categoryId", "certifications",
+                "status", "market", "featured", "color", "originLabel",
+                "createdAt", "updatedAt"
+            ) VALUES (
+                ${makeId()}, ${g.name}, ${productSlug}, ${g.blurb}, ${categoryId}, '{}'::text[],
+                'DRAFT'::"ProductStatus", 'BOTH'::"Market", ${g.featured}, ${g.color}, 'Gift Set',
+                ${now}::timestamptz, ${now}::timestamptz
+            )
+            ON CONFLICT ("slug") DO UPDATE SET
+                "name"        = EXCLUDED."name",
+                "description" = EXCLUDED."description",
+                "categoryId"  = EXCLUDED."categoryId",
+                "color"       = EXCLUDED."color",
+                "featured"    = EXCLUDED."featured",
+                "updatedAt"   = EXCLUDED."updatedAt"
+            RETURNING "id"
+        ` as { id: string }[];
+        const productId = prodRows[0].id;
+
+        // One variant per market so the market/currency guards resolve correctly.
+        const variants = [
+            { sku: `GIFT-${g.slug}-LKR`, price: parseMoney(g.lkr), market: 'LOCAL', currency: 'LKR' },
+            { sku: `GIFT-${g.slug}-USD`, price: parseMoney(g.usd), market: 'INTERNATIONAL', currency: 'USD' },
+        ];
+        for (const v of variants) {
+            await sql`
+                INSERT INTO "Variant" (
+                    "id", "productId", "weight", "price", "sku", "stock", "market", "currency"
+                ) VALUES (
+                    ${makeId()}, ${productId}, ${totalGrams}, ${v.price}, ${v.sku},
+                    ${GIFT_BACKING_STOCK}, ${v.market}::"Market", ${v.currency}::"Currency"
+                )
+                ON CONFLICT ("sku") DO UPDATE SET
+                    "productId" = EXCLUDED."productId",
+                    "weight"    = EXCLUDED."weight",
+                    "price"     = EXCLUDED."price",
+                    "stock"     = EXCLUDED."stock",
+                    "market"    = EXCLUDED."market",
+                    "currency"  = EXCLUDED."currency"
+            `;
+        }
+        console.log(`  ✓ ${g.name} → product ${productSlug} (LKR + USD variants)`);
+    }
+}
+
 async function main() {
     console.log('🎁 Seeding gift sets…');
     const now = new Date().toISOString();
@@ -133,6 +207,10 @@ async function main() {
     }
 
     console.log(`\n✅ Seeded ${GIFTS.length} gift sets`);
+
+    // Back each gift set with a purchasable (DRAFT, catalog-hidden) product.
+    await seedGiftProducts(now);
+    console.log(`✅ Seeded gift backing products`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

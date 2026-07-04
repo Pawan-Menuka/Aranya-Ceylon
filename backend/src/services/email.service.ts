@@ -7,6 +7,18 @@ import { Resend } from 'resend';
 const resend = new Resend(process.env.RESEND_API_KEY ?? 're_stub_unused_key');
 const FROM = process.env.EMAIL_FROM ?? 'orders@aranyaceylon.com';
 
+// Escape user-supplied text before interpolating into email HTML so a submitted
+// name/message can't inject markup into the internal notification (also the fix
+// pattern for SEC-09's unescaped interpolation).
+function escapeHtml(s: string): string {
+    return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // --- Order confirmation ---
 export async function sendOrderConfirmation(params: {
     to: string;
@@ -109,7 +121,28 @@ export async function sendWholesaleStatusEmail(params: {
         to,
         subject: `Your Aranya Ceylon wholesale application has been ${status.toLowerCase()}`,
         html: status === 'APPROVED'
-            ? `<h2>Application approved</h2><p>Congratulations ${companyName}! Your wholesale account is now active.</p>`
-            : `<h2>Application update</h2><p>Thank you for applying, ${companyName}. Unfortunately we are unable to approve your application at this time.</p>`,
+            ? `<h2>Application approved</h2><p>Congratulations ${escapeHtml(companyName)}! Your wholesale account is now active.</p>`
+            : `<h2>Application update</h2><p>Thank you for applying, ${escapeHtml(companyName)}. Unfortunately we are unable to approve your application at this time.</p>`,
+    });
+}
+
+// --- Internal notification for contact / wholesale submissions ---
+// Sends the submitted fields to the support inbox so enquiries aren't lost to a
+// console.log (BUG-10). Best-effort: callers wrap in try/catch; with no
+// RESEND_API_KEY it degrades to a logged error like every other send here.
+export async function sendSupportNotification(params: {
+    subject: string;
+    replyTo?: string;
+    fields: Array<[string, string]>;
+}) {
+    const rows = params.fields
+        .map(([k, v]) => `<tr><td><strong>${escapeHtml(k)}</strong></td><td>${escapeHtml(v)}</td></tr>`)
+        .join('');
+    await resend.emails.send({
+        from: FROM,
+        to: process.env.SUPPORT_EMAIL ?? process.env.ADMIN_EMAIL ?? FROM,
+        ...(params.replyTo ? { replyTo: params.replyTo } : {}),
+        subject: params.subject,
+        html: `<h2>${escapeHtml(params.subject)}</h2><table border="1" cellpadding="6">${rows}</table>`,
     });
 }

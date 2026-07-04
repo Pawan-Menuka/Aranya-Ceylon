@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { Seal } from "../primitives/Seal";
 import { AIcon } from "./AdminPrimitives";
+import { DEMO_MODE } from "@/lib/demo";
 
 // Aranya Ceylon — ADMIN sign-in gate. The console is role-gated to ADMIN /
 // SUPERADMIN (spec §6). A real admin session (auth/me role) enters straight
@@ -39,14 +40,18 @@ export function AdminGate({ onEnter, error }: { onEnter: (email: string, passwor
           <p style={{ fontSize: 15, color: "rgba(253,250,245,.78)", marginTop: 16, maxWidth: 420, lineHeight: 1.6 }}>
             Orders, inventory, the journal and the audit trail — the whole back office for the hill-country spice house, in one quiet room.
           </p>
-          <div style={{ display: "flex", gap: 26, marginTop: 30, borderTop: "1px solid rgba(253,250,245,.16)", paddingTop: 22 }}>
-            {[["Orders today", "31"], ["Awaiting ship", "18"], ["Low stock", "4"]].map((s) => (
-              <div key={s[0]}>
-                <div className="disp" style={{ fontSize: 28, fontWeight: 600 }}>{s[1]}</div>
-                <div style={{ fontSize: 11, color: "rgba(253,250,245,.6)", fontWeight: 600, letterSpacing: ".04em", marginTop: 2 }}>{s[0]}</div>
-              </div>
-            ))}
-          </div>
+          {/* Illustrative figures only — shown in demo mode, hidden in production
+              so the sign-in screen never presents fabricated live stats (BUG-20). */}
+          {DEMO_MODE && (
+            <div style={{ display: "flex", gap: 26, marginTop: 30, borderTop: "1px solid rgba(253,250,245,.16)", paddingTop: 22 }}>
+              {[["Orders today", "31"], ["Awaiting ship", "18"], ["Low stock", "4"]].map((s) => (
+                <div key={s[0]}>
+                  <div className="disp" style={{ fontSize: 28, fontWeight: 600 }}>{s[1]}</div>
+                  <div style={{ fontSize: 11, color: "rgba(253,250,245,.6)", fontWeight: 600, letterSpacing: ".04em", marginTop: 2 }}>{s[0]}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -76,10 +81,12 @@ export function AdminGate({ onEnter, error }: { onEnter: (email: string, passwor
             </button>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 18, fontSize: 12, color: "var(--ad-faint)", background: "var(--ad-soft)", borderRadius: 9, padding: "10px 12px" }}>
-            <AIcon name="sparkle" size={15} stroke="var(--warn)" />
-            <span><b style={{ color: "var(--ad-muted)" }}>Demo:</b> no backend required — any password enters the offline console.</span>
-          </div>
+          {DEMO_MODE && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 18, fontSize: 12, color: "var(--ad-faint)", background: "var(--ad-soft)", borderRadius: 9, padding: "10px 12px" }}>
+              <AIcon name="sparkle" size={15} stroke="var(--warn)" />
+              <span><b style={{ color: "var(--ad-muted)" }}>Demo:</b> no backend required — any password enters the offline console.</span>
+            </div>
+          )}
 
           <Link href="/" style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 22, fontSize: 13, fontWeight: 600, color: "var(--ad-muted)", textDecoration: "none" }}>
             <AIcon name="chevronL" size={15} stroke="var(--ad-muted)" />Back to store

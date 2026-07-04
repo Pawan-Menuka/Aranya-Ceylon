@@ -1,5 +1,5 @@
 import { CATALOG, parsePrice } from "./catalog-data";
-import type { Market } from "./types";
+import type { Market, Variant } from "./types";
 
 // Gift Sets dataset (ported from gifts-data.js). Curated bundles drawn from the
 // CATALOG range. Each set carries colour fields (lead spice) so GiftBox / cart
@@ -25,6 +25,12 @@ export interface GiftSet {
   // optional fields cart line maths reads off a Spice — gift sets satisfy the
   // shape lineFromSpice needs (name, colour fields, usd/lkr).
   latin?: string;
+  // Backend linkage to the gift's DRAFT backing product + its per-market
+  // variants. Present when served live (fetchGifts); lets the gift be added to
+  // the real server cart and checked out like any product. Absent for the
+  // static demo GIFTS fallback (those stay localStorage-only).
+  productId?: string;
+  variants?: Variant[];
 }
 
 export const GIFTS: GiftSet[] = [

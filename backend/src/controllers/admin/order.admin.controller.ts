@@ -15,6 +15,7 @@ const updateOrderSchema = z.object({
 export async function listOrders(req: Request, res: Response) {
     const market = req.query.market as string | undefined;
     const status = req.query.status as string | undefined;
+    const q = (req.query.q as string | undefined)?.trim();
     const limit = Math.min(Number(req.query.limit ?? 20), 100);
     const cursor = req.query.cursor as string | undefined;
 
@@ -22,6 +23,17 @@ export async function listOrders(req: Request, res: Response) {
         where: {
             ...(market && market !== 'ALL' && { market: market as any }),
             ...(status && { status: status as any }),
+            // Free-text search the admin order table sends via ?q= — match order
+            // id or the customer (registered email/name, or guest email). Without
+            // this the search box was a server-side no-op (BUG-14).
+            ...(q && {
+                OR: [
+                    { id: { contains: q, mode: 'insensitive' } },
+                    { guestEmail: { contains: q, mode: 'insensitive' } },
+                    { user: { is: { email: { contains: q, mode: 'insensitive' } } } },
+                    { user: { is: { name: { contains: q, mode: 'insensitive' } } } },
+                ],
+            }),
         },
         include: {
             user: { select: { id: true, name: true, email: true } },

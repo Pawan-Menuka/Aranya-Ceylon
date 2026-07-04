@@ -4,6 +4,7 @@ import * as React from "react";
 import { ADMIN, type AuditRow } from "@/lib/admin-data";
 import { AIcon, RoleTag } from "./AdminPrimitives";
 import { listAuditLogs, type AuditEntry } from "@/lib/api/admin";
+import { exportCsv } from "@/lib/csv";
 
 function backendAuditToRow(log: AuditEntry): AuditRow {
   const eventMap: Record<string, string> = {
@@ -81,7 +82,7 @@ export function AdminAudit() {
           <h1 className="ad-title" style={{ marginTop: 6 }}>Audit log</h1>
           <p className="ad-sub">Immutable record of every admin action and system job. Retained 24 months.</p>
         </div>
-        <button className="ad-btn ad-btn-ghost ad-btn-sm"><AIcon name="download" size={15} stroke="var(--ad-muted)" />Export log</button>
+        <button className="ad-btn ad-btn-ghost ad-btn-sm" onClick={() => exportCsv(`audit-log-${new Date().toISOString().slice(0, 10)}`, ["Timestamp", "Actor", "Role", "Action", "Target", "Detail"], filtered as unknown as Array<Record<string, unknown>>, ["ts", "actor", "role", "action", "target", "meta"])}><AIcon name="download" size={15} stroke="var(--ad-muted)" />Export log</button>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>

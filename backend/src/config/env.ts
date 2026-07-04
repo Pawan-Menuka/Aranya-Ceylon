@@ -24,6 +24,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 // there). Marked obviously so they can't be mistaken for a real secret in a log.
 const DEV_JWT_SECRET = 'dev-only-insecure-jwt-secret-change-me';
 const DEV_DATABASE_URL = 'postgresql://dev:dev@localhost:5432/dev';
+const DEV_COOKIE_SECRET = 'dev-only-insecure-cookie-secret-change-me';
 
 const envSchema = z
     .object({
@@ -35,12 +36,20 @@ const envSchema = z
         JWT_ACCESS_SECRET: z
             .string()
             .min(isProduction ? 32 : 1, 'JWT_ACCESS_SECRET must be at least 32 characters in production'),
+        // HMAC key for the signed market cookie (jose). Forgeable if short/unset —
+        // a guessed value lets an international customer forge LKR/PayHere pricing.
+        COOKIE_SECRET: z
+            .string()
+            .min(isProduction ? 32 : 1, 'COOKIE_SECRET must be at least 32 characters in production'),
 
         // Sensible defaults.
         JWT_ACCESS_EXPIRY: z.string().default('15m'),
         FRONTEND_URL: z.string().min(1).default('http://localhost:3000'),
         PAYMENTS_MODE: z.enum(['stub', 'live']).default('stub'),
         ENABLE_DEV_ROUTES: z.string().optional(),
+        // Public origin of this API — used to build the PayHere notify_url. An unset
+        // value would post live payment notifications to localhost (see superRefine).
+        API_URL: z.string().optional(),
 
         // Proxy / client-IP resolution. TRUST_PROXY is the number of proxy hops
         // in front of the app (Railway alone = 1; with Cloudflare added = 2).
@@ -59,6 +68,17 @@ const envSchema = z
     // validator owns only the security-critical surface, not every var.
     .passthrough()
     .superRefine((env, ctx) => {
+        // A production deploy must never run the stub payment path: POST
+        // /checkout/stub/complete would let anyone mark any order PAID for free.
+        // Fail the boot instead of coming up fail-open (SEC-01).
+        if (isProduction && env.PAYMENTS_MODE !== 'live') {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['PAYMENTS_MODE'],
+                message: 'PAYMENTS_MODE must be "live" in production (stub mode allows free orders).',
+            });
+        }
+
         if (env.PAYMENTS_MODE === 'live') {
             const liveKeys = [
                 'STRIPE_SECRET_KEY',
@@ -75,6 +95,16 @@ const envSchema = z
                     });
                 }
             }
+
+            // The PayHere notify_url is built from API_URL; unset would send live
+            // payment webhooks to localhost and they'd never arrive (SEC-07).
+            if (!env.API_URL) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ['API_URL'],
+                    message: 'API_URL is required when PAYMENTS_MODE=live (used for the PayHere notify_url).',
+                });
+            }
         }
     });
 
@@ -84,6 +114,7 @@ const rawEnv: NodeJS.ProcessEnv = { ...process.env };
 if (!isProduction) {
     rawEnv.JWT_ACCESS_SECRET ??= DEV_JWT_SECRET;
     rawEnv.DATABASE_URL ??= DEV_DATABASE_URL;
+    rawEnv.COOKIE_SECRET ??= DEV_COOKIE_SECRET;
 }
 
 const parsed = envSchema.safeParse(rawEnv);

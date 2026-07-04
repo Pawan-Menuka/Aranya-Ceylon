@@ -4,7 +4,8 @@ import * as React from "react";
 import type { Spice } from "@/lib/types";
 import {
   CART_KEY, CONFIG, type CartLine, type CartState, type Totals,
-  computeTotals, fmt as fmtMoney, lineFromSpice, linePrice as linePriceOf, unitPrice as unitPriceOf,
+  computeTotals, fmt as fmtMoney, lineFromSpice, lineFromServerItem,
+  linePrice as linePriceOf, unitPrice as unitPriceOf,
 } from "@/lib/cart";
 import { getCart, addCartItem, updateCartItem, removeCartItem, applyCoupon as apiApplyCoupon } from "@/lib/api/cart";
 import type { CartItem } from "@/lib/types";
@@ -35,7 +36,7 @@ interface CartCtx {
   clear: () => void;
   setGiftWrap: (b: boolean) => void;
   setGiftNote: (s: string) => void;
-  applyPromo: (code: string) => boolean;
+  applyPromo: (code: string) => Promise<boolean>;
   clearPromo: () => void;
   // UI
   open: boolean;
@@ -81,16 +82,26 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     getCart()
       .then(({ cart: bc }) => {
         if (!mounted || !bc?.items?.length) return;
-        setState((s) => ({
-          ...s,
-          items: s.items.map((localItem) => {
+        const serverItems = bc.items as CartItem[];
+        setState((s) => {
+          // 1) Reconcile: attach backendItemId to local lines that match a server
+          //    line by variant (keyed by variantId, not grind — BUG-19b).
+          const reconciled = s.items.map((localItem) => {
             if (localItem.backendItemId) return localItem;
-            const bi = (bc.items as CartItem[]).find(
-              (b) => b.variant?.id === localItem.variantId
-            );
+            const bi = serverItems.find((b) => b.variant?.id === localItem.variantId);
             return bi ? { ...localItem, backendItemId: bi.id } : localItem;
-          }),
-        }));
+          });
+          // 2) Server is the source of truth: append any server line not already
+          //    represented locally so items survive a cleared localStorage or a
+          //    different device, and the empty-cart guard reflects reality (BUG-29).
+          const known = new Set(
+            reconciled.map((i) => i.backendItemId).filter(Boolean) as string[],
+          );
+          const missing = serverItems
+            .filter((b) => !known.has(b.id))
+            .map((b) => lineFromServerItem(b));
+          return { ...s, items: [...reconciled, ...missing] };
+        });
       })
       .catch(() => { /* offline — localStorage-only mode */ });
 
@@ -117,6 +128,33 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Shared quantity setter for inc/dec/setQty. Reads the current qty from state,
+  // applies the change optimistically, then PATCHes the backend outside the
+  // reducer, reverting on failure. Keyed on state.items so it always sees the
+  // latest quantities.
+  const setQtyInternal = React.useCallback(
+    (id: string, next: (prev: number) => number) => {
+      const item = state.items.find((i) => i.id === id);
+      if (!item) return;
+      const prevQty = item.qty;
+      const newQty = next(prevQty);
+      if (newQty === prevQty) return;
+      setState((s) => ({
+        ...s,
+        items: s.items.map((i) => (i.id === id ? { ...i, qty: newQty } : i)),
+      }));
+      if (item.backendItemId) {
+        updateCartItem(item.backendItemId, newQty).catch(() => {
+          setState((prev) => ({
+            ...prev,
+            items: prev.items.map((i) => (i.id === id ? { ...i, qty: prevQty } : i)),
+          }));
+        });
+      }
+    },
+    [state.items],
+  );
+
   const api = React.useMemo<CartCtx>(() => {
     const totals = computeTotals(state, market);
     return {
@@ -130,8 +168,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       unitPrice: (i) => unitPriceOf(i, market),
       linePrice: (i) => linePriceOf(i, market),
       config: () => CONFIG[market],
+      // NOTE: all backend calls below run *outside* the setState updater so they
+      // fire exactly once (React StrictMode double-invokes reducers) and never as
+      // a side effect of rendering (BUG-19d).
       add: (spice, weight = "100g", form, qty = 1, backendIds) => {
-        const line = lineFromSpice(spice, weight, form || "Whole", qty, backendIds);
+        const line = lineFromSpice(spice, weight, form || "Whole", qty, market, backendIds);
         setState((s) => {
           const existing = s.items.find((i) => i.id === line.id);
           const items = existing
@@ -139,9 +180,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             : [...s.items, line];
           return { ...s, items };
         });
-        // Sync to backend when we have real IDs; revert on failure.
-        if (backendIds) {
-          addCartItem({ productId: backendIds.productId, variantId: backendIds.variantId, quantity: qty })
+        // Sync to backend whenever the line resolved a real product+variant, so
+        // items added from cards/quick-add reach the server cart too (BUG-01).
+        if (line.productId && line.variantId) {
+          addCartItem({ productId: line.productId, variantId: line.variantId, quantity: qty })
             .then((res) => {
               if (res?.item?.id) {
                 setState((s) => ({
@@ -153,75 +195,59 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
               }
             })
             .catch(() => {
-              // Backend rejected (e.g. out-of-stock) — remove the optimistic line.
-              setState((s) => ({ ...s, items: s.items.filter((i) => i.id !== line.id) }));
+              // Backend rejected (e.g. out-of-stock) — roll back only the qty we
+              // just added, dropping the line if it becomes empty.
+              setState((s) => {
+                const it = s.items.find((i) => i.id === line.id);
+                if (!it) return s;
+                const nextQty = it.qty - qty;
+                return nextQty > 0
+                  ? { ...s, items: s.items.map((i) => (i.id === line.id ? { ...i, qty: nextQty } : i)) }
+                  : { ...s, items: s.items.filter((i) => i.id !== line.id) };
+              });
             });
         }
       },
-      inc: (id) => {
-        setState((s) => {
-          const item = s.items.find((i) => i.id === id);
-          const prevQty = item?.qty ?? 1;
-          if (item?.backendItemId) {
-            updateCartItem(item.backendItemId, prevQty + 1).catch(() => {
-              setState((prev) => ({ ...prev, items: prev.items.map((i) => (i.id === id ? { ...i, qty: prevQty } : i)) }));
-            });
-          }
-          return { ...s, items: s.items.map((i) => (i.id === id ? { ...i, qty: prevQty + 1 } : i)) };
-        });
-      },
-      dec: (id) => {
-        setState((s) => {
-          const item = s.items.find((i) => i.id === id);
-          const prevQty = item?.qty ?? 1;
-          const newQty = Math.max(1, prevQty - 1);
-          if (item?.backendItemId) {
-            updateCartItem(item.backendItemId, newQty).catch(() => {
-              setState((prev) => ({ ...prev, items: prev.items.map((i) => (i.id === id ? { ...i, qty: prevQty } : i)) }));
-            });
-          }
-          return { ...s, items: s.items.map((i) => (i.id === id ? { ...i, qty: newQty } : i)) };
-        });
-      },
-      setQty: (id, qty) => {
-        setState((s) => {
-          const item = s.items.find((i) => i.id === id);
-          const prevQty = item?.qty ?? 1;
-          const newQty = Math.max(1, qty);
-          if (item?.backendItemId) {
-            updateCartItem(item.backendItemId, newQty).catch(() => {
-              setState((prev) => ({ ...prev, items: prev.items.map((i) => (i.id === id ? { ...i, qty: prevQty } : i)) }));
-            });
-          }
-          return { ...s, items: s.items.map((i) => (i.id === id ? { ...i, qty: newQty } : i)) };
-        });
-      },
+      inc: (id) => setQtyInternal(id, (prev) => prev + 1),
+      dec: (id) => setQtyInternal(id, (prev) => Math.max(1, prev - 1)),
+      setQty: (id, qty) => setQtyInternal(id, () => Math.max(1, qty)),
       remove: (id) => {
-        setState((s) => {
-          const item = s.items.find((i) => i.id === id);
-          if (item?.backendItemId) {
-            removeCartItem(item.backendItemId).catch(() => {
-              // Restore the item if the backend remove failed.
-              setState((prev) => {
-                if (prev.items.some((i) => i.id === id)) return prev;
-                return { ...prev, items: [...prev.items, item] };
-              });
-            });
-          }
-          return { ...s, items: s.items.filter((i) => i.id !== id) };
-        });
+        const item = state.items.find((i) => i.id === id);
+        setState((s) => ({ ...s, items: s.items.filter((i) => i.id !== id) }));
+        if (item?.backendItemId) {
+          removeCartItem(item.backendItemId).catch(() => {
+            // Restore the item if the backend remove failed.
+            setState((prev) =>
+              prev.items.some((i) => i.id === id)
+                ? prev
+                : { ...prev, items: [...prev.items, item] },
+            );
+          });
+        }
       },
       clear: () => setState(EMPTY),
       setGiftWrap: (b) => setState((s) => ({ ...s, giftWrap: b })),
       setGiftNote: (str) => setState((s) => ({ ...s, giftNote: str })),
-      applyPromo: (code) => {
+      applyPromo: async (code) => {
         const c = (code || "").trim().toUpperCase();
-        if (CONFIG[market].promo[c]) {
+        if (!c) return false;
+        // Validate against the backend — the DB is the only authority on whether
+        // a code exists and what it's worth (BUG-05). The drawer shows an estimate,
+        // but checkout charges the server-computed discount, so the two can't
+        // diverge into a blocked or mischarged order.
+        try {
+          await apiApplyCoupon(c);
           setState((s) => ({ ...s, promo: c }));
-          apiApplyCoupon(code).catch(() => {});
           return true;
+        } catch {
+          // Offline/demo continuity only: accept a known local promo when the
+          // backend is unreachable (there is no real checkout in that mode).
+          if (CONFIG[market].promo[c]) {
+            setState((s) => ({ ...s, promo: c }));
+            return true;
+          }
+          return false;
         }
-        return false;
       },
       clearPromo: () => setState((s) => ({ ...s, promo: "" })),
       open,
@@ -231,7 +257,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       openSignIn: () => setSignInOpen(true),
       closeSignIn: () => setSignInOpen(false),
     };
-  }, [state, market, open, signInOpen]);
+  }, [state, market, open, signInOpen, setQtyInternal]);
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 }

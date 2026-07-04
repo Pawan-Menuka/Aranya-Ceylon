@@ -12,6 +12,7 @@ import { AdminRecipes } from "./AdminRecipes";
 import { AdminGifts } from "./AdminGifts";
 import { AdminAudit } from "./AdminAudit";
 import { ADMIN } from "@/lib/admin-data";
+import { DEMO_MODE } from "@/lib/demo";
 
 // Aranya Ceylon — ADMIN app: role gate + hash router (ported from Admin.html).
 // Standalone full-screen shell (no storefront navbar/footer). Wrapped in its own
@@ -68,8 +69,14 @@ function AdminConsole() {
     try {
       const { user: signedInUser, demo: isDemo } = await signIn(email, password);
       if (isDemo) {
-        // Backend unreachable — grant local demo session for offline review
-        setDemoAdmin({ name: email.split("@")[0].replace(/\W/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || ADMIN.user.name, email });
+        // Backend unreachable. Only grant a local demo admin session when demo
+        // mode is explicitly enabled — otherwise anyone could enter the console
+        // with any password when the API is down (SEC-08).
+        if (DEMO_MODE) {
+          setDemoAdmin({ name: email.split("@")[0].replace(/\W/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || ADMIN.user.name, email });
+        } else {
+          setGateError("The admin service is unavailable right now. Please try again shortly.");
+        }
       } else if (signedInUser.role !== "ADMIN" && signedInUser.role !== "SUPERADMIN") {
         // Authenticated but not an admin — deny access and sign back out
         await signOut();

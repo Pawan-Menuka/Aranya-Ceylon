@@ -10,7 +10,7 @@ export async function getDashboard(_req: Request, res: Response) {
         intlRevenue,
         localOrderCount,
         intlOrderCount,
-        topProducts,
+        topLineItems,
         pendingFulfilment,
         lowStockVariants,
         recentAuditLogs,
@@ -30,13 +30,18 @@ export async function getDashboard(_req: Request, res: Response) {
         // Order counts
         prisma.order.count({ where: { market: 'LOCAL', createdAt: { gte: thirtyDaysAgo } } }),
         prisma.order.count({ where: { market: 'INTERNATIONAL', createdAt: { gte: thirtyDaysAgo } } }),
-        // Top products by paid-order revenue (with product name join)
-        prisma.orderItem.groupBy({
-            by: ['productId'],
+        // Top-product line items in the window. We aggregate in JS (below) because
+        // "revenue" must be Σ(quantity × unitPrice) — groupBy can only _sum a single
+        // column, which is why the old query summed unitPrice with no quantity and
+        // also mixed LKR + USD into one meaningless figure (BUG-15).
+        prisma.orderItem.findMany({
             where: { order: { status: { in: ['PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED'] }, createdAt: { gte: thirtyDaysAgo } } },
-            _sum: { quantity: true, unitPrice: true },
-            orderBy: { _sum: { unitPrice: 'desc' } },
-            take: 5,
+            select: {
+                productId: true,
+                quantity: true,
+                unitPrice: true,
+                order: { select: { currency: true } },
+            },
         }),
         // Orders needing action
         prisma.order.count({ where: { status: 'PROCESSING' } }),
@@ -55,8 +60,25 @@ export async function getDashboard(_req: Request, res: Response) {
         }),
     ]);
 
+    // Aggregate per product: units = Σquantity, revenue = Σ(quantity × unitPrice).
+    // LKR revenue is normalised to USD (LKR_USD_RATE, default 300) so the single
+    // USD figure the dashboard renders is comparable rather than a raw LKR+USD sum;
+    // ranking is by units, which is currency-neutral (BUG-15).
+    const LKR_USD_RATE = Number(process.env.LKR_USD_RATE ?? 300) || 300;
+    const perProduct = new Map<string, { units: number; revenueUsd: number }>();
+    for (const li of topLineItems) {
+        const acc = perProduct.get(li.productId) ?? { units: 0, revenueUsd: 0 };
+        const lineTotal = Number(li.unitPrice) * li.quantity;
+        acc.units += li.quantity;
+        acc.revenueUsd += li.order.currency === 'LKR' ? lineTotal / LKR_USD_RATE : lineTotal;
+        perProduct.set(li.productId, acc);
+    }
+    const ranked = [...perProduct.entries()]
+        .sort((a, b) => b[1].units - a[1].units)
+        .slice(0, 5);
+
     // Resolve product names for the top-products list in one extra query.
-    const productIds = topProducts.map((p) => p.productId);
+    const productIds = ranked.map(([productId]) => productId);
     const productNames = productIds.length
         ? await prisma.product.findMany({
             where: { id: { in: productIds } },
@@ -65,12 +87,12 @@ export async function getDashboard(_req: Request, res: Response) {
         : [];
     const nameById = Object.fromEntries(productNames.map((p) => [p.id, p]));
 
-    const topProductsWithNames = topProducts.map((p) => ({
-        productId: p.productId,
-        name: nameById[p.productId]?.name ?? p.productId,
-        slug: nameById[p.productId]?.slug ?? '',
-        units: p._sum.quantity ?? 0,
-        revenue: Number(p._sum.unitPrice ?? 0),
+    const topProductsWithNames = ranked.map(([productId, agg]) => ({
+        productId,
+        name: nameById[productId]?.name ?? productId,
+        slug: nameById[productId]?.slug ?? '',
+        units: agg.units,
+        revenue: Math.round(agg.revenueUsd * 100) / 100,
     }));
 
     return res.json({

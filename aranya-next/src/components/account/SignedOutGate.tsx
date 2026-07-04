@@ -19,16 +19,28 @@ export function SignedOutGate() {
   const [password, setPassword] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [notice, setNotice] = React.useState<string | null>(null);
   const accentBtn = market === "local" ? "btn btn-local" : "btn btn-intl";
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
-      if (mode === "in") await signIn(email, password);
-      else await signUp(name, email, password);
-      // success: parent re-renders to the dashboard (user is now set)
+      if (mode === "in") {
+        await signIn(email, password);
+        // success: parent re-renders to the dashboard (user is now set)
+      } else {
+        const res = await signUp(name, email, password);
+        // Real registration establishes no session (verify email first); only the
+        // offline demo path signs in. Show the pending notice and switch to sign-in.
+        if (!res.demo && res.pending) {
+          setNotice(res.message ?? "Account created — check your email to verify, then sign in.");
+          setMode("in");
+          setPassword("");
+        }
+      }
     } catch (err) {
       setError((err as Error)?.message || "Something went wrong. Please try again.");
     } finally {
@@ -84,10 +96,11 @@ export function SignedOutGate() {
               {field("Password", "password", "••••••••", password, setPassword)}
               {mode === "in" && <div style={{ textAlign: "right", marginTop: -6, marginBottom: 12 }}><a href="#" style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, fontWeight: 600, color: "var(--brand)" }}>Forgot password?</a></div>}
               {error && <div style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "#C0531F", fontWeight: 600, marginBottom: 12 }}>{error}</div>}
+              {notice && <div style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--brand)", fontWeight: 600, marginBottom: 12 }}>{notice}</div>}
               <button type="submit" className={accentBtn} disabled={busy} style={{ marginTop: 4, opacity: busy ? 0.7 : 1 }}>{busy ? "Please wait…" : mode === "in" ? "Sign in" : "Create account"}</button>
               <div style={{ textAlign: "center", marginTop: 16, fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--muted)" }}>
                 {mode === "in" ? "New to Aranya? " : "Already have an account? "}
-                <button type="button" onClick={() => { setMode(mode === "in" ? "up" : "in"); setError(null); }} style={{ background: "none", border: 0, cursor: "pointer", fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 700, color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: 3 }}>{mode === "in" ? "Create an account" : "Sign in"}</button>
+                <button type="button" onClick={() => { setMode(mode === "in" ? "up" : "in"); setError(null); setNotice(null); }} style={{ background: "none", border: 0, cursor: "pointer", fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 700, color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: 3 }}>{mode === "in" ? "Create an account" : "Sign in"}</button>
               </div>
             </form>
           </div>

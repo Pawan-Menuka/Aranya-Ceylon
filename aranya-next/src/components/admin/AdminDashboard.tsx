@@ -3,6 +3,7 @@
 import * as React from "react";
 import { ADMIN } from "@/lib/admin-data";
 import { getDashboard, type DashboardData } from "@/lib/api/admin";
+import { exportCsv } from "@/lib/csv";
 import { AreaChart, AreaChartLight, Donut, Spark, ShareBar } from "./AdminCharts";
 import { AIcon, Delta, Pill, MarketTag, Avatar, SectionCard, StatCard } from "./AdminPrimitives";
 
@@ -557,6 +558,16 @@ export function AdminDashboard({ go }: { go: (r: string) => void }) {
   const d = useDashData(market, live);
   const setL = (k: string) => { setLayout(k); if (typeof window !== "undefined") localStorage.setItem("ad_dash_layout", k); };
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  const exportDashboard = () => {
+    // Export the live top-products table (the concrete, real figures on the page).
+    const rows = live?.topProducts ?? [];
+    exportCsv(
+      `dashboard-top-products-${new Date().toISOString().slice(0, 10)}`,
+      ["Product", "Slug", "Units", "Revenue (USD)"],
+      rows as unknown as Array<Record<string, unknown>>,
+      ["name", "slug", "units", "revenue"],
+    );
+  };
 
   return (
     <div>
@@ -575,7 +586,7 @@ export function AdminDashboard({ go }: { go: (r: string) => void }) {
               ))}
             </div>
           </div>
-          <button className="ad-btn ad-btn-ghost ad-btn-sm"><AIcon name="download" size={15} stroke="var(--ad-muted)" />Export</button>
+          <button className="ad-btn ad-btn-ghost ad-btn-sm" onClick={exportDashboard}><AIcon name="download" size={15} stroke="var(--ad-muted)" />Export</button>
           <button className="ad-btn ad-btn-amber ad-btn-sm" onClick={() => go("products")}><AIcon name="plus" size={15} stroke="#fff" />New product</button>
         </div>
       </div>

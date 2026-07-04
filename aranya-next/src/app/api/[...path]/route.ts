@@ -59,8 +59,19 @@ async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
 
   const body = await upstream.arrayBuffer();
   const out = new NextResponse(body, { status: upstream.status, headers: resHeaders });
-  for (const c of setCookies) out.headers.append("set-cookie", c);
+  for (const c of setCookies) out.headers.append("set-cookie", rescopeCookiePath(c));
   return out;
+}
+
+// The browser only ever reaches the API through this /api/* BFF, so a cookie the
+// backend scopes to `/auth` (the refresh token) would never be sent back to
+// /api/auth/refresh or /api/auth/logout — the paths don't match. Re-scope it to
+// `/api/auth` so the browser returns it to both endpoints (logout can then revoke
+// the token family — BUG-03/SEC-10). Cookies left at Path=/ (x-market,
+// guestCartToken) are untouched: SSR page requests to non-/api routes still need
+// them, and `/` already covers /api/*.
+function rescopeCookiePath(cookie: string): string {
+  return cookie.replace(/;\s*Path=\/auth\b/i, "; Path=/api/auth");
 }
 
 type Ctx = { params: { path: string[] } };

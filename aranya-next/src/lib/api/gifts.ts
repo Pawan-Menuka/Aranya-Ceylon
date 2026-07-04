@@ -1,10 +1,14 @@
 import type { GiftSet } from "@/lib/gifts-data";
+import type { Variant } from "@/lib/types";
 import { formatMoney } from "@/lib/money";
 
 // Server-side only — called from Next.js server components.
 // Falls back gracefully when backend is unavailable so ISR/SSG never fails.
 
-const API_BASE = process.env.BACKEND_URL ?? "http://localhost:4000";
+// Standardise on NEXT_PUBLIC_API_URL (see api/recipes.ts). BACKEND_URL kept only
+// as a legacy fallback so a deploy per .env.example doesn't silently hit
+// localhost and serve static demo gifts forever (BUG-17).
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? process.env.BACKEND_URL ?? "http://localhost:4000";
 
 interface ApiGiftSet {
   id: string;
@@ -25,6 +29,9 @@ interface ApiGiftSet {
   status: string;
   createdAt: string;
   updatedAt: string;
+  // Backing product link (gift.controller attachBackingProducts).
+  productId?: string | null;
+  variants?: Variant[];
 }
 
 function toGiftSet(g: ApiGiftSet): GiftSet {
@@ -45,6 +52,10 @@ function toGiftSet(g: ApiGiftSet): GiftSet {
     usd: formatMoney(g.usd, "USD"),
     lkr: formatMoney(g.lkr, "LKR"),
     contents: g.contents,
+    // Thread the backing product + variants through so the gift is addable to
+    // the real cart (resolved by lineFromSpice on add).
+    ...(g.productId ? { productId: g.productId } : {}),
+    ...(g.variants ? { variants: g.variants } : {}),
   };
 }
 

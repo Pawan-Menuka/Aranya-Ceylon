@@ -19,11 +19,16 @@ export interface ApiError extends Error {
 }
 
 function makeError(status: number, payload: unknown): ApiError {
-  const msg =
-    (payload && typeof payload === "object" && "message" in payload
-      ? String((payload as { message: unknown }).message)
-      : `Request failed (${status})`) || `Request failed (${status})`;
-  const e = new Error(msg) as ApiError;
+  // The backend reports failures as { error } (some as { message }). Read either
+  // so real guidance (e.g. "verify your email") reaches the UI instead of a
+  // generic "Request failed (NNN)".
+  let msg = "";
+  if (payload && typeof payload === "object") {
+    const p = payload as { message?: unknown; error?: unknown };
+    if (typeof p.message === "string") msg = p.message;
+    else if (typeof p.error === "string") msg = p.error;
+  }
+  const e = new Error(msg || `Request failed (${status})`) as ApiError;
   e.status = status;
   e.payload = payload;
   return e;

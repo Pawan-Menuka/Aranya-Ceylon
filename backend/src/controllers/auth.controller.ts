@@ -8,6 +8,11 @@ import type { RegisterInput, LoginInput } from '@aranya/shared';
 
 const BCRYPT_ROUNDS = 12;
 const REFRESH_COOKIE_NAME = 'refreshToken';
+// Scope the refresh cookie to /auth (not /auth/refresh) so the browser also
+// sends it to POST /auth/logout — otherwise logout never receives the cookie
+// and can't revoke the token family server-side (BUG-03 / SEC-10). Both
+// endpoints live under /auth, and 'lax' still blocks cross-site POSTs.
+const REFRESH_COOKIE_PATH = '/auth';
 
 // Identical response for both new and existing emails — see register().
 const NEUTRAL_REGISTER_MESSAGE = 'If this email is new, a verification link has been sent.';
@@ -24,7 +29,7 @@ const refreshCookieOptions = {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax' as const,
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
-    path: '/auth/refresh', // Cookie only sent to the refresh endpoint
+    path: REFRESH_COOKIE_PATH, // sent to /auth/* (refresh + logout)
 };
 
 // --- Register ---
@@ -109,6 +114,16 @@ export async function login(req: Request, res: Response) {
         return res.status(401).json({ error: 'Invalid email or password' });
     }
 
+    // Enforce email verification (SEC-04). Until now login issued tokens
+    // regardless of `verified`, so the whole verification flow was decorative.
+    // Dev auto-verifies on register, so local logins are unaffected.
+    if (!user.verified) {
+        return res.status(403).json({
+            error: 'Please verify your email address before signing in — check your inbox for the verification link.',
+            code: 'EMAIL_NOT_VERIFIED',
+        });
+    }
+
     const { accessToken, refreshTokenPlaintext } = await issueTokenPair(user);
 
     res.cookie(REFRESH_COOKIE_NAME, refreshTokenPlaintext, refreshCookieOptions);
@@ -138,7 +153,7 @@ export async function refresh(req: Request, res: Response) {
         });
     } catch (err: unknown) {
         // Clear cookie on any token error
-        res.clearCookie(REFRESH_COOKIE_NAME, { path: '/auth/refresh' });
+        res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
 
         const message = err instanceof Error ? err.message : '';
         if (message === 'TOKEN_REUSE_DETECTED') {
@@ -158,14 +173,14 @@ export async function logout(req: Request, res: Response) {
         await revokeTokenFamily(token);
     }
 
-    res.clearCookie(REFRESH_COOKIE_NAME, { path: '/auth/refresh' });
+    res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
     return res.json({ message: 'Logged out successfully' });
 }
 
 // --- Logout everywhere (all devices) ---
 export async function logoutAll(req: Request, res: Response) {
     await revokeAllUserTokens(req.user!.userId);
-    res.clearCookie(REFRESH_COOKIE_NAME, { path: '/auth/refresh' });
+    res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
     return res.json({ message: 'Logged out on all devices' });
 }
 

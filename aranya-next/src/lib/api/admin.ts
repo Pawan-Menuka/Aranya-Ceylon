@@ -91,6 +91,10 @@ export interface AdminBlogPost {
   viewCount: number;
   tags: string[];
   authorId?: string;
+  // Present on the detail endpoint (getAdminBlog), not the list.
+  content?: string;
+  seoTitle?: string;
+  seoDesc?: string;
 }
 
 export interface AdminBlogInput {
@@ -241,12 +245,18 @@ export interface AuditEntry {
   actor?: { name: string; email: string };
 }
 
-export function listAuditLogs(params?: { limit?: number; cursor?: string }): Promise<{ logs: AuditEntry[]; nextCursor: string | null }> {
+export async function listAuditLogs(params?: { limit?: number; cursor?: string }): Promise<{ logs: AuditEntry[]; nextCursor: string | null }> {
   const qs = new URLSearchParams();
   if (params?.limit) qs.set("limit", String(params.limit));
   if (params?.cursor) qs.set("cursor", params.cursor);
   const s = qs.toString();
-  return apiFetch(`/admin/audit-logs${s ? `?${s}` : ""}`, { auth: true });
+  // Backend returns { items, nextCursor }; the audit page consumes { logs }.
+  // Map here so the live audit trail renders instead of staying on demo data (BUG-14).
+  const res = await apiFetch<{ items: AuditEntry[]; nextCursor: string | null }>(
+    `/admin/audit-logs${s ? `?${s}` : ""}`,
+    { auth: true },
+  );
+  return { logs: res.items ?? [], nextCursor: res.nextCursor ?? null };
 }
 
 // ---- categories ----
