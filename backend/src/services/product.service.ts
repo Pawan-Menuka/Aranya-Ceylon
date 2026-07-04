@@ -410,6 +410,7 @@ export async function adminListProducts() {
     const products = await prisma.product.findMany({
         include: adminProductIncludes,
         orderBy: { createdAt: 'desc' },
+        take: 500, // bound an otherwise unlimited load with variants+images (PERF-07)
     });
     return enrichProductsWithRatingAvg(products);
 }

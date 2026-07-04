@@ -27,6 +27,7 @@ const giftSchema = z.object({
 export async function listGifts(_req: Request, res: Response) {
     const gifts = await prisma.giftSet.findMany({
         orderBy: [{ featured: 'desc' }, { createdAt: 'asc' }],
+        take: 500, // bound an otherwise unlimited load (PERF-07)
         select: {
             id: true, slug: true, name: true, featured: true,
             badge: true, usd: true, lkr: true, status: true,

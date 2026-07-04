@@ -32,6 +32,7 @@ const recipeSchema = z.object({
 export async function listRecipes(_req: Request, res: Response) {
     const recipes = await prisma.recipe.findMany({
         orderBy: { createdAt: 'desc' },
+        take: 500, // bound an otherwise unlimited load (PERF-07)
         select: {
             id: true, slug: true, title: true, course: true,
             difficulty: true, featured: true, status: true,

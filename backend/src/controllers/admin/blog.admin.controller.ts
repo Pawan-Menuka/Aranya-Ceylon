@@ -18,6 +18,7 @@ const createBlogSchema = z.object({
 export async function listBlogs(_req: Request, res: Response) {
     const blogs = await prisma.blog.findMany({
         orderBy: { createdAt: 'desc' },
+        take: 500, // bound an otherwise unlimited load (PERF-07) until this list is paginated
         select: {
             id: true, title: true, slug: true, status: true,
             publishedAt: true, scheduledAt: true, viewCount: true, tags: true, authorId: true,
