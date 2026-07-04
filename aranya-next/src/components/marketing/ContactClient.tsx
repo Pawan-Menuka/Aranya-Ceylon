@@ -60,6 +60,7 @@ const EMPTY_CFORM: CForm = { name: "", email: "", order: "", subject: "", messag
 function ContactMain({ market }: { market: Market }) {
   const [done, setDone] = React.useState(false);
   const [ref, setRef] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
   const [f, setF] = React.useState<CForm>(EMPTY_CFORM);
   const set = (k: keyof CForm, v: string | boolean) => setF((x) => ({ ...x, [k]: v }));
   const local = market === "local";
@@ -70,14 +71,17 @@ function ContactMain({ market }: { market: Market }) {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    setError(null);
     try {
       const res = await submitContact({ name: f.name, email: f.email, order: f.order || undefined, subject: f.subject, message: f.message, consent: f.consent });
+      // Only show the confirmation on a REAL success — never fabricate a
+      // reference for a submission the backend never received (BUG-10).
       setRef(res.ref);
-    } catch {
-      setRef("AC-" + (10000 + Math.floor(Math.random() * 89999)));
+      setDone(true);
+    } catch (err) {
+      setError((err as Error)?.message || "Sorry — your message couldn't be sent. Please try again, or email us directly at hello@aranyaceylon.com.");
     } finally {
       setSubmitting(false);
-      setDone(true);
     }
   };
 
@@ -128,6 +132,7 @@ function ContactMain({ market }: { market: Market }) {
                   <input type="checkbox" required checked={f.consent} onChange={(e) => set("consent", e.target.checked)} style={{ marginTop: 3, width: 16, height: 16, accentColor: "var(--brand)" }} />
                   <span style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--muted)", lineHeight: 1.5 }}>I agree that Aranya Ceylon may use my details to respond to this enquiry. We never share them.</span>
                 </label>
+                {error && <div role="alert" style={{ marginTop: 18, padding: "11px 14px", borderRadius: 9, background: "rgba(192,83,31,.1)", border: "1px solid rgba(192,83,31,.35)", color: "#C0531F", fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 600 }}>{error}</div>}
                 <button type="submit" className={btn} style={{ marginTop: 24, padding: "15px", opacity: submitting ? 0.6 : 1 }} disabled={submitting}>{submitting ? "Sending…" : "Send message"}</button>
               </form>
             )}

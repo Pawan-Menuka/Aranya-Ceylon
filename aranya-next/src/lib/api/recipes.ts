@@ -5,7 +5,11 @@ import type { Recipe, IngredientGroup } from "@/lib/recipes-data";
 // Falls back gracefully when the backend is unavailable so SSG/ISR can
 // still build from the static recipes-data.ts fallback.
 
-const API_BASE = process.env.BACKEND_URL ?? "http://localhost:4000";
+// Standardise on NEXT_PUBLIC_API_URL (the one env var the rest of the app + the
+// .env.example use). BACKEND_URL is kept only as a legacy fallback — relying on
+// it alone meant a deploy documented per .env.example silently fell back to
+// localhost and served static demo data forever (BUG-17).
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? process.env.BACKEND_URL ?? "http://localhost:4000";
 
 interface ApiRecipe {
   id: string;

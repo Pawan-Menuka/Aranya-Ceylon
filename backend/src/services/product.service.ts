@@ -150,30 +150,38 @@ export async function listProducts(
         }),
     };
 
-    // Full-text search via PostgreSQL tsvector — market filtered in SQL
+    // Full-text search via PostgreSQL tsvector — market filtered in SQL.
     if (search) {
-        const products = await prisma.$queryRaw<{ id: string }[]>`
+        // Fetch limit+1 ranked ids so the controller can detect a next page
+        // (the old query took exactly `limit`, so hasNextPage was always false).
+        const ranked = await prisma.$queryRaw<{ id: string }[]>`
             SELECT id FROM "Product"
             WHERE status = 'ACTIVE'
               AND market IN (${market}::"Market", 'BOTH'::"Market")
               AND "searchVector" @@ plainto_tsquery('english', ${search})
             ORDER BY ts_rank("searchVector", plainto_tsquery('english', ${search})) DESC
-            LIMIT ${limit}
+            LIMIT ${limit + 1}
         `;
-        const ids = products.map((p) => p.id);
+        const ids = ranked.map((p) => p.id);
+        if (ids.length === 0) return [];
 
-        const items = await prisma.product.findMany({
+        const products = await prisma.product.findMany({
             where: { id: { in: ids } },
             include: buildProductIncludes(market),
         });
-        return enrichProductsWithRatingAvg(items);
+        // Preserve the rank order — `id IN (...)` returns rows in arbitrary order,
+        // which discarded the ts_rank ranking entirely (BUG-12).
+        const byId = new Map(products.map((p) => [p.id, p]));
+        const ordered = ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => !!p);
+        return enrichProductsWithRatingAvg(ordered);
     }
 
-    // Sort mapping
+    // Price sorting can't be expressed as a Prisma orderBy on a to-many relation,
+    // so the old code sorted by variant COUNT — meaningless (BUG-11). Fetch by a
+    // stable key, then order the page by the real market-appropriate variant price.
+    const priceSort = sort === 'price_asc' || sort === 'price_desc';
     const orderBy: Prisma.ProductOrderByWithRelationInput = (() => {
         switch (sort) {
-            case 'price_asc': return { variants: { _count: 'asc' } };
-            case 'price_desc': return { variants: { _count: 'desc' } };
             case 'bestselling': return { orderItems: { _count: 'desc' } };
             default: return { createdAt: 'desc' };
         }
@@ -186,6 +194,19 @@ export async function listProducts(
         ...(cursor && { cursor: { id: cursor }, skip: 1 }),
         include: buildProductIncludes(market),
     });
+
+    if (priceSort) {
+        const dir = sort === 'price_asc' ? 1 : -1;
+        const wantCurrency = market === 'LOCAL' ? 'LKR' : 'USD';
+        const minPrice = (p: (typeof items)[number]) => {
+            const prices = p.variants
+                .filter((v) => v.currency === wantCurrency || v.market === 'BOTH')
+                .map((v) => Number(v.price));
+            return prices.length ? Math.min(...prices) : Number.POSITIVE_INFINITY;
+        };
+        items.sort((a, b) => dir * (minPrice(a) - minPrice(b)));
+    }
+
     return enrichProductsWithRatingAvg(items);
 }
 

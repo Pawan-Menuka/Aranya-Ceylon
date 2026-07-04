@@ -63,8 +63,8 @@ export async function createBlog(req: Request, res: Response) {
 
     // P3-4: revalidate listing + detail when a post goes live immediately
     if (data.status === 'PUBLISHED') {
-        await revalidateFrontend(`/blog/${blog.slug}`);
-        await revalidateFrontend('/blog');
+        await revalidateFrontend(`/journal/${blog.slug}`);
+        await revalidateFrontend('/journal');
     }
 
     return res.status(201).json({ blog });
@@ -104,8 +104,8 @@ export async function updateBlog(req: Request, res: Response) {
         diff: { before, after: blog },
     });
 
-    await revalidateFrontend(`/blog/${blog.slug}`);
-    await revalidateFrontend('/blog');
+    await revalidateFrontend(`/journal/${blog.slug}`);
+    await revalidateFrontend('/journal');
 
     return res.json({ blog });
 }
@@ -124,8 +124,8 @@ export async function deleteBlog(req: Request, res: Response) {
     });
 
     // P3-4: revalidate on delete so the listing and detail no longer serve the post
-    await revalidateFrontend(`/blog/${blog.slug}`);
-    await revalidateFrontend('/blog');
+    await revalidateFrontend(`/journal/${blog.slug}`);
+    await revalidateFrontend('/journal');
 
     return res.json({ message: 'Blog deleted' });
 }

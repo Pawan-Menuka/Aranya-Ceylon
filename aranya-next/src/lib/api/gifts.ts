@@ -5,7 +5,10 @@ import { formatMoney } from "@/lib/money";
 // Server-side only — called from Next.js server components.
 // Falls back gracefully when backend is unavailable so ISR/SSG never fails.
 
-const API_BASE = process.env.BACKEND_URL ?? "http://localhost:4000";
+// Standardise on NEXT_PUBLIC_API_URL (see api/recipes.ts). BACKEND_URL kept only
+// as a legacy fallback so a deploy per .env.example doesn't silently hit
+// localhost and serve static demo gifts forever (BUG-17).
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? process.env.BACKEND_URL ?? "http://localhost:4000";
 
 interface ApiGiftSet {
   id: string;

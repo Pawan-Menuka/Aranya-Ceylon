@@ -60,7 +60,12 @@ export const productFilterSchema = z.object({
     cursor: z.string().optional(),
     limit: z.coerce.number().min(1).max(100).default(12),
     category: z.string().optional(),
-    featured: z.coerce.boolean().optional(),
+    // z.coerce.boolean() treats ANY non-empty string as true, so ?featured=false
+    // returned featured products (BUG-13). Parse the literal tokens instead.
+    featured: z
+        .enum(['true', 'false', '1', '0'])
+        .optional()
+        .transform((v) => (v === undefined ? undefined : v === 'true' || v === '1')),
     minPrice: z.coerce.number().min(0).optional(),
     maxPrice: z.coerce.number().min(0).optional(),
     sort: z.enum(['newest', 'price_asc', 'price_desc', 'bestselling']).default('newest'),
