@@ -175,6 +175,10 @@ model ProductImage {
   altText    String?
   position   Int      @default(0) // Display order
   createdAt  DateTime @default(now())
+
+  // Postgres doesn't auto-index FK columns; every include:{images} would scan
+  // ProductImage without this (PERF-02).
+  @@index([productId])
 }
 
 model Variant {
@@ -219,8 +223,8 @@ model Order {
   shippingAddress  Json         // Address snapshot at order time
   trackingNumber   String?
   createdAt        DateTime     @default(now())
-  market    Market    
-  currency  Currency  
+  market    Market
+  currency  Currency
 
   items            OrderItem[]
   timeline         OrderEvent[]
@@ -228,6 +232,7 @@ model Order {
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+  @@index([couponId]) // FK — coupon usage joins would otherwise scan (PERF-02)
 }
 
 model OrderItem {
@@ -240,6 +245,12 @@ model OrderItem {
   variant    Variant  @relation(fields: [variantId], references: [id])
   quantity   Int
   unitPrice  Decimal  @db.Decimal(10, 2) // Price snapshot — never changes after order
+
+  // FK indexes — include:{items} on orders and the dashboard groupBy join scan
+  // these child columns without them (PERF-02).
+  @@index([orderId])
+  @@index([productId])
+  @@index([variantId])
 }
 
 model OrderEvent {
@@ -249,6 +260,8 @@ model OrderEvent {
   status    OrderStatus
   note      String?
   createdAt DateTime    @default(now())
+
+  @@index([orderId]) // FK — order timeline fetch would otherwise scan (PERF-02)
 }
 
 model Review {

@@ -13,13 +13,17 @@ import { ACCOUNT } from "@/lib/account-data";
 // offline (acceptance criterion §11) — flagged via `demo`.
 
 export interface SignInResult { user: AuthUser; demo: boolean }
+// Registration doesn't establish a session — the user must verify their email
+// first. `pending` means "account created, go verify"; `demo` means the API was
+// unreachable and we fell back to a local demo session (already signed in).
+export interface SignUpResult { pending: boolean; demo: boolean; message?: string }
 
 interface AuthCtx {
   user: AuthUser | null;
   loading: boolean;
   demo: boolean;
   signIn: (email: string, password: string) => Promise<SignInResult>;
-  signUp: (name: string, email: string, password: string) => Promise<void>;
+  signUp: (name: string, email: string, password: string) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
 }
 
@@ -83,21 +87,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [afterAuth]);
 
-  const signUp = React.useCallback(async (name: string, email: string, password: string) => {
+  const signUp = React.useCallback(async (name: string, email: string, password: string): Promise<SignUpResult> => {
     try {
-      const u = await apiRegister({ name, email, password });
-      setUser(u);
-      setDemo(false);
-      await afterAuth();
+      const res = await apiRegister({ name, email, password });
+      // No session is established — the user must verify their email, then sign
+      // in. Surface the pending state so the form can tell them to check inbox.
+      return { pending: true, demo: false, message: res.message };
     } catch (e) {
       if (isOffline(e)) {
         setUser({ ...DEMO_USER, name: name || DEMO_USER.name, email: email || DEMO_USER.email });
         setDemo(true);
-        return;
+        return { pending: false, demo: true };
       }
       throw e;
     }
-  }, [afterAuth]);
+  }, []);
 
   const signOut = React.useCallback(async () => {
     try {

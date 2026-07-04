@@ -30,8 +30,8 @@ export function startScheduledPostsJob() {
             // P3-4: revalidate each newly published post so it appears immediately
             await Promise.all(
                 due.flatMap((blog) => [
-                    revalidateFrontend(`/blog/${blog.slug}`),
-                    revalidateFrontend('/blog'),
+                    revalidateFrontend(`/journal/${blog.slug}`),
+                    revalidateFrontend('/journal'),
                 ]),
             );
 

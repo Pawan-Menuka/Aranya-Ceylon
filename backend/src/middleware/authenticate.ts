@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken, type AccessTokenPayload } from '../lib/jwt.js';
+import { prisma } from '../index.js';
 
 // Extend Express Request type to include authenticated user
 declare global {
@@ -44,12 +45,22 @@ export function requireRole(...roles: string[]) {
 }
 
 // --- requireVerified: rejects unverified email accounts ---
-export function requireVerified(req: Request, res: Response, next: NextFunction) {
+// Checks `verified` from the DB (not the JWT, which can be stale during the 15m
+// access-token window). Previously this was a no-op that let any authenticated
+// request through regardless of verification (BUG-21). Login already blocks
+// unverified accounts (SEC-04); this makes the primitive genuinely enforce so
+// it's safe to guard sensitive routes with.
+export async function requireVerified(req: Request, res: Response, next: NextFunction) {
     if (!req.user) {
         return res.status(401).json({ error: 'Authentication required' });
     }
-    // Note: verified status is checked from DB in sensitive routes,
-    // not from JWT — JWT payload can be stale during the 15min window
+    const user = await prisma.user.findUnique({
+        where: { id: req.user.userId },
+        select: { verified: true },
+    });
+    if (!user?.verified) {
+        return res.status(403).json({ error: 'Email verification required', code: 'EMAIL_NOT_VERIFIED' });
+    }
     next();
 }
 

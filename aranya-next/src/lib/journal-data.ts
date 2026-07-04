@@ -101,7 +101,34 @@ function dekFrom(b: Blog): string {
   const plain = (b.content || "").replace(/[#>*_`]/g, "").replace(/\[(.*?)\]\(.*?\)/g, "$1").trim();
   return plain.slice(0, 180);
 }
+// Convert light inline markdown to the small HTML subset the article renderer
+// sanitises + allows (strong/em/a). Anything else stays literal text.
+function inlineMarkdown(s: string): string {
+  return s
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*])\*(?!\*)([^*]+?)\*/g, "$1<em>$2</em>")
+    .replace(/\[(.+?)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+
+// Map a live post's MDX/markdown `content` into the PostBlock[] the article page
+// renders. Without this, toPost never populated `body`, so every live article
+// fell back to canned placeholder prose (BUG-09b). Paragraph text is sanitised
+// at render time (ArticleBody → sanitizeHtml); headings/quotes render as text.
+export function contentToBlocks(content: string): PostBlock[] {
+  const blocks: PostBlock[] = [];
+  for (const raw of (content || "").replace(/\r\n/g, "\n").split(/\n{2,}/)) {
+    const para = raw.trim();
+    if (!para) continue;
+    const heading = para.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) { blocks.push({ t: "h", text: heading[2].trim() }); continue; }
+    if (para.startsWith(">")) { blocks.push({ t: "quote", text: para.replace(/^>\s?/gm, "").trim() }); continue; }
+    blocks.push({ t: "p", text: inlineMarkdown(para.replace(/\n/g, " ").trim()) });
+  }
+  return blocks;
+}
+
 export function toPost(b: Blog): Post {
+  const body = contentToBlocks(b.content);
   return {
     slug: b.slug,
     title: b.title,
@@ -114,6 +141,8 @@ export function toPost(b: Blog): Post {
     accent: ACCENTS[hashIndex(b.slug, ACCENTS.length)],
     slot: "post-" + b.slug,
     featured: false,
+    // Real article body from content; falls back to canned prose only when empty.
+    ...(body.length ? { body } : {}),
   };
 }
 

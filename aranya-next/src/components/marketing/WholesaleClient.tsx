@@ -242,6 +242,7 @@ const EMPTY_WFORM: WForm = { company: "", contact: "", email: "", phone: "", cou
 function WholesaleForm({ market, formRef }: { market: Market; formRef: React.RefObject<HTMLElement> }) {
   const [done, setDone] = React.useState(false);
   const [ref, setRef] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
   const [f, setF] = React.useState<WForm>(EMPTY_WFORM);
   const set = (k: keyof WForm, v: string | boolean) => setF((x) => ({ ...x, [k]: v }));
   const local = market === "local";
@@ -254,15 +255,18 @@ function WholesaleForm({ market, formRef }: { market: Market; formRef: React.Ref
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    setError(null);
     try {
       const res = await submitWholesale({ company: f.company, contact: f.contact, email: f.email, phone: f.phone || undefined, country: f.country, type: f.type, volume: f.volume || undefined, website: f.website || undefined, message: f.message || undefined, consent: f.consent });
+      // Only confirm on a real success — don't fabricate a reference for a lead
+      // the backend never received (BUG-10).
       setRef(res.ref);
-    } catch {
-      setRef("WS-" + (210 + Math.floor(Math.random() * 80)));
-    } finally {
-      setSubmitting(false);
       setDone(true);
       if (formRef.current) formRef.current.scrollIntoView({ block: "start" });
+    } catch (err) {
+      setError((err as Error)?.message || "Sorry — your application couldn't be submitted. Please try again, or email trade@aranyaceylon.com.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -350,6 +354,7 @@ function WholesaleForm({ market, formRef }: { market: Market; formRef: React.Ref
                   <input type="checkbox" required checked={f.consent} onChange={(e) => set("consent", e.target.checked)} style={{ marginTop: 3, width: 16, height: 16, accentColor: "var(--brand)" }} />
                   <span style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--muted)", lineHeight: 1.5 }}>I&rsquo;d like to receive wholesale pricing and harvest updates from Aranya Ceylon. We never share your details.</span>
                 </label>
+                {error && <div role="alert" style={{ marginTop: 18, padding: "11px 14px", borderRadius: 9, background: "rgba(192,83,31,.1)", border: "1px solid rgba(192,83,31,.35)", color: "#C0531F", fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 600 }}>{error}</div>}
                 <button type="submit" className={btn} style={{ marginTop: 24, padding: "15px", opacity: submitting ? 0.6 : 1 }} disabled={submitting}>{submitting ? "Submitting…" : "Submit application"}</button>
                 <p style={{ fontFamily: "var(--font-ui)", fontSize: 11.5, color: "var(--muted)", textAlign: "center", marginTop: 14 }}>Applications are reviewed by our trade team — this won&rsquo;t create a public account.</p>
               </form>

@@ -78,6 +78,9 @@ export interface AccountOrder {
   shipTo: string;
   items: OrderLineItem[];
   events: OrderEvent[];
+  // Real charged total + its currency, present for live (backend) orders.
+  total?: number;
+  currency?: "USD" | "LKR";
 }
 export interface AccountUser {
   first: string;
@@ -158,6 +161,10 @@ export function acOrderSubtotal(o: AccountOrder, market: Market): number {
   return o.items.reduce((s, it) => s + (market === "local" ? it.lkr : it.usd) * it.qty, 0);
 }
 export function acOrderTotal(o: AccountOrder, market: Market): number {
+  // Prefer the real charged total for live orders (matches what the customer
+  // paid, including discount/gift/express) — only fall back to the recomputed
+  // estimate for demo orders that carry no backend total (BUG-18).
+  if (o.total != null) return o.total;
   const sub = acOrderSubtotal(o, market);
   const ship = sub >= (market === "local" ? 5000 : 60) ? 0 : market === "local" ? 650 : 8.5;
   return sub + ship;
@@ -169,6 +176,8 @@ export function acStatusMeta(status: string): StatusMeta {
     in_transit: { label: "In transit", tone: "forest", short: "In transit" },
     out_for_delivery: { label: "Out for delivery", tone: "forest", short: "Out for delivery" },
     delivered: { label: "Delivered", tone: "muted", short: "Delivered" },
+    cancelled: { label: "Cancelled", tone: "muted", short: "Cancelled" },
+    refunded: { label: "Refunded", tone: "muted", short: "Refunded" },
   };
   return map[status] || { label: status, tone: "muted", short: status };
 }
@@ -203,15 +212,28 @@ export function wishlistSpices(keys: string[]): Spice[] {
   return keys.map(spiceForKey).filter((s): s is Spice => !!s);
 }
 
-// Map backend status strings → the dashboard's lowercase status tokens.
+// Map backend order status → the dashboard's status tokens. CANCELLED/REFUNDED
+// must NOT read as "delivered" — that misinformed customers about the outcome
+// of their order (BUG-18).
 const BACKEND_STATUS_MAP: Record<string, string> = {
   PENDING: "processing",
   PAID: "processing",
   PROCESSING: "processing",
   SHIPPED: "in_transit",
   DELIVERED: "delivered",
-  CANCELLED: "delivered",
-  REFUNDED: "delivered",
+  CANCELLED: "cancelled",
+  REFUNDED: "refunded",
+};
+
+// Map a backend timeline event's status → a tracking-spine step key (AC_STEPS).
+// The old code mapped events to status tokens (processing/in_transit) that don't
+// exist in the spine, so timestamps never attached to any step (BUG-18).
+const TIMELINE_STEP_MAP: Record<string, string> = {
+  PENDING: "placed",
+  PAID: "placed",
+  PROCESSING: "packed",
+  SHIPPED: "shipped",
+  DELIVERED: "delivered",
 };
 
 // Convert a backend Order → AccountOrder so the existing dashboard components
@@ -248,22 +270,32 @@ export function toAccountOrder(order: Order): AccountOrder {
   });
 
   const timeline = (order.timeline ?? []).map((t) => ({
-    step: BACKEND_STATUS_MAP[t.status] ?? "placed",
+    step: TIMELINE_STEP_MAP[t.status] ?? "placed",
     at: new Date(t.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }),
     loc: t.note ?? "",
   }));
+
+  // Real charged total + currency straight from the backend order, so what the
+  // customer sees matches what they paid (discount/gift/express included) rather
+  // than a client-side recomputation (BUG-18).
+  const totalNum = parseFloat(String(order.total ?? "0")) || 0;
+  const deliveredLabel = order.status === "DELIVERED" ? placedLabel : undefined;
 
   return {
     id: `AC-${order.id.slice(-6).toUpperCase()}`,
     placedISO: placed.toISOString().slice(0, 10),
     placedLabel,
     status,
-    carrier: "DHL Express",
+    // The backend doesn't record a carrier; use a neutral market-appropriate
+    // label instead of a fabricated "DHL Express".
+    carrier: order.market === "LOCAL" ? "Island-wide courier" : "International courier",
     tracking: order.trackingNumber ?? "",
     etaLabel: undefined,
-    deliveredLabel: status === "delivered" ? placedLabel : undefined,
+    deliveredLabel,
     shipTo: "",
     items,
     events: timeline,
+    total: totalNum,
+    currency: order.currency,
   };
 }

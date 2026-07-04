@@ -29,6 +29,10 @@ export const createProductSchema = z.object({
     categoryId: z.string().min(1),
     certifications: z.array(z.string()).default([]),
     featured: z.boolean().default(false),
+    // Lifecycle status. Without this, admin-created products were stuck DRAFT
+    // forever and could never appear on the storefront (public queries filter
+    // status=ACTIVE) — BUG-08. Defaults to DRAFT to preserve prior behaviour.
+    status: z.enum(['DRAFT', 'ACTIVE', 'ARCHIVED']).default('DRAFT'),
     latin: z.string().optional().nullable(),
     originLabel: z.string().optional().nullable(),
     color: z.string().optional().nullable(),
@@ -44,6 +48,8 @@ export const updateProductSchema = z.object({
     categoryId: z.string().min(1).optional(),
     certifications: z.array(z.string()).optional(),
     featured: z.boolean().optional(),
+    // Lets the admin console's active/archive toggle actually take effect (BUG-08).
+    status: z.enum(['DRAFT', 'ACTIVE', 'ARCHIVED']).optional(),
     latin: z.string().optional().nullable(),
     originLabel: z.string().optional().nullable(),
     color: z.string().optional().nullable(),
@@ -54,7 +60,12 @@ export const productFilterSchema = z.object({
     cursor: z.string().optional(),
     limit: z.coerce.number().min(1).max(100).default(12),
     category: z.string().optional(),
-    featured: z.coerce.boolean().optional(),
+    // z.coerce.boolean() treats ANY non-empty string as true, so ?featured=false
+    // returned featured products (BUG-13). Parse the literal tokens instead.
+    featured: z
+        .enum(['true', 'false', '1', '0'])
+        .optional()
+        .transform((v) => (v === undefined ? undefined : v === 'true' || v === '1')),
     minPrice: z.coerce.number().min(0).optional(),
     maxPrice: z.coerce.number().min(0).optional(),
     sort: z.enum(['newest', 'price_asc', 'price_desc', 'bestselling']).default('newest'),
