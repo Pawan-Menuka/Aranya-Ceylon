@@ -24,10 +24,16 @@ export async function login(email: string, password: string): Promise<AuthUser> 
   return data.user;
 }
 
-export async function register(input: { name: string; email: string; password: string }): Promise<AuthUser> {
-  const data = await apiFetch<AuthResponse>("/auth/register", { method: "POST", body: input });
-  if (data.accessToken) setAccessToken(data.accessToken);
-  return data.user;
+// Registration is deliberately neutral (anti-enumeration): the backend returns
+// only { message } and never a session — the user must verify their email, then
+// sign in. So register() surfaces that pending state rather than a user/token.
+export interface RegisterResult {
+  pending: true;
+  message: string;
+}
+export async function register(input: { name: string; email: string; password: string }): Promise<RegisterResult> {
+  const data = await apiFetch<{ message?: string }>("/auth/register", { method: "POST", body: input });
+  return { pending: true, message: data.message ?? "Check your email to verify your account." };
 }
 
 export async function refresh(): Promise<boolean> {
