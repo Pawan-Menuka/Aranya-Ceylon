@@ -11,6 +11,7 @@ import { neonConfig } from '@neondatabase/serverless';
 import { PrismaNeon } from '@prisma/adapter-neon';
 import ws from 'ws';
 import { SHARED_VERSION } from '@aranya/shared';
+import { ZodError } from 'zod';
 import authRoutes from './routes/auth.routes.js';
 import productRoutes from './routes/product.routes.js';
 import blogRoutes from './routes/blog.routes.js';
@@ -138,6 +139,17 @@ app.use((_req, res) => {
 });
 
 app.use((err: Error & { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    // Controllers that call schema.parse() directly (cart, checkout, contact,
+    // wholesale, admin) throw a ZodError, which has no .status — without this
+    // branch it would fall through to a 500 for what is really a 400. Surface
+    // field-level errors so the client can show which input was rejected.
+    if (err instanceof ZodError) {
+        return res.status(400).json({
+            error: 'Validation failed',
+            errors: err.errors.map((e) => ({ field: e.path.join('.'), message: e.message })),
+        });
+    }
+
     // Use the status the error was tagged with (e.g. 403 for CORS), default 500
     const status = typeof err.status === 'number' ? err.status : 500;
     if (status < 500) {

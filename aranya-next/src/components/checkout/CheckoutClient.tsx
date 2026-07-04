@@ -538,7 +538,9 @@ export function CheckoutClient() {
 
     // Basic validation
     if (!user && !email) { setError("Please enter your email address."); return; }
-    if (!firstName || !line1 || !city) { setError("Please fill in all required shipping fields."); return; }
+    // lastName is required by checkoutSchema (min 1); enforce it here so the
+    // user gets field-level guidance instead of a backend rejection.
+    if (!firstName || !lastName || !line1 || !city) { setError("Please fill in all required shipping fields."); return; }
 
     setPlacing(true);
     try {
@@ -709,7 +711,7 @@ export function CheckoutClient() {
             <Section n="2" title="Shipping address">
               <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
                 <Field label="First name" ph="First" value={firstName} onChange={setFirstName} half required />
-                <Field label="Last name" ph="Last" value={lastName} onChange={setLastName} half />
+                <Field label="Last name" ph="Last" value={lastName} onChange={setLastName} half required />
                 <Field label="Address" ph="Street address" value={line1} onChange={setLine1} required />
                 <Field label="Apartment, suite (optional)" ph="Apt, unit, etc." value={line2} onChange={setLine2} />
                 <Field label="City" ph="City" value={city} onChange={setCity} half required />

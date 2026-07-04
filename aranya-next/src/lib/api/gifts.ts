@@ -1,4 +1,5 @@
 import type { GiftSet } from "@/lib/gifts-data";
+import type { Variant } from "@/lib/types";
 import { formatMoney } from "@/lib/money";
 
 // Server-side only — called from Next.js server components.
@@ -25,6 +26,9 @@ interface ApiGiftSet {
   status: string;
   createdAt: string;
   updatedAt: string;
+  // Backing product link (gift.controller attachBackingProducts).
+  productId?: string | null;
+  variants?: Variant[];
 }
 
 function toGiftSet(g: ApiGiftSet): GiftSet {
@@ -45,6 +49,10 @@ function toGiftSet(g: ApiGiftSet): GiftSet {
     usd: formatMoney(g.usd, "USD"),
     lkr: formatMoney(g.lkr, "LKR"),
     contents: g.contents,
+    // Thread the backing product + variants through so the gift is addable to
+    // the real cart (resolved by lineFromSpice on add).
+    ...(g.productId ? { productId: g.productId } : {}),
+    ...(g.variants ? { variants: g.variants } : {}),
   };
 }
 
