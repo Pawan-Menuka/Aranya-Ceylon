@@ -8,6 +8,7 @@ import { Stars } from "../primitives/Stars";
 import { Badge } from "../primitives/Badge";
 import { Icon } from "../primitives/Icon";
 import { useCart } from "../CartContext";
+import { resolveVariant } from "@/lib/cart";
 
 // Product cards (ported from cards.jsx). The two locked variants:
 //   • CardCFinal — default catalog card (surface + 5px spice stripe, ghost CTA)
@@ -28,15 +29,32 @@ function pdHref(spice: Spice) {
   return `/products/${spice.slug ?? encodeURIComponent(spice.name.toLowerCase().replace(/\s+/g, "-"))}`;
 }
 
-// price-by-weight (mirrors the cart weight multipliers) so the card price
-// tracks the selector.
+// price-by-weight. Prefer the real variant price for the selected weight/market
+// (BUG-26); fall back to the derived 100g × weight-multiplier only when the card
+// has no live variants (demo/offline data).
 const WMULT: Record<string, number> = { "50g": 0.6, "100g": 1, "250g": 2.3 };
 function wNum(p: string) {
   return parseFloat(String(p).replace(/[^0-9.]/g, ""));
 }
-function wPrice(spice: Spice, market: Market, wt: string) {
-  const n = wNum(market === "local" ? spice.lkr : spice.usd) * (WMULT[wt] || 1);
+function fmtPrice(n: number, market: Market) {
   return market === "local" ? "Rs " + Math.round(n).toLocaleString("en-US") : "$" + n.toFixed(2);
+}
+function wPrice(spice: Spice, market: Market, wt: string) {
+  const v = resolveVariant(spice.variants, wt, market);
+  const wantCurrency = market === "local" ? "LKR" : "USD";
+  if (v && v.currency === wantCurrency) return fmtPrice(parseFloat(v.price), market);
+  const n = wNum(market === "local" ? spice.lkr : spice.usd) * (WMULT[wt] || 1);
+  return fmtPrice(n, market);
+}
+// Weights actually offered: derive from live variants for the active market when
+// present, else the demo triplet — so a card never offers a weight with no variant.
+function spiceWeights(spice: Spice, market: Market): string[] {
+  const wantCurrency = market === "local" ? "LKR" : "USD";
+  const live = spice.variants
+    ?.filter((v) => v.currency === wantCurrency || v.market === "BOTH")
+    .map((v) => `${v.weight}g`);
+  const uniq = live && live.length ? [...new Set(live)] : null;
+  return uniq ? uniq.sort((a, b) => parseInt(a) - parseInt(b)) : ["50g", "100g", "250g"];
 }
 
 // Cart wiring (lib/api/cart connects this to POST /cart/items in production).
@@ -57,9 +75,9 @@ function Wish() {
   );
 }
 
-function WeightSeg({ market, value, onChange }: { market: Market; value?: string; onChange?: (w: string) => void }) {
-  const ws = ["50g", "100g", "250g"];
-  const [iLocal, setILocal] = React.useState(1);
+function WeightSeg({ market, value, onChange, weights }: { market: Market; value?: string; onChange?: (w: string) => void; weights?: string[] }) {
+  const ws = weights && weights.length ? weights : ["50g", "100g", "250g"];
+  const [iLocal, setILocal] = React.useState(Math.min(1, ws.length - 1));
   const i = value != null ? Math.max(0, ws.indexOf(value)) : iLocal;
   const set = (k: number) => {
     if (onChange) onChange(ws[k]);
@@ -78,7 +96,8 @@ function WeightSeg({ market, value, onChange }: { market: Market; value?: string
 export function CardB({ spice, market = "intl" }: { spice: Spice; market?: Market }) {
   const cart = useCart();
   const [h, hp] = useHover();
-  const [wt, setWt] = React.useState("100g");
+  const weights = spiceWeights(spice, market);
+  const [wt, setWt] = React.useState(() => (weights.includes("100g") ? "100g" : weights[0]));
   const [added, setAdded] = React.useState(false);
   const onAdd = () => {
     cart.add(spice, wt, "Whole", 1);
@@ -109,7 +128,7 @@ export function CardB({ spice, market = "intl" }: { spice: Spice; market?: Marke
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
           <div className="disp" style={{ fontSize: 27, color: "var(--accent)", lineHeight: 1, fontWeight: 600 }}>{wPrice(spice, market, wt)}</div>
-          <WeightSeg market={market} value={wt} onChange={setWt} />
+          <WeightSeg market={market} value={wt} onChange={setWt} weights={weights} />
         </div>
         <button className={ctaClass(market)} onClick={onAdd}>{added ? "Added to basket ✓" : "Add to Cart"}</button>
       </div>
@@ -121,7 +140,8 @@ export function CardB({ spice, market = "intl" }: { spice: Spice; market?: Marke
 export function CardCFinal({ spice, market = "intl" }: { spice: Spice; market?: Market }) {
   const cart = useCart();
   const [h, hp] = useHover();
-  const [wt, setWt] = React.useState("100g");
+  const weights = spiceWeights(spice, market);
+  const [wt, setWt] = React.useState(() => (weights.includes("100g") ? "100g" : weights[0]));
   const [added, setAdded] = React.useState(false);
   const onAdd = () => {
     cart.add(spice, wt, "Whole", 1);
@@ -154,7 +174,7 @@ export function CardCFinal({ spice, market = "intl" }: { spice: Spice; market?: 
         <div style={{ height: 1, background: "var(--line)", marginBottom: 15, marginTop: "auto" }} />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 15 }}>
           <div className="disp" style={{ fontSize: 29, color: "var(--ink)", lineHeight: 1, fontWeight: 600 }}>{wPrice(spice, market, wt)}</div>
-          <WeightSeg market={market} value={wt} onChange={setWt} />
+          <WeightSeg market={market} value={wt} onChange={setWt} weights={weights} />
         </div>
         <button
           className={market === "local" ? "btn btn-local" : "btn btn-intl"}

@@ -144,6 +144,11 @@ export interface Spice {
   usd: string;
   lkr: string;
   weights: string[];
+  // Backend linkage — present when the Spice was adapted from a live Product
+  // (toSpice). Lets cards/quick-add resolve the real variant + price so items
+  // added anywhere reach the server cart and are charged correctly (BUG-01/26).
+  productId?: string;
+  variants?: Variant[];
 }
 
 // Catalog view model = Spice + the facet/sort fields the /products page filters on

@@ -108,5 +108,7 @@ export function toSpice(p: Product): Spice {
     usd: headlinePrice(p, "intl"),
     lkr: headlinePrice(p, "local"),
     weights: weights.length ? weights.map((w) => `${w}g`) : ["50g", "100g", "250g"],
+    productId: p.id,
+    variants: p.variants,
   };
 }

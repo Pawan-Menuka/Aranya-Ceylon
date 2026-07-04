@@ -8,6 +8,7 @@ import { Stars } from "../primitives/Stars";
 import { Badge } from "../primitives/Badge";
 import { pdContent, pdPrice } from "@/lib/pd-content";
 import { useCart } from "../CartContext";
+import { resolveVariant } from "@/lib/cart";
 import { addToWishlist, removeFromWishlist } from "@/lib/api/wishlist";
 
 // Product-detail buy side (ported from product-detail.jsx):
@@ -67,17 +68,16 @@ function Qty({ q, setQ }: { q: number; setQ: (n: number) => void }) {
   );
 }
 
-function resolveVariant(product: Product, weightStr: string, market: Market) {
-  const grams = parseInt(weightStr, 10);
+// Real variant price for the selected weight/market (BUG-26); falls back to the
+// derived pdPrice only when there are no live variants (demo/offline product).
+function priceFor(spice: Spice, market: Market, weight: string): string {
+  const v = resolveVariant(spice.variants, weight, market);
   const wantCurrency = market === "local" ? "LKR" : "USD";
-  const byWeight = product.variants.filter((v) => v.weight === grams);
-  const pool = byWeight.length ? byWeight : product.variants;
-  // prefer exact currency match, then BOTH, then any
-  return (
-    pool.find((v) => v.currency === wantCurrency) ??
-    pool.find((v) => v.market === "BOTH") ??
-    pool[0]
-  );
+  if (v && v.currency === wantCurrency) {
+    const n = parseFloat(v.price);
+    return market === "local" ? "Rs " + Math.round(n).toLocaleString("en-US") : "$" + n.toFixed(2);
+  }
+  return pdPrice(spice, market, weight);
 }
 
 export function BuyBox({ spice, market, product }: { spice: Spice; market: Market; product?: Product }) {
@@ -104,7 +104,7 @@ export function BuyBox({ spice, market, product }: { spice: Spice; market: Marke
   const onAdd = () => {
     const backendIds = product
       ? (() => {
-          const v = resolveVariant(product, weight, market);
+          const v = resolveVariant(product.variants, weight, market);
           return v ? { productId: product.id, variantId: v.id } : undefined;
         })()
       : undefined;
@@ -143,7 +143,7 @@ export function BuyBox({ spice, market, product }: { spice: Spice; market: Marke
       <div style={{ height: 1, background: "var(--line)", margin: "0 0 22px" }} />
 
       <div style={{ display: "flex", alignItems: "flex-end", gap: 12, marginBottom: 22 }}>
-        <span className="disp" style={{ fontSize: 42, color: "var(--ink)", lineHeight: 0.9, fontWeight: 600 }}>{pdPrice(spice, market, weight)}</span>
+        <span className="disp" style={{ fontSize: 42, color: "var(--ink)", lineHeight: 0.9, fontWeight: 600 }}>{priceFor(spice, market, weight)}</span>
         <span style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--muted)", fontWeight: 600, paddingBottom: 5 }}>/ {weight} · {isLocal ? "incl. tax" : "duty-free export"}</span>
       </div>
 
@@ -155,7 +155,7 @@ export function BuyBox({ spice, market, product }: { spice: Spice; market: Marke
             return (
               <button key={w} onClick={() => setWeight(w)} style={{ flex: 1, padding: "12px 8px", borderRadius: 7, cursor: "pointer", textAlign: "center", border: on ? "1.5px solid " + accent : "1px solid var(--line)", background: on ? (isLocal ? "rgba(15,110,86,.06)" : "rgba(186,117,23,.07)") : "#fff", transition: "all .15s" }}>
                 <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, fontWeight: 700, color: on ? accent : "var(--ink)" }}>{w}</div>
-                <div style={{ fontFamily: "var(--font-ui)", fontSize: 11.5, color: "var(--muted)", marginTop: 3 }}>{pdPrice(spice, market, w)}</div>
+                <div style={{ fontFamily: "var(--font-ui)", fontSize: 11.5, color: "var(--muted)", marginTop: 3 }}>{priceFor(spice, market, w)}</div>
               </button>
             );
           })}
@@ -174,7 +174,7 @@ export function BuyBox({ spice, market, product }: { spice: Spice; market: Marke
       <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
         <Qty q={q} setQ={setQ} />
         <button onClick={onAdd} className={isLocal ? "btn btn-local" : "btn btn-intl"} style={{ flex: 1 }}>
-          {added ? "Added to basket ✓" : "Add to Cart — " + pdPrice(spice, market, weight)}
+          {added ? "Added to basket ✓" : "Add to Cart — " + priceFor(spice, market, weight)}
         </button>
         <button onClick={toggleSaved} aria-label="Save" style={{ width: 46, height: 46, flex: "0 0 auto", borderRadius: 6, border: "1.5px solid " + (saved ? accent : "var(--line)"), background: "#fff", cursor: "pointer", display: "grid", placeItems: "center" }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill={saved ? accent : "none"} stroke={saved ? accent : "var(--muted)"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
