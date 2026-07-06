@@ -5,6 +5,7 @@ import { Seal } from "../primitives/Seal";
 import { Liyawel, Eyebrow } from "../primitives/Motif";
 import { useMarket } from "../MarketContext";
 import { useAuth } from "../AuthContext";
+import { resendVerification } from "@/lib/api/auth";
 
 // Signed-out gate (ported from account.jsx SignedOutGate), wired to real auth.
 // Sign in / register call the AuthContext; on success the parent swaps to the
@@ -20,7 +21,40 @@ export function SignedOutGate() {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
+  const [resending, setResending] = React.useState(false);
   const accentBtn = market === "local" ? "btn btn-local" : "btn btn-intl";
+
+  // Surface the result of the email-verification link the backend redirects to
+  // (/account?verified=1|0) — previously it pointed at a non-existent /login and
+  // nothing read the flag, so the whole signup funnel dead-ended (FLOW-01).
+  React.useEffect(() => {
+    try {
+      const v = new URLSearchParams(window.location.search).get("verified");
+      if (v === "1") {
+        setMode("in");
+        setNotice("Your email is verified — sign in below to continue.");
+      } else if (v === "0") {
+        setMode("in");
+        setError("That verification link is invalid or has expired. Enter your email below and resend a new one.");
+      }
+    } catch { /* no window / bad URL — ignore */ }
+  }, []);
+
+  // Neutral resend: always shows the same reassurance, never reveals whether the
+  // account exists or is already verified.
+  const handleResend = async () => {
+    if (!email) { setError("Enter your email above first, then resend."); return; }
+    setResending(true);
+    setError(null);
+    try {
+      const res = await resendVerification(email);
+      setNotice(res.message ?? "If that account still needs verifying, a new link is on its way.");
+    } catch {
+      setNotice("If that account still needs verifying, a new link is on its way.");
+    } finally {
+      setResending(false);
+    }
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,7 +128,9 @@ export function SignedOutGate() {
               {mode === "up" && field("Full name", "text", "Your name", name, setName)}
               {field("Email", "email", "you@example.com", email, setEmail)}
               {field("Password", "password", "••••••••", password, setPassword)}
-              {mode === "in" && <div style={{ textAlign: "right", marginTop: -6, marginBottom: 12 }}><a href="#" style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, fontWeight: 600, color: "var(--brand)" }}>Forgot password?</a></div>}
+              {/* No self-service reset route exists yet — point at support instead of
+                  a dead href="#" (BUG-25). TODO: wire /auth/forgot-password + reset page. */}
+              {mode === "in" && <div style={{ textAlign: "right", marginTop: -6, marginBottom: 12 }}><a href="mailto:hello@aranyaceylon.com?subject=Password%20reset%20request" style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, fontWeight: 600, color: "var(--brand)" }}>Forgot password?</a></div>}
               {error && <div style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "#C0531F", fontWeight: 600, marginBottom: 12 }}>{error}</div>}
               {notice && <div style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--brand)", fontWeight: 600, marginBottom: 12 }}>{notice}</div>}
               <button type="submit" className={accentBtn} disabled={busy} style={{ marginTop: 4, opacity: busy ? 0.7 : 1 }}>{busy ? "Please wait…" : mode === "in" ? "Sign in" : "Create account"}</button>
@@ -102,6 +138,12 @@ export function SignedOutGate() {
                 {mode === "in" ? "New to Aranya? " : "Already have an account? "}
                 <button type="button" onClick={() => { setMode(mode === "in" ? "up" : "in"); setError(null); setNotice(null); }} style={{ background: "none", border: 0, cursor: "pointer", fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 700, color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: 3 }}>{mode === "in" ? "Create an account" : "Sign in"}</button>
               </div>
+              {mode === "in" && (
+                <div style={{ textAlign: "center", marginTop: 10, fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--muted)" }}>
+                  Didn&rsquo;t get a verification email?{" "}
+                  <button type="button" onClick={handleResend} disabled={resending} style={{ background: "none", border: 0, cursor: resending ? "default" : "pointer", fontFamily: "var(--font-ui)", fontSize: 12.5, fontWeight: 700, color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: 3, opacity: resending ? 0.6 : 1 }}>{resending ? "Sending…" : "Resend link"}</button>
+                </div>
+              )}
             </form>
           </div>
         </div>

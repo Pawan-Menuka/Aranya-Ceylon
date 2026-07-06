@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { hash, verify } from '@node-rs/bcrypt';
+import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../index.js';
 import { issueTokenPair, rotateRefreshToken, revokeTokenFamily, revokeAllUserTokens, issueEmailVerificationToken, verifyEmailToken } from '../services/token.service.js';
@@ -87,17 +88,43 @@ export async function register(req: Request, res: Response) {
 // GET /auth/verify?token=… — clicked from the verification email. Marks the
 // account verified, then redirects to the storefront with a result flag.
 // Always redirects (never leaks token validity in the body); a bad/expired
-// token just lands on ?verified=0.
+// token just lands on ?verified=0. Target is /account (which exists and reads
+// the flag) — NOT /login, which has no route and 404'd the whole funnel (FLOW-01).
 export async function verifyEmail(req: Request, res: Response) {
     const token = typeof req.query.token === 'string' ? req.query.token : '';
     const frontend = (process.env.FRONTEND_URL ?? 'http://localhost:3000').split(',')[0]!.trim();
 
     try {
         await verifyEmailToken(token);
-        return res.redirect(`${frontend}/login?verified=1`);
+        return res.redirect(`${frontend}/account?verified=1`);
     } catch {
-        return res.redirect(`${frontend}/login?verified=0`);
+        return res.redirect(`${frontend}/account?verified=0`);
     }
+}
+
+// --- Resend verification email ---
+// Neutral response (anti-enumeration): always 200 with the same message whether
+// or not the email exists or is already verified. A new link is only actually
+// issued + sent for a real, still-unverified account. Rate-limited at the route.
+const resendVerificationSchema = z.object({ email: z.string().email() });
+const NEUTRAL_RESEND_MESSAGE = 'If that account exists and still needs verifying, a new link has been sent.';
+export async function resendVerification(req: Request, res: Response) {
+    const { email } = resendVerificationSchema.parse(req.body); // ZodError → 400
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (user && !user.verified) {
+        // Fire-and-forget, mirroring register(): keep the response fast + timing-flat.
+        void (async () => {
+            try {
+                const token = await issueEmailVerificationToken(user.id);
+                await sendVerificationEmail({ to: user.email, token });
+            } catch (err) {
+                console.error('[resend-verification] failed:', err);
+            }
+        })();
+    }
+
+    return res.status(200).json({ message: NEUTRAL_RESEND_MESSAGE });
 }
 
 // --- Login ---
