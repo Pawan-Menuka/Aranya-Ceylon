@@ -9,6 +9,8 @@ import { Icon } from "../primitives/Icon";
 import { ImageSlot } from "../primitives/ImageSlot";
 import { CardCFinal } from "../cards/Cards";
 import { useMarket } from "../MarketContext";
+import { listProducts } from "@/lib/api/products";
+import { toCatalogSpice } from "@/lib/catalog-data";
 
 // Search results (ported from search.jsx). Searches both the catalog (products)
 // and the journal (articles). Query is seeded from ?q= and kept in the URL.
@@ -131,19 +133,44 @@ export function SearchClient({ products, journal, initialQuery = "" }: { product
     window.history.replaceState(null, "", q ? `?q=${encodeURIComponent(q)}` : window.location.pathname);
   }, [query]);
 
+  // Authoritative product results from the backend full-text-search endpoint
+  // (ranked, market-filtered, covers the whole catalogue — not just the ≤100
+  // preloaded products the client scores). Debounced; falls back to null (→
+  // client-side scoring) on error / offline so search still works with the API
+  // down (BUG-12). `null` = no backend result yet, `[]` = backend found nothing.
+  const [remoteProducts, setRemoteProducts] = React.useState<CatalogSpice[] | null>(null);
+  React.useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) { setRemoteProducts(null); return; }
+    let alive = true;
+    const t = setTimeout(() => {
+      listProducts({ search: q, limit: 24 })
+        .then((res) => { if (alive) setRemoteProducts((res.items || []).map(toCatalogSpice)); })
+        .catch(() => { if (alive) setRemoteProducts(null); });
+    }, 220);
+    return () => { alive = false; clearTimeout(t); };
+  }, [query]);
+
   const productResults = React.useMemo(() => {
     if (!tokens.length) return [];
-    const list = products.map((p) => [p, scoreProduct(p, tokens)] as [CatalogSpice, number]).filter(([, s]) => s > 0);
     const num = (p: CatalogSpice) => parseFloat(p.usd.replace(/[^0-9.]/g, "")) || 0;
-    const byRel = (a: [CatalogSpice, number], b: [CatalogSpice, number]) => b[1] - a[1];
-    const sorters: Record<string, (a: [CatalogSpice, number], b: [CatalogSpice, number]) => number> = {
-      relevance: byRel,
-      "price-asc": (a, b) => num(a[0]) - num(b[0]),
-      "price-desc": (a, b) => num(b[0]) - num(a[0]),
-      rating: (a, b) => b[0].rating - a[0].rating,
+    const applySort = (list: CatalogSpice[]): CatalogSpice[] => {
+      if (sort === "price-asc") return [...list].sort((a, b) => num(a) - num(b));
+      if (sort === "price-desc") return [...list].sort((a, b) => num(b) - num(a));
+      if (sort === "rating") return [...list].sort((a, b) => b.rating - a.rating);
+      return list; // relevance — keep the incoming (backend ts_rank / client score) order
     };
-    return list.sort(sorters[sort] || byRel).map(([p]) => p);
-  }, [products, tokens, sort]);
+    // Prefer backend FTS ranking when it has hits. Fall back to client-side
+    // scoring while the request is in flight, when offline, OR when FTS (which is
+    // word-based) returns nothing but a partial/substring match exists locally.
+    if (remoteProducts && remoteProducts.length) return applySort(remoteProducts);
+    const scored = products
+      .map((p) => [p, scoreProduct(p, tokens)] as [CatalogSpice, number])
+      .filter(([, s]) => s > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([p]) => p);
+    return applySort(scored);
+  }, [remoteProducts, products, tokens, sort]);
 
   const postResults = React.useMemo(() => {
     if (!tokens.length) return [];

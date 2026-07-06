@@ -2,7 +2,6 @@ import { prisma } from '../index.js';
 import { Prisma } from '@prisma/client';
 import type { Market } from '@prisma/client';
 import type { CreateProductInput, UpdateProductInput, ProductFilterInput } from '@aranya/shared';
-import { deleteImage } from './cloudinary.service.js';
 
 // ----------------------------------------------------------------
 // MARKET FILTER HELPER
@@ -332,9 +331,12 @@ export async function updateProduct(id: string, data: UpdateProductInput) {
         await tx.product.update({
             where: { id },
             data: {
-                ...(fields.name && { name: fields.name }),
-                ...(fields.description && { description: fields.description }),
-                ...(fields.categoryId && { categoryId: fields.categoryId }),
+                // Use !== undefined (not truthiness) so a provided value is always
+                // applied, consistent with latin/originLabel below (BUG-23). The
+                // shared schema still enforces min lengths, so these can't be blanked.
+                ...(fields.name !== undefined && { name: fields.name }),
+                ...(fields.description !== undefined && { description: fields.description }),
+                ...(fields.categoryId !== undefined && { categoryId: fields.categoryId }),
                 ...(fields.featured !== undefined && { featured: fields.featured }),
                 ...(fields.status && { status: fields.status }),
                 ...(fields.certifications && { certifications: fields.certifications }),
@@ -386,23 +388,15 @@ export async function updateProduct(id: string, data: UpdateProductInput) {
 }
 
 // --- Soft delete (archive) product (admin only) ---
+// Archiving is reversible (status → ARCHIVED), so it must NOT destroy the
+// product's Cloudinary images — doing so left broken image URLs behind if the
+// product was later un-archived (BUG-24). Images are only removed on a true
+// hard delete or explicit image removal, never here.
 export async function archiveProduct(id: string) {
-    const images = await prisma.productImage.findMany({
-        where: { productId: id, publicId: { not: null } },
-        select: { publicId: true },
-    });
-
-    const product = await prisma.product.update({
+    return prisma.product.update({
         where: { id },
         data: { status: 'ARCHIVED' },
     });
-
-    // Best-effort Cloudinary cleanup — don't fail the archive if this errors.
-    await Promise.allSettled(
-        images.map((img) => deleteImage(img.publicId!)),
-    );
-
-    return product;
 }
 
 // --- Admin: list ALL products across both markets ---

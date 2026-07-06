@@ -80,9 +80,11 @@ app.use(cors({
         if (origin && _allowedOrigins.includes(origin)) return cb(null, true);
         // Development only: allow any origin, incl. file:// pages (null origin)
         if (isDev) return cb(null, true);
-        // Tag the error so the global handler returns 403 instead of 500
-        const err = new Error('CORS: origin not allowed') as Error & { status?: number };
+        // Tag the error so the global handler returns 403 instead of 500. `expose`
+        // marks the message as safe to relay to the client (see error handler).
+        const err = new Error('CORS: origin not allowed') as Error & { status?: number; expose?: boolean };
         err.status = 403;
+        err.expose = true;
         cb(err);
     },
     credentials: true,
@@ -138,7 +140,7 @@ app.use((_req, res) => {
     res.status(404).json({ error: 'Route not found' });
 });
 
-app.use((err: Error & { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: Error & { status?: number; expose?: boolean }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     // Controllers that call schema.parse() directly (cart, checkout, contact,
     // wholesale, admin) throw a ZodError, which has no .status — without this
     // branch it would fall through to a 500 for what is really a 400. Surface
@@ -153,8 +155,10 @@ app.use((err: Error & { status?: number }, _req: express.Request, res: express.R
     // Use the status the error was tagged with (e.g. 403 for CORS), default 500
     const status = typeof err.status === 'number' ? err.status : 500;
     if (status < 500) {
-        // Client errors: log at debug level, surface the message
-        return res.status(status).json({ error: err.message });
+        // Client errors. Only relay the message when it's explicitly marked safe
+        // (expose) — an arbitrary library error carrying status<500 must not leak
+        // its internal message to clients (SEC-11).
+        return res.status(status).json({ error: err.expose ? err.message : 'Request rejected' });
     }
     console.error('[ERROR]', err);
     // Never leak internals (message/stack) outside development

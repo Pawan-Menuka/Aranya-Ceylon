@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { register, login, refresh, logout, logoutAll, getMe, patchMe, verifyEmail, listAddresses, createAddress, updateAddress, deleteAddress } from '../controllers/auth.controller.js';
+import { register, login, refresh, logout, logoutAll, getMe, patchMe, verifyEmail, resendVerification, listAddresses, createAddress, updateAddress, deleteAddress } from '../controllers/auth.controller.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { validate } from '../middleware/validate.js';
@@ -12,6 +12,8 @@ router.post('/register', authLimiter, validate(registerSchema), asyncHandler(reg
 // Email-verification link target. Rate-limited even though tokens are 48 random
 // chars (brute-force is infeasible) — defence in depth against token guessing.
 router.get('/verify', authLimiter, asyncHandler(verifyEmail));
+// Resend the verification link (neutral, anti-enumeration). authLimiter caps abuse.
+router.post('/resend-verification', authLimiter, asyncHandler(resendVerification));
 router.post('/login', loginLimiter, validate(loginSchema), asyncHandler(login));
 router.post('/refresh', authLimiter, asyncHandler(refresh));
 // Logout needs no access token — possession of the refresh cookie is the proof

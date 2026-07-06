@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { resolveMarket } from "@/lib/market";
 import { listProducts } from "@/lib/api/products";
-import { getRecentBlog } from "@/lib/api/blog";
+import { listBlog } from "@/lib/api/blog";
 import { CATALOG, toCatalogSpice } from "@/lib/catalog-data";
 import { JOURNAL, toPost } from "@/lib/journal-data";
 import { SiteChrome } from "@/components/SiteChrome";
@@ -22,9 +22,12 @@ async function loadIndex(): Promise<{ products: CatalogSpice[]; journal: Post[] 
   let products: CatalogSpice[] = [];
   let journal: Post[] = [];
   try {
-    const [p, b] = await Promise.all([listProducts({ limit: 100 }), getRecentBlog()]);
+    // Preload a broad index so first paint + the offline fallback are instant.
+    // Journal covers up to 50 posts (was the 3 most recent) so journal search
+    // isn't limited to a handful of articles (BUG-12).
+    const [p, b] = await Promise.all([listProducts({ limit: 100 }), listBlog({ limit: 50 })]);
     products = (p.items || []).map(toCatalogSpice);
-    journal = (b.blogs || []).map(toPost);
+    journal = (b.items || []).map(toPost);
   } catch {
     /* fall through to demo */
   }

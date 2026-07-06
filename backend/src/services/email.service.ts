@@ -102,7 +102,7 @@ export async function sendLowStockAlert(products: { name: string; sku: string; s
             <h2>Low stock alert</h2>
             <table border="1" cellpadding="6">
                 <tr><th>Product</th><th>SKU</th><th>Stock</th></tr>
-                ${products.map((p) => `<tr><td>${p.name}</td><td>${p.sku}</td><td>${p.stock}</td></tr>`).join('')}
+                ${products.map((p) => `<tr><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.sku)}</td><td>${p.stock}</td></tr>`).join('')}
             </table>
         `,
     });

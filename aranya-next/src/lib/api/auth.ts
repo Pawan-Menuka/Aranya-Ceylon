@@ -36,6 +36,12 @@ export async function register(input: { name: string; email: string; password: s
   return { pending: true, message: data.message ?? "Check your email to verify your account." };
 }
 
+// Request a fresh verification link. Neutral by design — resolves on any 2xx,
+// never reveals whether the account exists or is already verified.
+export async function resendVerification(email: string): Promise<{ message: string }> {
+  return apiFetch("/auth/resend-verification", { method: "POST", body: { email } });
+}
+
 export async function refresh(): Promise<boolean> {
   try {
     const data = await apiFetch<{ accessToken: string }>("/auth/refresh", { method: "POST" });

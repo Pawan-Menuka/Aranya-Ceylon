@@ -5,6 +5,7 @@ import type { AuthUser } from "@/lib/api/auth";
 import { login as apiLogin, register as apiRegister, refresh as apiRefresh, me as apiMe, logout as apiLogout } from "@/lib/api/auth";
 import { mergeCart } from "@/lib/api/cart";
 import { ACCOUNT } from "@/lib/account-data";
+import { DEMO_MODE } from "@/lib/demo";
 
 // Auth context (spec §6/§7.3). Access token lives in memory (lib/api/http.ts);
 // the refresh token is an HttpOnly cookie via the BFF. On mount we try a silent
@@ -32,8 +33,11 @@ const Ctx = React.createContext<AuthCtx | null>(null);
 const DEMO_USER: AuthUser = { id: "demo", name: ACCOUNT.user.name, email: ACCOUNT.user.email, role: "CUSTOMER" };
 
 // Treat "API unreachable" (BFF 502) or a network error as offline → demo mode.
-// A real 400/401 from the backend is surfaced to the form.
+// A real 400/401 from the backend is surfaced to the form. Gated by DEMO_MODE
+// so a transient network error in production never silently logs the visitor
+// into a fabricated demo account instead of surfacing the failure (BUG-20).
 function isOffline(e: unknown): boolean {
+  if (!DEMO_MODE) return false;
   const status = (e as { status?: number })?.status;
   return status === undefined || status === 502 || status === 0;
 }

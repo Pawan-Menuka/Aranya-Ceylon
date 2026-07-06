@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
+import { timingSafeEqual } from "crypto";
+
+// Length-independent constant-time compare so a timing side-channel can't be
+// used to recover the revalidation secret byte by byte (SEC-15).
+function secretsMatch(provided: string | null, expected: string): boolean {
+  if (!provided) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
 
 // On-demand ISR revalidation endpoint.
 // Called by the backend after content create/update/delete.
@@ -11,7 +22,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const secret = req.headers.get("x-revalidate-secret");
   const expected = process.env.REVALIDATION_SECRET;
 
-  if (!expected || secret !== expected) {
+  if (!expected || !secretsMatch(secret, expected)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
