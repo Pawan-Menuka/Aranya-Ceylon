@@ -210,7 +210,7 @@ src/
   types/global.d.ts       <image-slot> custom-element JSX typing
 public/
   image-slot.js           The photo-drop web component (drop real photos onto tiles)
-  assets/hero-spices.png  Simulated hero still (until real frames are hosted)
+  hero/                   Scroll-scrubbed hero frames (desktop/ + mobile/, 192 each) + poster.webp
 ```
 
 ### The patterns that matter (spec §7)

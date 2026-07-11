@@ -18,7 +18,7 @@ via Stripe), served from one catalog and one API.
 ```
 backend/      Express API, Prisma schema + migrations, cron jobs, services
 shared/       Zod schemas and types (built to dist/, consumed by backend & frontend)
-aranya-next/  Next.js storefront + admin console (see aranya-next/HANDOFF.md)
+aranya-next/  Next.js storefront + admin console (see aranya-next/README.md)
 ```
 
 ## Prerequisites
