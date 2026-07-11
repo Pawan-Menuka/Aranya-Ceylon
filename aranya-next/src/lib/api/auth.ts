@@ -64,7 +64,11 @@ export async function me(): Promise<AuthUser | null> {
   }
 }
 
-export async function patchMe(input: { name?: string; phone?: string }): Promise<AuthUser> {
+// name-only: the backend patchMe + patchMeSchema accept only `name`. A `phone`
+// field here was silently dropped (no User.phone column, not in the schema) —
+// removed to keep the client contract honest (GAP-01). Add it back alongside a
+// User.phone migration + schema field if profile phone is ever needed.
+export async function patchMe(input: { name?: string }): Promise<AuthUser> {
   const data = await apiFetch<{ user: AuthUser }>("/auth/me", { method: "PATCH", body: input, auth: true });
   return data.user;
 }

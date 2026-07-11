@@ -73,7 +73,7 @@ function BlogTable({ rows, onOpen }: { rows: AdminBlogPost[]; onOpen: (p: AdminB
 
 type BlogDraft = Partial<AdminBlogPost>;
 
-type BlogSavePayload = AdminBlogPost & { content?: string; seoDesc?: string };
+type BlogSavePayload = AdminBlogPost & { content?: string; seoDesc?: string; scheduledAt?: string };
 function BlogEditor({ post, onClose, onSave }: { post: BlogDraft; onClose: () => void; onSave: (p: BlogSavePayload) => void }) {
   const isNew = !post.slug;
   const [p, setP] = React.useState<AdminBlogPost>(() => ({
@@ -87,6 +87,15 @@ function BlogEditor({ post, onClose, onSave }: { post: BlogDraft; onClose: () =>
   // failed backend validation — BUG-09a).
   const [content, setContent] = React.useState("");
   const [excerpt, setExcerpt] = React.useState("");
+  // Controlled schedule date/time — previously uncontrolled defaultValue inputs
+  // whose values were never read, so scheduledAt was never sent and scheduled
+  // posts could never publish (FLOW-03). Defaults to tomorrow 09:00.
+  const [scheduleDate, setScheduleDate] = React.useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [scheduleTime, setScheduleTime] = React.useState("09:00");
   const set = <K extends keyof AdminBlogPost>(k: K, v: AdminBlogPost[K]) => setP((x) => ({ ...x, [k]: v }));
   React.useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -101,7 +110,17 @@ function BlogEditor({ post, onClose, onSave }: { post: BlogDraft; onClose: () =>
     if (!backendId) return;
     let alive = true;
     getAdminBlog(backendId)
-      .then(({ blog }) => { if (alive) { setContent(blog.content ?? ""); setExcerpt(blog.seoDesc ?? ""); } })
+      .then(({ blog }) => {
+        if (!alive) return;
+        setContent(blog.content ?? "");
+        setExcerpt(blog.seoDesc ?? "");
+        if (blog.scheduledAt) {
+          const d = new Date(blog.scheduledAt);
+          const pad = (n: number) => String(n).padStart(2, "0");
+          setScheduleDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+          setScheduleTime(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
+        }
+      })
       .catch(() => { /* keep empty — offline/demo */ });
     return () => { alive = false; };
   }, [backendId]);
@@ -166,10 +185,10 @@ function BlogEditor({ post, onClose, onSave }: { post: BlogDraft; onClose: () =>
             </div>
             {publishMode === "schedule" && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
-                <div className="ad-field"><label className="ad-label">Date</label><input className="ad-input" type="date" defaultValue="2026-06-09" /></div>
-                <div className="ad-field"><label className="ad-label">Time</label><input className="ad-input" type="time" defaultValue="09:00" /></div>
+                <div className="ad-field"><label className="ad-label">Date</label><input className="ad-input" type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)} /></div>
+                <div className="ad-field"><label className="ad-label">Time</label><input className="ad-input" type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} /></div>
                 <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "var(--ad-muted)", background: "rgba(94,117,135,.1)", padding: "10px 12px", borderRadius: 9 }}>
-                  <AIcon name="clock" size={15} stroke="var(--slate)" />Goes live automatically on Jun 9, 2026 at 09:00 — the background job will publish and revalidate the page.
+                  <AIcon name="clock" size={15} stroke="var(--slate)" />Goes live automatically at the date &amp; time above — the background job will publish and revalidate the page.
                 </div>
               </div>
             )}
@@ -180,7 +199,12 @@ function BlogEditor({ post, onClose, onSave }: { post: BlogDraft; onClose: () =>
           {!isNew && <button className="ad-btn ad-btn-danger ad-btn-sm"><AIcon name="trash" size={15} stroke="var(--neg)" /></button>}
           <button className="ad-btn ad-btn-ghost ad-btn-sm"><AIcon name="external" size={15} stroke="var(--ad-muted)" />Preview</button>
           <button className="ad-btn ad-btn-ghost" style={{ marginLeft: "auto" }} onClick={onClose}>Cancel</button>
-          <button className="ad-btn ad-btn-green" onClick={() => onSave({ ...p, content, seoDesc: excerpt, status: publishMode === "now" ? "Published" : publishMode === "schedule" ? "Scheduled" : "Draft" })}>
+          <button className="ad-btn ad-btn-green" onClick={() => {
+            const scheduledAt = publishMode === "schedule" && scheduleDate
+              ? new Date(`${scheduleDate}T${scheduleTime || "09:00"}`).toISOString()
+              : undefined;
+            onSave({ ...p, content, seoDesc: excerpt, scheduledAt, status: publishMode === "now" ? "Published" : publishMode === "schedule" ? "Scheduled" : "Draft" });
+          }}>
             <AIcon name="check" size={16} stroke="#fff" />{publishMode === "now" ? "Publish" : publishMode === "schedule" ? "Schedule" : "Save draft"}
           </button>
         </div>
@@ -214,7 +238,7 @@ export function AdminBlog() {
     return c;
   }, [rows]);
 
-  const save = (p: AdminBlogPost & { content?: string; seoDesc?: string }) => {
+  const save = (p: BlogSavePayload) => {
     const statusMap: Record<string, "DRAFT" | "SCHEDULED" | "PUBLISHED"> = { Draft: "DRAFT", Scheduled: "SCHEDULED", Published: "PUBLISHED" };
     const apiStatus = statusMap[p.status] ?? "DRAFT";
     const slug = p.slug || (p.title || "untitled").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -227,9 +251,15 @@ export function AdminBlog() {
       setSaveError("Add at least a short body (10+ characters) before saving.");
       return;
     }
+    // A scheduled post must carry a scheduledAt or the cron job can never select
+    // it (its predicate is scheduledAt <= now) — it would sit SCHEDULED forever (FLOW-03).
+    if (apiStatus === "SCHEDULED" && !p.scheduledAt) {
+      setSaveError("Pick a publish date and time for the scheduled post.");
+      return;
+    }
     setRows((prev) => {
       const exists = prev.find((x) => x.slug === p.slug);
-      const blogPayload = { title: p.title, slug, content, status: apiStatus, tags: [p.category], ...(p.seoDesc ? { seoDesc: p.seoDesc } : {}) };
+      const blogPayload = { title: p.title, slug, content, status: apiStatus, tags: [p.category], ...(p.seoDesc ? { seoDesc: p.seoDesc } : {}), ...(p.scheduledAt ? { scheduledAt: p.scheduledAt } : {}) };
       if (exists && backendId) {
         updateBlog(backendId, blogPayload).catch(() => setSaveError("Couldn't save changes to the server. They may not be persisted."));
         return prev.map((x) => (x.slug === p.slug ? { ...x, ...p } : x));
