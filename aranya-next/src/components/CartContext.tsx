@@ -154,10 +154,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setOpen(true); // surface the notice — otherwise the basket empties silently
   }, [market, hydrated]);
 
-  // Shared quantity setter for inc/dec/setQty. Reads the current qty from state,
-  // applies the change optimistically, then PATCHes the backend outside the
-  // reducer, reverting on failure. Keyed on state.items so it always sees the
-  // latest quantities.
+  // Per-line quantity-sync timers, so rapid +/- coalesces into ONE PATCH with the
+  // final quantity instead of firing an absolute-quantity PATCH per click that can
+  // land out of order and leave the server on the wrong number (BUG-19a).
+  const qtySyncRef = React.useRef<Map<string, { timer: ReturnType<typeof setTimeout>; revertTo: number }>>(new Map());
+
+  // Shared quantity setter for inc/dec/setQty. Updates the UI optimistically each
+  // click, but debounces the backend write so only the settled quantity is sent.
   const setQtyInternal = React.useCallback(
     (id: string, next: (prev: number) => number) => {
       const item = state.items.find((i) => i.id === id);
@@ -169,14 +172,24 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         ...s,
         items: s.items.map((i) => (i.id === id ? { ...i, qty: newQty } : i)),
       }));
-      if (item.backendItemId) {
-        updateCartItem(item.backendItemId, newQty).catch(() => {
+
+      const backendItemId = item.backendItemId;
+      if (!backendItemId) return;
+      const sync = qtySyncRef.current;
+      const existing = sync.get(backendItemId);
+      // revertTo = the qty before this burst began (first change of the burst wins).
+      const revertTo = existing ? existing.revertTo : prevQty;
+      if (existing) clearTimeout(existing.timer);
+      const timer = setTimeout(() => {
+        sync.delete(backendItemId);
+        updateCartItem(backendItemId, newQty).catch(() => {
           setState((prev) => ({
             ...prev,
-            items: prev.items.map((i) => (i.id === id ? { ...i, qty: prevQty } : i)),
+            items: prev.items.map((i) => (i.id === id ? { ...i, qty: revertTo } : i)),
           }));
         });
-      }
+      }, 350);
+      sync.set(backendItemId, { timer, revertTo });
     },
     [state.items],
   );

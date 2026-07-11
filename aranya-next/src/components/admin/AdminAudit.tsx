@@ -5,6 +5,7 @@ import { ADMIN, type AuditRow } from "@/lib/admin-data";
 import { AIcon, RoleTag } from "./AdminPrimitives";
 import { listAuditLogs, type AuditEntry } from "@/lib/api/admin";
 import { exportCsv } from "@/lib/csv";
+import { DEMO_MODE } from "@/lib/demo";
 
 function backendAuditToRow(log: AuditEntry): AuditRow {
   const eventMap: Record<string, string> = {
@@ -52,12 +53,13 @@ const AUDIT_FILTERS = [
 export function AdminAudit() {
   const [filter, setFilter] = React.useState("all");
   const [q, setQ] = React.useState("");
-  const [rows, setRows] = React.useState(ADMIN.AUDIT);
+  // Demo rows only in demo mode (BUG-20).
+  const [rows, setRows] = React.useState<AuditRow[]>(DEMO_MODE ? ADMIN.AUDIT : []);
 
   React.useEffect(() => {
     listAuditLogs({ limit: 100 }).then(({ logs }) => {
-      if (logs?.length) setRows(logs.map(backendAuditToRow));
-    }).catch(() => { /* keep demo data */ });
+      setRows(logs?.map(backendAuditToRow) ?? []);
+    }).catch(() => { /* fetch failed — keep whatever's there (demo only in demo mode) */ });
   }, []);
 
   const filtered = React.useMemo(() => rows.filter((r) => {

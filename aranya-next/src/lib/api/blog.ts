@@ -13,10 +13,6 @@ export function listBlog(
   return apiFetch(`/blog${q ? `?${q}` : ""}`, { revalidate });
 }
 
-export function getRecentBlog(revalidate: number | false = 300): Promise<{ blogs: Blog[] }> {
-  return apiFetch(`/blog/recent`, { revalidate });
-}
-
 export function getBlogPost(
   slug: string,
   revalidate: number | false = 300

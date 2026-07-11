@@ -4,6 +4,7 @@ import * as React from "react";
 import { ADMIN, type AdminBlogPost } from "@/lib/admin-data";
 import { AIcon, Pill, FlagRow } from "./AdminPrimitives";
 import { createBlog, updateBlog, getAdminBlog, listAdminBlogs, type BlogPublishMode, type AdminBlogPost as ApiBlogPost } from "@/lib/api/admin";
+import { DEMO_MODE } from "@/lib/demo";
 
 function backendBlogToAdmin(b: ApiBlogPost): AdminBlogPost {
   const statusMap: Record<string, string> = { DRAFT: "Draft", SCHEDULED: "Scheduled", PUBLISHED: "Published" };
@@ -214,7 +215,8 @@ function BlogEditor({ post, onClose, onSave }: { post: BlogDraft; onClose: () =>
 }
 
 export function AdminBlog() {
-  const [rows, setRows] = React.useState<AdminBlogPost[]>(() => ADMIN.BLOG.map((p) => ({ ...p })));
+  // Demo rows only in demo mode (BUG-20).
+  const [rows, setRows] = React.useState<AdminBlogPost[]>(() => DEMO_MODE ? ADMIN.BLOG.map((p) => ({ ...p })) : []);
   const [tab, setTab] = React.useState("all");
   const [q, setQ] = React.useState("");
   const [edit, setEdit] = React.useState<BlogDraft | null>(null);
@@ -222,8 +224,8 @@ export function AdminBlog() {
 
   React.useEffect(() => {
     listAdminBlogs().then(({ blogs }) => {
-      if (blogs?.length) setRows(blogs.map(backendBlogToAdmin));
-    }).catch(() => { /* keep demo data */ });
+      setRows(blogs?.map(backendBlogToAdmin) ?? []);
+    }).catch(() => { /* fetch failed — keep whatever's there (demo only in demo mode) */ });
   }, []);
 
   const filtered = React.useMemo(() => rows.filter((p) => {

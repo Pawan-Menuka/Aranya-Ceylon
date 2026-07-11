@@ -9,6 +9,7 @@ import {
   listAdminGifts, createGift, updateGift, deleteGift,
   bestEffort, type AdminGiftSet, type AdminGiftInput,
 } from "@/lib/api/admin";
+import { DEMO_MODE } from "@/lib/demo";
 
 const JAR_SIZES = ["50g", "100g", "250g"];
 const BADGES = ["Bestselling gift", "New", "Limited"];
@@ -239,7 +240,8 @@ function GiftEditor({ gift, onClose, onSave, onDelete }: {
 }
 
 export function AdminGifts() {
-  const [rows, setRows] = React.useState<AdminGiftSet[]>(staticRows);
+  // Demo rows only in demo mode (BUG-20).
+  const [rows, setRows] = React.useState<AdminGiftSet[]>(() => DEMO_MODE ? staticRows() : []);
   const [liveLoaded, setLiveLoaded] = React.useState(false);
   const [tab, setTab] = React.useState("all");
   const [q, setQ] = React.useState("");
@@ -247,8 +249,8 @@ export function AdminGifts() {
 
   React.useEffect(() => {
     listAdminGifts().then(({ gifts }) => {
-      if (gifts?.length) { setRows(gifts); setLiveLoaded(true); }
-    }).catch(() => { /* keep demo data */ });
+      setRows(gifts ?? []); setLiveLoaded(true); // live responded — real data authoritative
+    }).catch(() => { /* fetch failed — keep whatever's there (demo only in demo mode) */ });
   }, []);
 
   const filtered = React.useMemo(() => rows.filter((g) => {
