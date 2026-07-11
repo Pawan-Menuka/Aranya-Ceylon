@@ -3,7 +3,12 @@
 // Values are quoted and internal quotes escaped so commas/newlines are safe.
 
 function escapeCell(value: unknown): string {
-  const s = value == null ? "" : String(value);
+  let s = value == null ? "" : String(value);
+  // Formula-injection guard (GAP-04): Excel/Sheets execute a cell that begins
+  // with = + - @ (or a leading control char), so a value like a customer name
+  // `=HYPERLINK(...)` would run on open. Prefix such cells with a single quote
+  // so they render as literal text.
+  if (/^[=+\-@\t\r\n]/.test(s)) s = `'${s}`;
   return `"${s.replace(/"/g, '""')}"`;
 }
 

@@ -4,7 +4,7 @@ import { writeAuditLog } from '../../services/audit.service.js';
 import { revalidateFrontend } from '../../lib/revalidate.js';
 import { z } from 'zod';
 
-const createBlogSchema = z.object({
+const blogFields = z.object({
     title: z.string().min(2),
     slug: z.string().regex(/^[a-z0-9-]+$/),
     content: z.string().min(10),
@@ -14,6 +14,26 @@ const createBlogSchema = z.object({
     seoTitle: z.string().optional(),
     seoDesc: z.string().optional(),
 });
+
+// A SCHEDULED post with no scheduledAt can never be picked by the cron job
+// (predicate: scheduledAt <= now) — reject it instead of storing a post that
+// sits SCHEDULED forever (FLOW-03). Applied to both create and (partial) update;
+// on update it only fires when status is explicitly set to SCHEDULED.
+const requireScheduledAt = (
+    data: { status?: string; scheduledAt?: string },
+    ctx: z.RefinementCtx,
+) => {
+    if (data.status === 'SCHEDULED' && !data.scheduledAt) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['scheduledAt'],
+            message: 'scheduledAt is required when status is SCHEDULED.',
+        });
+    }
+};
+
+const createBlogSchema = blogFields.superRefine(requireScheduledAt);
+const updateBlogSchema = blogFields.partial().superRefine(requireScheduledAt);
 
 export async function listBlogs(_req: Request, res: Response) {
     const blogs = await prisma.blog.findMany({
@@ -73,7 +93,7 @@ export async function createBlog(req: Request, res: Response) {
 
 export async function updateBlog(req: Request, res: Response) {
     const id = req.params.id!;
-    const data = createBlogSchema.partial().parse(req.body);
+    const data = updateBlogSchema.parse(req.body);
 
     const before = await prisma.blog.findUnique({ where: { id } });
     if (!before) return res.status(404).json({ error: 'Blog not found' });
