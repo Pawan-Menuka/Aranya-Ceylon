@@ -582,7 +582,16 @@ export function CheckoutClient() {
       window.scrollTo({ top: 0 });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
-      setError(msg);
+      // A promo accepted offline (or since expired) that isn't a real DB coupon
+      // 400s here and would otherwise wedge checkout with the code stuck applied.
+      // Remove it and ask the user to review + resubmit, so they see the corrected
+      // total instead of silently losing the discount (FLOW-06).
+      if (cart.promo && /coupon/i.test(msg)) {
+        cart.clearPromo();
+        setError("That promo code isn't valid, so we've removed it. Please review your total and place your order again.");
+      } else {
+        setError(msg);
+      }
     } finally {
       setPlacing(false);
     }
