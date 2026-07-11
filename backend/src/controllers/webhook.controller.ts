@@ -90,7 +90,12 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
         };
     });
 
-    console.log(`✅ Order ${orderId} marked PAID via ${gateway}`);
+    // Only log the transition on the FIRST flip — the transaction returns null
+    // for an already-processed (or unknown) order, so logging unconditionally
+    // claimed "marked PAID" on every duplicate webhook delivery (BUG-25).
+    if (confirmation) {
+        console.log(`✅ Order ${orderId} marked PAID via ${gateway}`);
+    }
 
     // Order confirmation — sent once (first PAID flip only) and after commit,
     // so a slow/failed send never blocks the webhook ack or rolls back payment.

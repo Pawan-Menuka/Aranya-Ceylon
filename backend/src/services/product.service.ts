@@ -2,7 +2,6 @@ import { prisma } from '../index.js';
 import { Prisma } from '@prisma/client';
 import type { Market } from '@prisma/client';
 import type { CreateProductInput, UpdateProductInput, ProductFilterInput } from '@aranya/shared';
-import { deleteImage } from './cloudinary.service.js';
 
 // ----------------------------------------------------------------
 // MARKET FILTER HELPER
@@ -122,6 +121,12 @@ const adminProductIncludes = buildProductIncludes();
 // ----------------------------------------------------------------
 
 // --- List products with cursor pagination + filters ---
+// Upper bound for the two paths that order in application code (FTS ranking and
+// price sort). Both fetch the ordered set up to this cap and page by offset;
+// the storefront catalogue loads far fewer than this per page, so it only limits
+// how deep those two can paginate — an acceptable ceiling.
+const RANKED_SCAN_LIMIT = 500;
+
 export async function listProducts(
     filters: ProductFilterInput,
     market: Market,
@@ -152,40 +157,61 @@ export async function listProducts(
 
     // Full-text search via PostgreSQL tsvector — market filtered in SQL.
     if (search) {
-        // Fetch limit+1 ranked ids so the controller can detect a next page
-        // (the old query took exactly `limit`, so hasNextPage was always false).
+        // Rank IDs (bounded), then page by the cursor's OFFSET into the ranked
+        // list. The cursor was previously ignored, so page 2 returned page 1
+        // again (REGRESSION-03); RANKED_SCAN_LIMIT caps how deep search paginates.
         const ranked = await prisma.$queryRaw<{ id: string }[]>`
             SELECT id FROM "Product"
             WHERE status = 'ACTIVE'
               AND market IN (${market}::"Market", 'BOTH'::"Market")
               AND "searchVector" @@ plainto_tsquery('english', ${search})
             ORDER BY ts_rank("searchVector", plainto_tsquery('english', ${search})) DESC
-            LIMIT ${limit + 1}
+            LIMIT ${RANKED_SCAN_LIMIT}
         `;
-        const ids = ranked.map((p) => p.id);
-        if (ids.length === 0) return [];
+        const rankedIds = ranked.map((p) => p.id);
+        const startIdx = cursor ? rankedIds.indexOf(cursor) + 1 : 0; // stale cursor → restart
+        const pageIds = rankedIds.slice(startIdx, startIdx + limit + 1);
+        if (pageIds.length === 0) return [];
 
         const products = await prisma.product.findMany({
-            where: { id: { in: ids } },
+            where: { id: { in: pageIds } },
             include: buildProductIncludes(market),
         });
         // Preserve the rank order — `id IN (...)` returns rows in arbitrary order,
         // which discarded the ts_rank ranking entirely (BUG-12).
         const byId = new Map(products.map((p) => [p.id, p]));
-        const ordered = ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => !!p);
+        const ordered = pageIds.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => !!p);
         return enrichProductsWithRatingAvg(ordered);
     }
 
-    // Price sorting can't be expressed as a Prisma orderBy on a to-many relation,
-    // so the old code sorted by variant COUNT — meaningless (BUG-11). Fetch by a
-    // stable key, then order the page by the real market-appropriate variant price.
-    const priceSort = sort === 'price_asc' || sort === 'price_desc';
-    const orderBy: Prisma.ProductOrderByWithRelationInput = (() => {
-        switch (sort) {
-            case 'bestselling': return { orderItems: { _count: 'desc' } };
-            default: return { createdAt: 'desc' };
-        }
-    })();
+    // Price sorting can't be expressed as a Prisma orderBy on a to-many relation
+    // (the old code sorted by variant COUNT — BUG-11). We sort in app, but over
+    // the WHOLE matching set (bounded) and page via the cursor's offset — the
+    // previous version sorted only the fetched page, so cross-page ordering was
+    // wrong (REGRESSION-02).
+    if (sort === 'price_asc' || sort === 'price_desc') {
+        const all = await prisma.product.findMany({
+            where,
+            take: RANKED_SCAN_LIMIT,
+            include: buildProductIncludes(market),
+        });
+        const dir = sort === 'price_asc' ? 1 : -1;
+        const wantCurrency = market === 'LOCAL' ? 'LKR' : 'USD';
+        const minPrice = (p: (typeof all)[number]) => {
+            const prices = p.variants
+                .filter((v) => v.currency === wantCurrency || v.market === 'BOTH')
+                .map((v) => Number(v.price));
+            return prices.length ? Math.min(...prices) : Number.POSITIVE_INFINITY;
+        };
+        all.sort((a, b) => dir * (minPrice(a) - minPrice(b)));
+        const startIdx = cursor ? all.findIndex((p) => p.id === cursor) + 1 : 0;
+        const page = all.slice(startIdx, startIdx + limit + 1);
+        return enrichProductsWithRatingAvg(page);
+    }
+
+    // Remaining sorts keep efficient DB-level cursor pagination.
+    const orderBy: Prisma.ProductOrderByWithRelationInput =
+        sort === 'bestselling' ? { orderItems: { _count: 'desc' } } : { createdAt: 'desc' };
 
     const items = await prisma.product.findMany({
         where,
@@ -194,18 +220,6 @@ export async function listProducts(
         ...(cursor && { cursor: { id: cursor }, skip: 1 }),
         include: buildProductIncludes(market),
     });
-
-    if (priceSort) {
-        const dir = sort === 'price_asc' ? 1 : -1;
-        const wantCurrency = market === 'LOCAL' ? 'LKR' : 'USD';
-        const minPrice = (p: (typeof items)[number]) => {
-            const prices = p.variants
-                .filter((v) => v.currency === wantCurrency || v.market === 'BOTH')
-                .map((v) => Number(v.price));
-            return prices.length ? Math.min(...prices) : Number.POSITIVE_INFINITY;
-        };
-        items.sort((a, b) => dir * (minPrice(a) - minPrice(b)));
-    }
 
     return enrichProductsWithRatingAvg(items);
 }
@@ -332,9 +346,12 @@ export async function updateProduct(id: string, data: UpdateProductInput) {
         await tx.product.update({
             where: { id },
             data: {
-                ...(fields.name && { name: fields.name }),
-                ...(fields.description && { description: fields.description }),
-                ...(fields.categoryId && { categoryId: fields.categoryId }),
+                // Use !== undefined (not truthiness) so a provided value is always
+                // applied, consistent with latin/originLabel below (BUG-23). The
+                // shared schema still enforces min lengths, so these can't be blanked.
+                ...(fields.name !== undefined && { name: fields.name }),
+                ...(fields.description !== undefined && { description: fields.description }),
+                ...(fields.categoryId !== undefined && { categoryId: fields.categoryId }),
                 ...(fields.featured !== undefined && { featured: fields.featured }),
                 ...(fields.status && { status: fields.status }),
                 ...(fields.certifications && { certifications: fields.certifications }),
@@ -386,23 +403,15 @@ export async function updateProduct(id: string, data: UpdateProductInput) {
 }
 
 // --- Soft delete (archive) product (admin only) ---
+// Archiving is reversible (status → ARCHIVED), so it must NOT destroy the
+// product's Cloudinary images — doing so left broken image URLs behind if the
+// product was later un-archived (BUG-24). Images are only removed on a true
+// hard delete or explicit image removal, never here.
 export async function archiveProduct(id: string) {
-    const images = await prisma.productImage.findMany({
-        where: { productId: id, publicId: { not: null } },
-        select: { publicId: true },
-    });
-
-    const product = await prisma.product.update({
+    return prisma.product.update({
         where: { id },
         data: { status: 'ARCHIVED' },
     });
-
-    // Best-effort Cloudinary cleanup — don't fail the archive if this errors.
-    await Promise.allSettled(
-        images.map((img) => deleteImage(img.publicId!)),
-    );
-
-    return product;
 }
 
 // --- Admin: list ALL products across both markets ---

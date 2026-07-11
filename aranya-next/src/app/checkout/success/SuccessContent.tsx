@@ -92,14 +92,18 @@ export function SuccessContent() {
           </svg>
         </div>
         <div className="eyebrow" style={{ color: "var(--muted)", justifyContent: "center", display: "flex", marginBottom: 14 }}>
-          Payment received
+          Order status
         </div>
         <h1 className="disp" style={{ fontSize: 40, color: "var(--brand)", margin: "0 0 14px", lineHeight: 1.05 }}>
           We&rsquo;re confirming your order
         </h1>
+        {/* This branch is also reached on a timeout, a failed payment, or a
+            missing order — so it must NOT assert the payment succeeded (BUG-31). */}
         <p className="prose" style={{ fontSize: 17, color: "var(--ink)", margin: "0 0 24px" }}>
-          Your payment went through — we&rsquo;re just waiting for the final confirmation.
-          We&rsquo;ll email you as soon as your order is confirmed. You don&rsquo;t need to do anything.
+          We haven&rsquo;t received final confirmation for this order yet. If your payment
+          went through, we&rsquo;ll email you as soon as it&rsquo;s confirmed — you don&rsquo;t need to
+          do anything. If you were charged and don&rsquo;t hear from us shortly, contact support
+          {orderId ? <> with order <strong>{orderId}</strong></> : null}.
         </p>
         <div>
           <Link href="/products" className="btn btn-intl" style={{ display: "inline-flex", width: "auto", padding: "14px 34px", textDecoration: "none" }}>

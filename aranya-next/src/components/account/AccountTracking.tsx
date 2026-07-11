@@ -4,7 +4,7 @@ import * as React from "react";
 import type { Market } from "@/lib/types";
 import { SpicePhoto } from "../primitives/SpicePhoto";
 import {
-  acStatusMeta, acBuildTimeline, acFmt, acOrderSubtotal, acOrderTotal,
+  acStatusMeta, acBuildTimeline, acFmt, acOrderSubtotal, acOrderTotal, orderMarketOf,
   type AccountOrder, type AccountAddress, type OrderLineItem,
 } from "@/lib/account-data";
 
@@ -189,8 +189,10 @@ function DetailRow({ label, val }: { label: string; val: string }) {
 }
 
 export function OrderDetailView({ order, market, address, onBack, onReorder }: { order: AccountOrder; market: Market; address: AccountAddress | null; onBack: () => void; onReorder: (o: AccountOrder) => void }) {
-  const sub = acOrderSubtotal(order, market);
-  const total = acOrderTotal(order, market);
+  // Display this order in its own currency, not the global market toggle (BUG-18).
+  const om = orderMarketOf(order, market);
+  const sub = acOrderSubtotal(order, om);
+  const total = acOrderTotal(order, om);
   const ship = total - sub;
   const delivered = order.status === "delivered";
   return (
@@ -238,15 +240,15 @@ export function OrderDetailView({ order, market, address, onBack, onReorder }: {
           <div style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 14, padding: "22px 24px" }}>
             <h3 className="disp" style={{ fontSize: 22, color: "var(--ink)", margin: "0 0 4px" }}>{order.items.reduce((n, it) => n + it.qty, 0)} items</h3>
             <div style={{ borderTop: "1px solid var(--line)", marginTop: 12 }}>
-              {order.items.map((it) => <div key={it.key} style={{ borderBottom: "1px solid var(--line)" }}><OrderLine item={it} market={market} /></div>)}
+              {order.items.map((it) => <div key={it.key} style={{ borderBottom: "1px solid var(--line)" }}><OrderLine item={it} market={om} /></div>)}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 16 }}>
-              <DetailRow label="Subtotal" val={acFmt(sub, market)} />
-              <DetailRow label="Shipping" val={ship === 0 ? "Free" : acFmt(ship, market)} />
+              <DetailRow label="Subtotal" val={acFmt(sub, om)} />
+              <DetailRow label="Shipping" val={ship === 0 ? "Free" : acFmt(ship, om)} />
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
               <span className="disp" style={{ fontSize: 20, color: "var(--ink)", fontWeight: 600 }}>Total</span>
-              <span className="disp" style={{ fontSize: 27, color: "var(--ink)", fontWeight: 600 }}>{acFmt(total, market)}</span>
+              <span className="disp" style={{ fontSize: 27, color: "var(--ink)", fontWeight: 600 }}>{acFmt(total, om)}</span>
             </div>
           </div>
           {address && (

@@ -3,7 +3,10 @@ import * as blogService from '../services/blog.service.js';
 
 export async function listBlogs(req: Request, res: Response) {
     const cursor = req.query.cursor as string | undefined;
-    const limit = Math.min(Number(req.query.limit ?? 10), 50);
+    // A non-numeric ?limit= made Number() NaN, which flowed into Prisma's `take`
+    // and threw a 500 (BUG-22). Fall back to the default and clamp to 1..50.
+    const parsed = Number(req.query.limit ?? 10);
+    const limit = Number.isFinite(parsed) ? Math.min(Math.max(1, Math.trunc(parsed)), 50) : 10;
     const blogs = await blogService.listPublishedBlogs(limit, cursor);
 
     const hasNextPage = blogs.length > limit;

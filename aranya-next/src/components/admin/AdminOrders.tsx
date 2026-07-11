@@ -3,14 +3,15 @@
 import * as React from "react";
 import { ADMIN, type AdminOrder, type AdminMarket } from "@/lib/admin-data";
 import { AIcon, Pill, MarketTag, Avatar } from "./AdminPrimitives";
-import { updateOrderStatus, refundOrder, listAdminOrders, bestEffort } from "@/lib/api/admin";
+import { updateOrderStatus, refundOrder, listAdminOrders } from "@/lib/api/admin";
 import { exportCsv } from "@/lib/csv";
+import { LKR_PER_USD } from "@/lib/fx";
 import type { Order } from "@/lib/types";
 
 function backendOrderToAdmin(order: Order): AdminOrder {
   const currency = order.currency ?? "USD";
   const total = parseFloat(String(order.total ?? "0"));
-  const totalUsd = currency === "USD" ? total : total / 148;
+  const totalUsd = currency === "USD" ? total : total / LKR_PER_USD;
   const itemsList = order.items ?? [];
   return {
     id: order.id,
@@ -25,7 +26,7 @@ function backendOrderToAdmin(order: Order): AdminOrder {
       name: it.product?.name ?? "Spice",
       weight: it.variant?.weight ? `${it.variant.weight}g` : "100g",
       qty: it.quantity,
-      priceUsd: currency === "USD" ? parseFloat(String(it.unitPrice ?? "0")) : parseFloat(String(it.unitPrice ?? "0")) / 148,
+      priceUsd: currency === "USD" ? parseFloat(String(it.unitPrice ?? "0")) : parseFloat(String(it.unitPrice ?? "0")) / LKR_PER_USD,
       color: "#B5651D",
     })),
     units: itemsList.reduce((s, it) => s + it.quantity, 0),
@@ -187,9 +188,13 @@ function OrderDrawer({ order, onClose, onStatus, onRefund }: {
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {STATUS_FLOW.map((s, i) => {
                   const active = s === o.status, passed = i < stepIdx;
+                  // PAID is set by the payment gateway/webhook, never by an admin —
+                  // the backend enum rejects it, so it's a display marker, not a
+                  // clickable transition (FLOW-02).
+                  const clickable = s !== "paid";
                   return (
-                    <button key={s} onClick={() => onStatus(o, s)} className="ad-btn ad-btn-sm"
-                      style={{ background: active ? "var(--brand)" : passed ? "rgba(15,110,86,.1)" : "#fff", color: active ? "#fff" : passed ? "var(--pos-deep)" : "var(--ad-muted)", border: active ? "0" : "1px solid var(--ad-line-2)", textTransform: "capitalize" }}>
+                    <button key={s} onClick={clickable ? () => onStatus(o, s) : undefined} disabled={!clickable} className="ad-btn ad-btn-sm"
+                      style={{ background: active ? "var(--brand)" : passed ? "rgba(15,110,86,.1)" : "#fff", color: active ? "#fff" : passed ? "var(--pos-deep)" : "var(--ad-muted)", border: active ? "0" : "1px solid var(--ad-line-2)", textTransform: "capitalize", cursor: clickable ? "pointer" : "default" }}>
                       {passed && <AIcon name="check" size={13} stroke="var(--pos-deep)" w={2.4} />}{s}
                     </button>
                   );
@@ -309,10 +314,22 @@ export function AdminOrders() {
     return true;
   }), [orders, tab, market, q]);
 
-  const setStatus = (o: AdminOrder, status: string) => {
-    setOrders((prev) => prev.map((x) => x.id === o.id ? { ...x, status, fulfillment: status === "shipped" ? "In transit" : status === "delivered" ? "Fulfilled" : status === "processing" || status === "paid" ? "Unfulfilled" : x.fulfillment } : x));
-    setOpen((cur) => (cur && cur.id === o.id ? { ...cur, status } : cur));
-    bestEffort(updateOrderStatus(o.id, { status: status.toUpperCase() }));
+  const setStatus = async (o: AdminOrder, status: string) => {
+    const prevStatus = o.status;
+    const prevFulfillment = o.fulfillment;
+    const fulfillment = status === "shipped" ? "In transit" : status === "delivered" ? "Fulfilled" : status === "processing" || status === "paid" ? "Unfulfilled" : o.fulfillment;
+    setActionError(null);
+    setOrders((list) => list.map((x) => x.id === o.id ? { ...x, status, fulfillment } : x));
+    setOpen((cur) => (cur && cur.id === o.id ? { ...cur, status, fulfillment } : cur));
+    try {
+      await updateOrderStatus(o.id, { status: status.toUpperCase() });
+    } catch (e) {
+      // Roll back + surface instead of the old bestEffort swallow, so a rejected
+      // status change (e.g. the enum-invalid PAID) can't look like it persisted (FLOW-02).
+      setOrders((list) => list.map((x) => x.id === o.id ? { ...x, status: prevStatus, fulfillment: prevFulfillment } : x));
+      setOpen((cur) => (cur && cur.id === o.id ? { ...cur, status: prevStatus, fulfillment: prevFulfillment } : cur));
+      setActionError((e as Error)?.message || `Couldn't update the order to ${status}.`);
+    }
   };
   const refund = async (o: AdminOrder) => {
     // Do NOT PATCH the status to REFUNDED first: that flips the order out of
@@ -335,10 +352,19 @@ export function AdminOrders() {
   };
 
   const exportOrders = () => {
+    // Map explicitly — AdminOrder rows carry `totalUsd` (a number), not `total`,
+    // so passing the "total" key emitted an empty column for every row (REGRESSION-01).
     exportCsv(
       `orders-${new Date().toISOString().slice(0, 10)}`,
-      ["Order", "Customer", "Email", "Market", "Status", "Total"],
-      filtered as unknown as Array<Record<string, unknown>>,
+      ["Order", "Customer", "Email", "Market", "Status", "Total (USD)"],
+      filtered.map((o) => ({
+        id: o.id,
+        customer: o.customer,
+        email: o.email,
+        market: o.market,
+        status: o.status,
+        total: o.totalUsd.toFixed(2),
+      })),
       ["id", "customer", "email", "market", "status", "total"],
     );
   };

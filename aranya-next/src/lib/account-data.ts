@@ -160,6 +160,13 @@ export function acFmt(n: number, market: Market): string {
 export function acOrderSubtotal(o: AccountOrder, market: Market): number {
   return o.items.reduce((s, it) => s + (market === "local" ? it.lkr : it.usd) * it.qty, 0);
 }
+// A historical order is fixed to the currency it was placed in, so it should
+// display in that currency — not the storefront's active market toggle. Without
+// this, an LKR order viewed under the intl toggle showed an LKR number with a $
+// sign (BUG-18 residual). Demo orders (no currency) fall back to the active market.
+export function orderMarketOf(o: AccountOrder, fallback: Market): Market {
+  return o.currency === "LKR" ? "local" : o.currency === "USD" ? "intl" : fallback;
+}
 export function acOrderTotal(o: AccountOrder, market: Market): number {
   // Prefer the real charged total for live orders (matches what the customer
   // paid, including discount/gift/express) — only fall back to the recomputed

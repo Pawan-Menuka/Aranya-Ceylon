@@ -9,7 +9,7 @@ import { Badge } from "../primitives/Badge";
 import { pdContent, pdPrice } from "@/lib/pd-content";
 import { useCart } from "../CartContext";
 import { resolveVariant } from "@/lib/cart";
-import { addToWishlist, removeFromWishlist } from "@/lib/api/wishlist";
+import { addToWishlist, removeFromWishlist, getWishlist } from "@/lib/api/wishlist";
 
 // Product-detail buy side (ported from product-detail.jsx):
 // Breadcrumb · Gallery · Qty · BuyBox.
@@ -88,6 +88,20 @@ export function BuyBox({ spice, market, product }: { spice: Spice; market: Marke
   const [q, setQ] = React.useState(1);
   const [saved, setSaved] = React.useState(false);
   const [added, setAdded] = React.useState(false);
+
+  // Initialise the heart from the server so an already-wishlisted product shows
+  // as saved on load — otherwise `saved` started false and the first tap fired
+  // addToWishlist → 409 (BUG-30). No-ops for guests / offline (getWishlist 401s).
+  React.useEffect(() => {
+    if (!product?.id) return;
+    let alive = true;
+    getWishlist()
+      .then(({ items }) => {
+        if (alive && items?.some((w) => w.productId === product.id)) setSaved(true);
+      })
+      .catch(() => { /* guest / offline — leave unsaved */ });
+    return () => { alive = false; };
+  }, [product?.id]);
 
   // P6-7: sync wishlist heart with the backend when a product id is available
   const toggleSaved = () => {

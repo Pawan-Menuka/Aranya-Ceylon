@@ -79,6 +79,16 @@ const envSchema = z
             });
         }
 
+        // Dev-only routes include an unauthenticated DB-seeding endpoint — never
+        // let them be enabled in production (SEC-06).
+        if (isProduction && env.ENABLE_DEV_ROUTES === 'true') {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['ENABLE_DEV_ROUTES'],
+                message: 'ENABLE_DEV_ROUTES must not be "true" in production (exposes unauthenticated dev endpoints).',
+            });
+        }
+
         if (env.PAYMENTS_MODE === 'live') {
             const liveKeys = [
                 'STRIPE_SECRET_KEY',

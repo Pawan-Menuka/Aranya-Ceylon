@@ -149,6 +149,11 @@ export interface Spice {
   // added anywhere reach the server cart and are charged correctly (BUG-01/26).
   productId?: string;
   variants?: Variant[];
+  // Real product certifications + approved reviews, so the detail page can show
+  // genuine data instead of fabricated certification claims / demo reviews
+  // (BUG-20). Absent for demo/offline Spice objects.
+  certifications?: string[];
+  reviewItems?: Review[];
 }
 
 // Catalog view model = Spice + the facet/sort fields the /products page filters on

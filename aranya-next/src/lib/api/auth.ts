@@ -36,6 +36,12 @@ export async function register(input: { name: string; email: string; password: s
   return { pending: true, message: data.message ?? "Check your email to verify your account." };
 }
 
+// Request a fresh verification link. Neutral by design — resolves on any 2xx,
+// never reveals whether the account exists or is already verified.
+export async function resendVerification(email: string): Promise<{ message: string }> {
+  return apiFetch("/auth/resend-verification", { method: "POST", body: { email } });
+}
+
 export async function refresh(): Promise<boolean> {
   try {
     const data = await apiFetch<{ accessToken: string }>("/auth/refresh", { method: "POST" });
@@ -58,7 +64,11 @@ export async function me(): Promise<AuthUser | null> {
   }
 }
 
-export async function patchMe(input: { name?: string; phone?: string }): Promise<AuthUser> {
+// name-only: the backend patchMe + patchMeSchema accept only `name`. A `phone`
+// field here was silently dropped (no User.phone column, not in the schema) —
+// removed to keep the client contract honest (GAP-01). Add it back alongside a
+// User.phone migration + schema field if profile phone is ever needed.
+export async function patchMe(input: { name?: string }): Promise<AuthUser> {
   const data = await apiFetch<{ user: AuthUser }>("/auth/me", { method: "PATCH", body: input, auth: true });
   return data.user;
 }

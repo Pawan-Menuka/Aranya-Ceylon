@@ -12,11 +12,19 @@ const updateOrderSchema = z.object({
 });
 
 // --- List all orders with market filter ---
+// Whitelist query enum values so an invalid ?market=/?status= can't reach
+// Prisma as a bad enum and 500 (BUG-22).
+const VALID_MARKETS = new Set(['LOCAL', 'INTERNATIONAL', 'BOTH']);
+const VALID_ORDER_STATUSES = new Set(['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED']);
+
 export async function listOrders(req: Request, res: Response) {
-    const market = req.query.market as string | undefined;
-    const status = req.query.status as string | undefined;
+    const marketRaw = req.query.market as string | undefined;
+    const statusRaw = req.query.status as string | undefined;
+    const market = marketRaw && VALID_MARKETS.has(marketRaw) ? marketRaw : undefined;
+    const status = statusRaw && VALID_ORDER_STATUSES.has(statusRaw) ? statusRaw : undefined;
     const q = (req.query.q as string | undefined)?.trim();
-    const limit = Math.min(Number(req.query.limit ?? 20), 100);
+    const parsedLimit = Number(req.query.limit ?? 20);
+    const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(1, Math.trunc(parsedLimit)), 100) : 20;
     const cursor = req.query.cursor as string | undefined;
 
     const orders = await prisma.order.findMany({
