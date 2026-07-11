@@ -145,10 +145,16 @@ app.use((err: Error & { status?: number; expose?: boolean }, _req: express.Reque
     // wholesale, admin) throw a ZodError, which has no .status — without this
     // branch it would fall through to a 500 for what is really a 400. Surface
     // field-level errors so the client can show which input was rejected.
-    if (err instanceof ZodError) {
+    // Duck-typed (name + issues array), NOT just `instanceof` — the backend and
+    // shared package can resolve to different zod instances, and instanceof
+    // silently fails across them, reverting shared-schema (cart/checkout) parses
+    // to 500s (BUG-06).
+    const zodLike = err as { name?: string; issues?: Array<{ path: Array<string | number>; message: string }> };
+    if (err instanceof ZodError || (zodLike.name === 'ZodError' && Array.isArray(zodLike.issues))) {
+        const issues = zodLike.issues ?? [];
         return res.status(400).json({
             error: 'Validation failed',
-            errors: err.errors.map((e) => ({ field: e.path.join('.'), message: e.message })),
+            errors: issues.map((e) => ({ field: e.path.join('.'), message: e.message })),
         });
     }
 

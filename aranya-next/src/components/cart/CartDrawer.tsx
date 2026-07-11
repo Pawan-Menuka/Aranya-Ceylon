@@ -79,6 +79,11 @@ export function CartDrawer() {
 
         {items.length === 0 ? (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 40, textAlign: "center" }}>
+            {cart.marketCleared && (
+              <div role="status" style={{ marginBottom: 22, padding: "11px 14px", borderRadius: 9, background: "rgba(186,117,23,.1)", border: "1px solid rgba(186,117,23,.35)", color: "var(--accent)", fontFamily: "var(--font-ui)", fontSize: 12.5, fontWeight: 600, maxWidth: 300, lineHeight: 1.5 }}>
+                Your basket was emptied because you switched stores — prices differ between the international and local stores.
+              </div>
+            )}
             <div style={{ opacity: 0.5, marginBottom: 18 }}><Seal size={64} /></div>
             <h3 className="disp" style={{ fontSize: 25, color: "var(--ink)", margin: "0 0 8px" }}>Your basket is empty</h3>
             <p className="prose" style={{ fontSize: 15.5, color: "var(--muted)", margin: "0 0 22px", maxWidth: 280 }}>Fresh-milled spice, sealed at peak aroma — start with a hill-country bestseller.</p>

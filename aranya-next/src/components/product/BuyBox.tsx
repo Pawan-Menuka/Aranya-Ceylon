@@ -10,6 +10,7 @@ import { pdContent, pdPrice } from "@/lib/pd-content";
 import { useCart } from "../CartContext";
 import { resolveVariant } from "@/lib/cart";
 import { addToWishlist, removeFromWishlist, getWishlist } from "@/lib/api/wishlist";
+import { getAccessToken } from "@/lib/api/http";
 
 // Product-detail buy side (ported from product-detail.jsx):
 // Breadcrumb · Gallery · Qty · BuyBox.
@@ -91,9 +92,11 @@ export function BuyBox({ spice, market, product }: { spice: Spice; market: Marke
 
   // Initialise the heart from the server so an already-wishlisted product shows
   // as saved on load — otherwise `saved` started false and the first tap fired
-  // addToWishlist → 409 (BUG-30). No-ops for guests / offline (getWishlist 401s).
+  // addToWishlist → 409 (BUG-30). Skip entirely for guests (no access token):
+  // otherwise every PDP view fired GET /wishlist → 401 → refresh → 401, churning
+  // three requests and eating the /auth/refresh rate limit (FLOW-05).
   React.useEffect(() => {
-    if (!product?.id) return;
+    if (!product?.id || !getAccessToken()) return;
     let alive = true;
     getWishlist()
       .then(({ items }) => {

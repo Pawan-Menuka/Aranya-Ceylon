@@ -6,6 +6,7 @@ import { AIcon, Pill, MarketTag, Avatar } from "./AdminPrimitives";
 import { updateOrderStatus, refundOrder, listAdminOrders } from "@/lib/api/admin";
 import { exportCsv } from "@/lib/csv";
 import { LKR_PER_USD } from "@/lib/fx";
+import { DEMO_MODE } from "@/lib/demo";
 import type { Order } from "@/lib/types";
 
 function backendOrderToAdmin(order: Order): AdminOrder {
@@ -291,14 +292,16 @@ export function AdminOrders() {
   const [tab, setTab] = React.useState("all");
   const [market, setMarket] = React.useState("all");
   const [q, setQ] = React.useState("");
-  const [orders, setOrders] = React.useState<AdminOrder[]>(() => ADMIN.ORDERS.map((o) => ({ ...o })));
+  // Demo rows only in demo mode — a real admin must never see fabricated orders,
+  // even if the live fetch fails or returns empty (BUG-20).
+  const [orders, setOrders] = React.useState<AdminOrder[]>(() => DEMO_MODE ? ADMIN.ORDERS.map((o) => ({ ...o })) : []);
   const [open, setOpen] = React.useState<AdminOrder | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     listAdminOrders().then(({ items }) => {
-      if (items?.length) setOrders(items.map(backendOrderToAdmin));
-    }).catch(() => { /* keep demo data */ });
+      setOrders(items?.map(backendOrderToAdmin) ?? []); // real data authoritative, even when empty
+    }).catch(() => { /* fetch failed — keep whatever's there (demo only in demo mode) */ });
   }, []);
 
   const counts = React.useMemo(() => {

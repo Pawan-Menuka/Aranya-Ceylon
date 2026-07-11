@@ -47,6 +47,11 @@ export function removeCartItem(itemId: string): Promise<void> {
   return apiFetch(`/cart/items/${encodeURIComponent(itemId)}`, { method: "DELETE", auth: true });
 }
 
+/** Empty the whole server cart (store switch / explicit clear) — BUG-19c. */
+export function clearServerCart(): Promise<void> {
+  return apiFetch(`/cart`, { method: "DELETE", auth: true });
+}
+
 /** Merge the guest cart into the user cart on login (spec §7.4). */
 export function mergeCart(): Promise<{ cart: Cart }> {
   return apiFetch(`/cart/merge`, { method: "POST", auth: true });

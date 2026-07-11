@@ -22,7 +22,7 @@ export const AD_NAV: NavItem[] = [
 ];
 
 export function AdminShell({
-  route, setRoute, search, setSearch, children, pendingCount = 18, onSignOut, userName, userInitials,
+  route, setRoute, search, setSearch, children, pendingCount = 0, onSignOut, userName, userInitials,
 }: {
   route: string;
   setRoute: (r: string) => void;
@@ -56,7 +56,9 @@ export function AdminShell({
               <button key={n.key} className={"ad-navitem" + (route === n.key ? " on" : "")} onClick={() => { setRoute(n.key); setRailOpen(false); }}>
                 <AIcon name={n.icon} size={18} stroke={route === n.key ? "#fff" : "rgba(253,250,245,.7)"} w={1.8} />
                 {n.label}
-                {"count" in n && n.count != null && <span className={"cnt" + ("hot" in n && n.hot ? " hot" : "")}>{n.key === "orders" ? pendingCount : n.count}</span>}
+                {n.key === "orders"
+                  ? pendingCount > 0 && <span className="cnt hot">{pendingCount}</span>
+                  : "count" in n && n.count != null && <span className={"cnt" + ("hot" in n && n.hot ? " hot" : "")}>{n.count}</span>}
               </button>
             ))}
           </nav>
