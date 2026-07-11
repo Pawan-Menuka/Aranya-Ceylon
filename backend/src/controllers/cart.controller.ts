@@ -65,6 +65,24 @@ export async function mergeCart(req: Request, res: Response) {
     return res.json({ ok: true });
 }
 
+// --- Clear the whole cart (all items) ---
+// Used when the shopper switches store (a cart is single-currency) and for an
+// explicit "empty basket". Idempotent: clearing an empty/absent cart is a no-op,
+// and it never mints a new guest cart just to empty it (BUG-19c).
+export async function clearCart(req: Request, res: Response) {
+    const userId = req.user?.userId;
+    const guestToken = req.cookies?.[GUEST_TOKEN_COOKIE];
+
+    const cart = userId
+        ? await prisma.cart.findUnique({ where: { userId }, select: { id: true } })
+        : guestToken
+            ? await prisma.cart.findUnique({ where: { guestToken }, select: { id: true } })
+            : null;
+
+    if (cart) await cartService.clearCart(cart.id);
+    return res.status(204).send();
+}
+
 // --- Update item quantity ---
 export async function updateItem(req: Request, res: Response) {
     const userId = req.user?.userId;

@@ -7,6 +7,7 @@ import {
   listAdminRecipes, createRecipe, updateRecipe, deleteRecipe,
   bestEffort, type AdminRecipe, type AdminRecipeInput,
 } from "@/lib/api/admin";
+import { DEMO_MODE } from "@/lib/demo";
 
 const COURSES = ["Curries & Mains", "Sweet & Bakes", "Drinks", "Sides & Basics"];
 const DIFFICULTIES = ["Easy", "Medium", "Hard"];
@@ -215,7 +216,8 @@ function RecipeEditor({ recipe, onClose, onSave, onDelete }: {
 }
 
 export function AdminRecipes() {
-  const [rows, setRows] = React.useState<AdminRecipe[]>(staticRows);
+  // Demo rows only in demo mode (BUG-20).
+  const [rows, setRows] = React.useState<AdminRecipe[]>(() => DEMO_MODE ? staticRows() : []);
   const [liveLoaded, setLiveLoaded] = React.useState(false);
   const [tab, setTab] = React.useState("all");
   const [q, setQ] = React.useState("");
@@ -223,8 +225,8 @@ export function AdminRecipes() {
 
   React.useEffect(() => {
     listAdminRecipes().then(({ recipes }) => {
-      if (recipes?.length) { setRows(recipes); setLiveLoaded(true); }
-    }).catch(() => { /* keep demo data */ });
+      setRows(recipes ?? []); setLiveLoaded(true); // live responded — real data authoritative
+    }).catch(() => { /* fetch failed — keep whatever's there (demo only in demo mode) */ });
   }, []);
 
   const filtered = React.useMemo(() => rows.filter((r) => {

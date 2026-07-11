@@ -95,7 +95,14 @@ export async function addToCart(
 
     if (!variant) throw new Error('VARIANT_NOT_FOUND_FOR_MARKET');
 
-    // P1-2: validate against existing cart qty so repeated adds can't exceed stock
+    // P1-2: validate against existing cart qty so repeated adds can't exceed stock.
+    // NOTE (GAP-05): this read→check→upsert is not atomic, so two concurrent adds
+    // can both pass and push cart qty above stock. That is intentional and safe:
+    // the cart is not the inventory ledger. The AUTHORITATIVE guard is the
+    // payment-time decrement (webhook.controller: updateMany `where stock >= qty`),
+    // which is atomic and can't oversell; checkout also re-validates stock first.
+    // The worst case here is a hopeful over-quantity that surfaces as a 409 at
+    // checkout, never an actual oversell.
     const existing = await prisma.cartItem.findUnique({
         where: { cartId_variantId: { cartId, variantId: data.variantId } },
         select: { quantity: true },

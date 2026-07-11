@@ -4,8 +4,11 @@ import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 
 // 1. Bypass Windows/Node SSL connection blocking (Fixes P1001)
+// Fall back to DATABASE_URL when DIRECT_URL isn't set, so a config that follows
+// .env.example (which may only define DATABASE_URL) doesn't connect with
+// `undefined` and fail (GAP-02).
 const pool = new Pool({
-    connectionString: process.env.DIRECT_URL,
+    connectionString: process.env.DIRECT_URL ?? process.env.DATABASE_URL,
     ssl: {
         rejectUnauthorized: false
     }

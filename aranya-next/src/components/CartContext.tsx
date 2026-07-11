@@ -7,7 +7,7 @@ import {
   computeTotals, fmt as fmtMoney, lineFromSpice, lineFromServerItem,
   linePrice as linePriceOf, unitPrice as unitPriceOf,
 } from "@/lib/cart";
-import { getCart, addCartItem, updateCartItem, removeCartItem, applyCoupon as apiApplyCoupon } from "@/lib/api/cart";
+import { getCart, addCartItem, updateCartItem, removeCartItem, clearServerCart, applyCoupon as apiApplyCoupon } from "@/lib/api/cart";
 import type { CartItem } from "@/lib/types";
 import { useMarket } from "./MarketContext";
 
@@ -38,6 +38,10 @@ interface CartCtx {
   setGiftNote: (s: string) => void;
   applyPromo: (code: string) => Promise<boolean>;
   clearPromo: () => void;
+  // True right after a store switch emptied a non-empty basket (FLOW-04); the
+  // drawer shows a one-line notice, dismissed on next add or via dismiss.
+  marketCleared: boolean;
+  dismissMarketCleared: () => void;
   // UI
   open: boolean;
   openCart: () => void;
@@ -69,6 +73,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   // `hydrated` becomes true after the first localStorage read; used to gate
   // persistence so the pre-hydration EMPTY state never overwrites the store.
   const [hydrated, setHydrated] = React.useState(false);
+  const [marketCleared, setMarketCleared] = React.useState(false);
+  // Always-current mirrors so the market-change effect can read the latest cart
+  // and previous market without re-running on every item change.
+  const itemsRef = React.useRef(state.items);
+  itemsRef.current = state.items;
+  const prevMarketRef = React.useRef(market);
 
   // Hydrate from localStorage on mount, then reconcile backendItemIds with the
   // server cart (which also causes the backend to issue the guestCartToken cookie
@@ -128,10 +138,29 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Shared quantity setter for inc/dec/setQty. Reads the current qty from state,
-  // applies the change optimistically, then PATCHes the backend outside the
-  // reducer, reverting on failure. Keyed on state.items so it always sees the
-  // latest quantities.
+  // Store switch (USD ↔ LKR) with items in the basket: a cart is single-currency
+  // (its lines are bound to one store's variants, and checkout rejects cross-store
+  // items), so empty it — local + server — and flag a notice, rather than strand
+  // the shopper at a checkout 409 (FLOW-04). Guarded so it never fires on the
+  // initial hydration, only on a genuine market change.
+  React.useEffect(() => {
+    if (!hydrated) { prevMarketRef.current = market; return; }
+    if (prevMarketRef.current === market) return;
+    prevMarketRef.current = market;
+    if (itemsRef.current.length === 0) return;
+    setState((s) => ({ ...EMPTY, giftWrap: s.giftWrap, giftNote: s.giftNote }));
+    clearServerCart().catch(() => { /* best-effort */ });
+    setMarketCleared(true);
+    setOpen(true); // surface the notice — otherwise the basket empties silently
+  }, [market, hydrated]);
+
+  // Per-line quantity-sync timers, so rapid +/- coalesces into ONE PATCH with the
+  // final quantity instead of firing an absolute-quantity PATCH per click that can
+  // land out of order and leave the server on the wrong number (BUG-19a).
+  const qtySyncRef = React.useRef<Map<string, { timer: ReturnType<typeof setTimeout>; revertTo: number }>>(new Map());
+
+  // Shared quantity setter for inc/dec/setQty. Updates the UI optimistically each
+  // click, but debounces the backend write so only the settled quantity is sent.
   const setQtyInternal = React.useCallback(
     (id: string, next: (prev: number) => number) => {
       const item = state.items.find((i) => i.id === id);
@@ -143,14 +172,24 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         ...s,
         items: s.items.map((i) => (i.id === id ? { ...i, qty: newQty } : i)),
       }));
-      if (item.backendItemId) {
-        updateCartItem(item.backendItemId, newQty).catch(() => {
+
+      const backendItemId = item.backendItemId;
+      if (!backendItemId) return;
+      const sync = qtySyncRef.current;
+      const existing = sync.get(backendItemId);
+      // revertTo = the qty before this burst began (first change of the burst wins).
+      const revertTo = existing ? existing.revertTo : prevQty;
+      if (existing) clearTimeout(existing.timer);
+      const timer = setTimeout(() => {
+        sync.delete(backendItemId);
+        updateCartItem(backendItemId, newQty).catch(() => {
           setState((prev) => ({
             ...prev,
-            items: prev.items.map((i) => (i.id === id ? { ...i, qty: prevQty } : i)),
+            items: prev.items.map((i) => (i.id === id ? { ...i, qty: revertTo } : i)),
           }));
         });
-      }
+      }, 350);
+      sync.set(backendItemId, { timer, revertTo });
     },
     [state.items],
   );
@@ -172,6 +211,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       // fire exactly once (React StrictMode double-invokes reducers) and never as
       // a side effect of rendering (BUG-19d).
       add: (spice, weight = "100g", form, qty = 1, backendIds) => {
+        setMarketCleared(false); // adding to the basket dismisses the store-switch notice
         const line = lineFromSpice(spice, weight, form || "Whole", qty, market, backendIds);
         setState((s) => {
           const existing = s.items.find((i) => i.id === line.id);
@@ -225,7 +265,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           });
         }
       },
-      clear: () => setState(EMPTY),
+      clear: () => {
+        // Clear the server cart too, not just localStorage — otherwise an
+        // abandoned/switched cart lingered server-side and re-hydrated (BUG-19c).
+        const hadBackend = state.items.some((i) => i.backendItemId);
+        setState(EMPTY);
+        if (hadBackend) clearServerCart().catch(() => { /* best-effort */ });
+      },
       setGiftWrap: (b) => setState((s) => ({ ...s, giftWrap: b })),
       setGiftNote: (str) => setState((s) => ({ ...s, giftNote: str })),
       applyPromo: async (code) => {
@@ -250,6 +296,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         }
       },
       clearPromo: () => setState((s) => ({ ...s, promo: "" })),
+      marketCleared,
+      dismissMarketCleared: () => setMarketCleared(false),
       open,
       openCart: () => setOpen(true),
       closeCart: () => setOpen(false),
@@ -257,7 +305,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       openSignIn: () => setSignInOpen(true),
       closeSignIn: () => setSignInOpen(false),
     };
-  }, [state, market, open, signInOpen, setQtyInternal]);
+  }, [state, market, open, signInOpen, setQtyInternal, marketCleared]);
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 }

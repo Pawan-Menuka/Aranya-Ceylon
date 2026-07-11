@@ -6,6 +6,7 @@ import { AIcon, Pill, StockMeter, FlagRow } from "./AdminPrimitives";
 import { ShareBar } from "./AdminCharts";
 import { listAdminProducts, createAdminProduct, updateAdminProduct, listCategories, uploadProductImage, bestEffort, type Category, type AdminProductInput } from "@/lib/api/admin";
 import { exportCsv } from "@/lib/csv";
+import { DEMO_MODE } from "@/lib/demo";
 import type { Product } from "@/lib/types";
 import { paletteFor } from "@/lib/spice-data";
 
@@ -285,7 +286,8 @@ function ProductEditor({
 }
 
 export function AdminProducts() {
-  const [rows, setRows] = React.useState<AdminProduct[]>(() => ADMIN.PRODUCTS.map((p) => ({ ...p })));
+  // Demo rows only in demo mode (BUG-20).
+  const [rows, setRows] = React.useState<AdminProduct[]>(() => DEMO_MODE ? ADMIN.PRODUCTS.map((p) => ({ ...p })) : []);
   const [tab, setTab] = React.useState("all");
   const [q, setQ] = React.useState("");
   const [edit, setEdit] = React.useState<EditDraft | null>(null);
@@ -293,8 +295,8 @@ export function AdminProducts() {
 
   React.useEffect(() => {
     listAdminProducts().then(({ products }) => {
-      if (products?.length) setRows(products.map(backendProductToAdmin));
-    }).catch(() => { /* keep demo data */ });
+      setRows(products?.map(backendProductToAdmin) ?? []);
+    }).catch(() => { /* fetch failed — keep whatever's there (demo only in demo mode) */ });
     listCategories().then(({ categories: cats }) => setCategories(cats)).catch(() => {});
   }, []);
 
