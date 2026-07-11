@@ -5,12 +5,13 @@ import { ADMIN, type AdminOrder, type AdminMarket } from "@/lib/admin-data";
 import { AIcon, Pill, MarketTag, Avatar } from "./AdminPrimitives";
 import { updateOrderStatus, refundOrder, listAdminOrders } from "@/lib/api/admin";
 import { exportCsv } from "@/lib/csv";
+import { LKR_PER_USD } from "@/lib/fx";
 import type { Order } from "@/lib/types";
 
 function backendOrderToAdmin(order: Order): AdminOrder {
   const currency = order.currency ?? "USD";
   const total = parseFloat(String(order.total ?? "0"));
-  const totalUsd = currency === "USD" ? total : total / 148;
+  const totalUsd = currency === "USD" ? total : total / LKR_PER_USD;
   const itemsList = order.items ?? [];
   return {
     id: order.id,
@@ -25,7 +26,7 @@ function backendOrderToAdmin(order: Order): AdminOrder {
       name: it.product?.name ?? "Spice",
       weight: it.variant?.weight ? `${it.variant.weight}g` : "100g",
       qty: it.quantity,
-      priceUsd: currency === "USD" ? parseFloat(String(it.unitPrice ?? "0")) : parseFloat(String(it.unitPrice ?? "0")) / 148,
+      priceUsd: currency === "USD" ? parseFloat(String(it.unitPrice ?? "0")) : parseFloat(String(it.unitPrice ?? "0")) / LKR_PER_USD,
       color: "#B5651D",
     })),
     units: itemsList.reduce((s, it) => s + it.quantity, 0),

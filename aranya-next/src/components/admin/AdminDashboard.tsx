@@ -4,6 +4,7 @@ import * as React from "react";
 import { ADMIN } from "@/lib/admin-data";
 import { getDashboard, type DashboardData } from "@/lib/api/admin";
 import { exportCsv } from "@/lib/csv";
+import { LKR_PER_USD } from "@/lib/fx";
 import { AreaChart, AreaChartLight, Donut, Spark, ShareBar } from "./AdminCharts";
 import { AIcon, Delta, Pill, MarketTag, Avatar, SectionCard, StatCard } from "./AdminPrimitives";
 
@@ -161,7 +162,7 @@ function MarketDonutCard({ live }: { live: DashboardData | null }) {
   const liveSegs = live?.revenue
     ? [
         { key: "intl", label: "International (USD)", value: Number(live.revenue.international.total), color: "#BA7517" },
-        { key: "local", label: "Local (LKR ÷300 est.)", value: Number(live.revenue.local.total) / 300, color: "#0F6E56" },
+        { key: "local", label: `Local (LKR ÷${LKR_PER_USD} est.)`, value: Number(live.revenue.local.total) / LKR_PER_USD, color: "#0F6E56" },
       ]
     : null;
   const segs = liveSegs ?? A.MARKET_SPLIT;

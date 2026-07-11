@@ -5,7 +5,7 @@ import type { Market } from "@/lib/types";
 import { SpicePhoto } from "../primitives/SpicePhoto";
 import { CardCFinal } from "../cards/Cards";
 import {
-  ACCOUNT, ACCOUNT_SPICES, acFmt, acOrderTotal, wishlistSpices, toAccountOrder,
+  ACCOUNT, ACCOUNT_SPICES, acFmt, acOrderTotal, orderMarketOf, wishlistSpices, toAccountOrder,
   type AccountOrder,
 } from "@/lib/account-data";
 import { listOrders } from "@/lib/api/orders";
@@ -101,7 +101,8 @@ function StatTile({ label, value, sub, onClick }: { label: string; value: React.
 }
 
 function OrderRow({ order, market, onOpen, onReorder }: { order: AccountOrder; market: Market; onOpen: (o: AccountOrder) => void; onReorder: (o: AccountOrder) => void }) {
-  const total = acOrderTotal(order, market);
+  const om = orderMarketOf(order, market); // format in the order's own currency (BUG-18)
+  const total = acOrderTotal(order, om);
   const n = order.items.reduce((a, it) => a + it.qty, 0);
   return (
     <div style={{ background: "#FFFDF9", border: "1px solid var(--line)", borderRadius: 12, padding: "18px 20px" }}>
@@ -123,7 +124,7 @@ function OrderRow({ order, market, onOpen, onReorder }: { order: AccountOrder; m
           </div>
         </div>
         <div style={{ textAlign: "right", flex: "0 0 auto" }}>
-          <div className="disp" style={{ fontSize: 22, color: "var(--ink)", fontWeight: 600 }}>{acFmt(total, market)}</div>
+          <div className="disp" style={{ fontSize: 22, color: "var(--ink)", fontWeight: 600 }}>{acFmt(total, om)}</div>
         </div>
         <div style={{ display: "flex", gap: 8, flex: "0 0 auto" }}>
           <button onClick={() => onReorder(order)} style={{ background: "transparent", border: "1.5px solid var(--line)", color: "var(--ink)", borderRadius: 8, padding: "9px 14px", cursor: "pointer", fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 700 }}>Reorder</button>
