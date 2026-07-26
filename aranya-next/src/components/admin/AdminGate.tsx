@@ -12,7 +12,7 @@ import { DEMO_MODE } from "@/lib/demo";
 // the console stays reviewable without a backend (acceptance criterion §11).
 
 export function AdminGate({ onEnter, error }: { onEnter: (email: string, password: string) => void; error?: string | null }) {
-  const [email, setEmail] = React.useState("devika@aranyaceylon.com");
+  const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
