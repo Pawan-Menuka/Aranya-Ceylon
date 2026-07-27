@@ -1,5 +1,6 @@
 import type { Market, Spice, Order } from "./types";
 import { paletteFor } from "./spice-data";
+import { formatOrderNumber } from "./order-number";
 
 // Account / order-tracking data (ported from account-data.js), typed. The demo
 // dataset powers the signed-in dashboard offline and as a fallback; live orders
@@ -289,7 +290,7 @@ export function toAccountOrder(order: Order): AccountOrder {
   const deliveredLabel = order.status === "DELIVERED" ? placedLabel : undefined;
 
   return {
-    id: `AC-${order.id.slice(-6).toUpperCase()}`,
+    id: formatOrderNumber(order.id),
     placedISO: placed.toISOString().slice(0, 10),
     placedLabel,
     status,

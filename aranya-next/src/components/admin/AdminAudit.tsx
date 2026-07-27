@@ -6,10 +6,22 @@ import { AIcon, RoleTag } from "./AdminPrimitives";
 import { listAuditLogs, type AuditEntry } from "@/lib/api/admin";
 import { exportCsv } from "@/lib/csv";
 import { DEMO_MODE } from "@/lib/demo";
+import { formatOrderNumber } from "@/lib/order-number";
+
+function formatAuditTarget(log: AuditEntry): string {
+  if (!log.targetType) return "—";
+  if (!log.targetId) return log.targetType;
+  // Orders carry the AC- number the customer sees, so an audit entry can be tied
+  // to a support enquiry without translating cuids by hand.
+  if (log.targetType === "Order") return `Order ${formatOrderNumber(log.targetId)}`;
+  return `${log.targetType} #${log.targetId.slice(-6)}`;
+}
 
 function backendAuditToRow(log: AuditEntry): AuditRow {
   const eventMap: Record<string, string> = {
-    ORDER_REFUND: "order.refund", ORDER_STATUS: "order.status",
+    // The backend emits ORDER_STATUS_UPDATE, not ORDER_STATUS — the old key never
+    // matched, so these fell through to the raw slug and the generic icon.
+    ORDER_REFUND: "order.refund", ORDER_STATUS_UPDATE: "order.status",
     BLOG_PUBLISH: "blog.publish", BLOG_DELETE: "blog.schedule",
     PRODUCT_CREATE: "product.create", PRODUCT_UPDATE: "product.update",
   };
@@ -19,7 +31,7 @@ function backendAuditToRow(log: AuditEntry): AuditRow {
     actor: log.actor?.name ?? log.actorId ?? "System",
     role: log.actorRole ?? "ADMIN",
     action: eventMap[log.event] ?? log.event.toLowerCase().replace(/_/g, "."),
-    target: log.targetType && log.targetId ? `${log.targetType} #${log.targetId.slice(-6)}` : log.targetType ?? "—",
+    target: formatAuditTarget(log),
     meta: typeof log.meta === "object" ? JSON.stringify(log.meta ?? {}).slice(0, 80) : String(log.meta ?? ""),
     level: ["ORDER_REFUND", "PRODUCT_DELETE"].includes(log.event) ? "warn" : "info",
   };
