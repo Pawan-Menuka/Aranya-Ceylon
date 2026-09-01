@@ -27,7 +27,8 @@ function backendProductToAdmin(p: Product): AdminProduct {
     color: pal.color, base: pal.base, deep: pal.deep, surface: pal.surface,
     usd: usdPrice, lkr: lkrPrice,
     weights: weights.length ? weights : ["50g", "100g", "250g"],
-    rating: 4.8, reviews: 0,
+    rating: p.ratingAvg ?? 0,
+    reviews: p._count?.reviews ?? p.reviews?.length ?? 0,
     badge: totalStock > 0 ? "In Stock" : "Out of Stock",
     stock: totalStock,
     status: p.status === "ACTIVE" ? "Active" : p.status === "ARCHIVED" ? "Archived" : "Active",
@@ -84,7 +85,7 @@ function ProductsTable({ rows, onOpen, onToggle }: {
         <thead>
           <tr>
             <th>Product</th><th>SKU</th><th>Category</th><th className="num">Price</th>
-            <th>Stock</th><th className="num">Sold 30d</th><th>Status</th><th>Visible</th><th></th>
+            <th>Stock</th><th>Status</th><th>Visible</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -106,7 +107,6 @@ function ProductsTable({ rows, onOpen, onToggle }: {
                 <div style={{ fontSize: 11.5, color: "var(--ad-faint)" }}>{p.lkr}</div>
               </td>
               <td><StockMeter stock={p.stock} threshold={p.category === "Gift Sets" ? 10 : 25} /></td>
-              <td className="num tnum" style={{ color: "var(--ad-muted)" }}>{p.sold30.toLocaleString()}</td>
               <td><Pill status={p.status === "Active" ? "active" : p.status === "Low stock" ? "low" : "out"} /></td>
               <td onClick={(e) => { e.stopPropagation(); onToggle(p); }}>
                 <span className={"ad-toggle" + (p.visible ? " on" : "")} />
@@ -267,7 +267,6 @@ function ProductEditor({
                   <input className="ad-input" defaultValue={Math.round(p.stock / (p.weights.length || 1)) + i * 3} style={{ width: 80, marginLeft: "auto", padding: "7px 10px", textAlign: "right" }} />
                 </div>
               ))}
-              <button className="ad-btn ad-btn-ghost ad-btn-sm" style={{ alignSelf: "flex-start" }}><AIcon name="plus" size={14} stroke="var(--ad-muted)" />Add weight</button>
             </div>
           </div>
 
