@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth, requireRole } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
+import { adminLimiter } from '../middleware/rateLimit.js';
 import * as orderAdmin from '../controllers/admin/order.admin.controller.js';
 import * as blogAdmin from '../controllers/admin/blog.admin.controller.js';
 import * as recipeAdmin from '../controllers/admin/recipe.admin.controller.js';
@@ -11,7 +12,7 @@ import * as productController from '../controllers/product.controller.js';
 const router = Router();
 
 // All admin routes require auth + ADMIN or SUPERADMIN role
-router.use(asyncHandler(requireAuth), requireRole('ADMIN', 'SUPERADMIN'));
+router.use(asyncHandler(requireAuth), requireRole('ADMIN', 'SUPERADMIN'), adminLimiter);
 
 // --- Analytics ---
 router.get('/dashboard', asyncHandler(analyticsAdmin.getDashboard));

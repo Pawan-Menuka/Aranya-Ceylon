@@ -2,9 +2,8 @@
 
 import * as React from "react";
 import { ADMIN } from "@/lib/admin-data";
-import { getDashboard, type DashboardData } from "@/lib/api/admin";
+import type { DashboardData } from "@/lib/api/admin";
 import { exportCsv } from "@/lib/csv";
-import { LKR_PER_USD } from "@/lib/fx";
 import { AreaChart, AreaChartLight, Donut, Spark, ShareBar } from "./AdminCharts";
 import { AIcon, Delta, Pill, MarketTag, Avatar, SectionCard, StatCard } from "./AdminPrimitives";
 
@@ -12,17 +11,6 @@ import { AIcon, Delta, Pill, MarketTag, Avatar, SectionCard, StatCard } from "./
 // 3 layout variations (Command / Editorial / Dense) + market-aware charts.
 
 type Market = "all" | "intl" | "local";
-
-/* ---------- live dashboard data hook ---------- */
-function useLiveDash() {
-  const [data, setData] = React.useState<DashboardData | null>(null);
-  React.useEffect(() => {
-    getDashboard()
-      .then(setData)
-      .catch(() => { /* keep null — fallback to demo */ });
-  }, []);
-  return data;
-}
 
 /* ---------- market-aware series + kpis (demo fallback) ---------- */
 function useDashData(market: Market, live: DashboardData | null) {
@@ -43,8 +31,9 @@ function useDashData(market: Market, live: DashboardData | null) {
     const liveIntl = live?.revenue?.international;
     const liveOrders = live?.orders;
 
-    // LKR converted at a fixed rate — approximate; display context makes this clear
-    const localRevUsd = liveLocal?.total ? Number(liveLocal.total) / 300 : 0;
+    // Use the exact rate the backend used for its USD-normalised aggregates.
+    const fxRate = live?.fxRate || 300;
+    const localRevUsd = liveLocal?.total ? Number(liveLocal.total) / fxRate : 0;
     const intlRevUsd = liveIntl?.total ? Number(liveIntl.total) : 0;
     const allRevUsd = localRevUsd + intlRevUsd;
     const totalOrders = (liveOrders?.localCount ?? 0) + (liveOrders?.intlCount ?? 0);
@@ -146,7 +135,7 @@ const AUDIT_ICON: Record<string, { icon: string; tone: string }> = {
   PRODUCT_CREATE: { icon: "tag", tone: "brand" },
   PRODUCT_UPDATE: { icon: "tag", tone: "slate" },
   PRODUCT_ARCHIVE: { icon: "trash", tone: "red" },
-  REFUND_ISSUED: { icon: "refund", tone: "red" },
+  ORDER_REFUND: { icon: "refund", tone: "red" },
   BLOG_CREATE: { icon: "blog", tone: "slate" },
   BLOG_PUBLISH: { icon: "star", tone: "brand" },
   BLOG_UPDATE: { icon: "blog", tone: "slate" },
@@ -162,7 +151,7 @@ function MarketDonutCard({ live }: { live: DashboardData | null }) {
   const liveSegs = live?.revenue
     ? [
         { key: "intl", label: "International (USD)", value: Number(live.revenue.international.total), color: "#BA7517" },
-        { key: "local", label: `Local (LKR ÷${LKR_PER_USD} est.)`, value: Number(live.revenue.local.total) / LKR_PER_USD, color: "#0F6E56" },
+        { key: "local", label: `Local (LKR ÷${live.fxRate || 300} est.)`, value: Number(live.revenue.local.total) / (live.fxRate || 300), color: "#0F6E56" },
       ]
     : null;
   const segs = liveSegs ?? A.MARKET_SPLIT;
@@ -425,11 +414,11 @@ function DashCommand({ d, live, market, setMarket, range, setRange, go }: DashPr
       <div style={{ display: "grid", gridTemplateColumns: "1.62fr 1fr", gap: 18, alignItems: "start" }}>
         <TopProductsCard live={live} />
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          <WholesaleCard onGo={() => go("orders")} live={live} />
+          {!live && <WholesaleCard onGo={() => go("orders")} live={live} />}
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 18, alignItems: "start" }}>
-        <FulfillmentCard onOpen={() => go("orders")} live={live} />
+      <div style={{ display: "grid", gridTemplateColumns: live ? "1fr 1fr" : "1fr 1fr 1fr", gap: 18, alignItems: "start" }}>
+        {!live && <FulfillmentCard onOpen={() => go("orders")} live={live} />}
         <MarketDonutCard live={live} />
         <ActivityCard live={live} />
       </div>
@@ -439,6 +428,7 @@ function DashCommand({ d, live, market, setMarket, range, setRange, go }: DashPr
 
 /* ============================ VARIATION B — EDITORIAL SPLIT ============================ */
 function DashEditorial({ d, live, market, setMarket, range, go }: DashProps) {
+  const todayLabel = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1.7fr 1fr", gap: 18, alignItems: "stretch" }}>
@@ -448,7 +438,7 @@ function DashEditorial({ d, live, market, setMarket, range, go }: DashProps) {
           <div style={{ position: "relative" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
               <div>
-                <div className="ad-eyebrow" style={{ color: "#E6B860" }}>Today · June 4, 2026</div>
+                <div className="ad-eyebrow" style={{ color: "#E6B860" }}>Today · {todayLabel}</div>
                 <div className="disp" style={{ fontSize: 62, fontWeight: 600, lineHeight: 1, marginTop: 10, letterSpacing: ".01em" }}>{fmtUSD0(d.todayRev)}</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12 }}>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 13, fontWeight: 700, color: "#9FE3C4" }}>
@@ -481,7 +471,7 @@ function DashEditorial({ d, live, market, setMarket, range, go }: DashProps) {
           <div className="ad-eyebrow" style={{ color: "var(--ad-faint)", marginBottom: -2 }}>Needs attention</div>
           <AlertTile icon="truck" tone="amber" value={d.pending} label="to fulfill" sub="Orders awaiting shipment" onGo={() => go("orders")} />
           <AlertTile icon="alert" tone="red" value={d.lowStockCount} label="low stock" sub="Items below threshold — restock soon" onGo={() => go("products")} />
-          <AlertTile icon="handshake" tone="brand" value={ADMIN.WHOLESALE.filter((w) => w.status !== "approved").length} label="wholesale" sub="Applications pending review" onGo={() => go("orders")} />
+          {!live && <AlertTile icon="handshake" tone="brand" value={ADMIN.WHOLESALE.filter((w) => w.status !== "approved").length} label="wholesale" sub="Applications pending review" onGo={() => go("orders")} />}
           <AlertTile icon="users" tone="slate" value={d.newCustomers} label="new customers" sub="Joined the Harvest Club this week" onGo={() => go("orders")} />
         </div>
       </div>
@@ -489,8 +479,8 @@ function DashEditorial({ d, live, market, setMarket, range, go }: DashProps) {
         <TopProductsCard live={live} />
         <MarketDonutCard live={live} />
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, alignItems: "start" }}>
-        <FulfillmentCard onOpen={() => go("orders")} live={live} />
+      <div style={{ display: "grid", gridTemplateColumns: live ? "1fr" : "1fr 1fr", gap: 18, alignItems: "start" }}>
+        {!live && <FulfillmentCard onOpen={() => go("orders")} live={live} />}
         <ActivityCard live={live} />
       </div>
     </div>
@@ -528,10 +518,10 @@ function DashDense({ d, live, market, setMarket, range, setRange, go }: DashProp
         <MarketDonutCard live={live} />
       </div>
       {/* operations row — three equal queues */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, alignItems: "stretch" }}>
-        <FulfillmentCard onOpen={() => go("orders")} live={live} />
+      <div style={{ display: "grid", gridTemplateColumns: live ? "1fr" : "1fr 1fr 1fr", gap: 16, alignItems: "stretch" }}>
+        {!live && <FulfillmentCard onOpen={() => go("orders")} live={live} />}
         <LowStockCard onGo={() => go("products")} live={live} />
-        <WholesaleCard onGo={() => go("orders")} live={live} />
+        {!live && <WholesaleCard onGo={() => go("orders")} live={live} />}
       </div>
       {/* detail row — top products table + activity */}
       <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 16, alignItems: "stretch" }}>
@@ -549,13 +539,12 @@ const DASH_LAYOUTS = [
   { key: "dense", label: "Dense ops", note: "Max data" },
 ];
 
-export function AdminDashboard({ go }: { go: (r: string) => void }) {
+export function AdminDashboard({ go, live }: { go: (r: string) => void; live: DashboardData | null }) {
   const [layout, setLayout] = React.useState<string>(() =>
     (typeof window !== "undefined" && localStorage.getItem("ad_dash_layout")) || "command"
   );
   const [market, setMarket] = React.useState<Market>("all");
   const [range, setRange] = React.useState("30d");
-  const live = useLiveDash();
   const d = useDashData(market, live);
   const setL = (k: string) => { setLayout(k); if (typeof window !== "undefined") localStorage.setItem("ad_dash_layout", k); };
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
@@ -576,7 +565,7 @@ export function AdminDashboard({ go }: { go: (r: string) => void }) {
         <div>
           <div className="ad-eyebrow">{today}</div>
           <h1 className="ad-title" style={{ marginTop: 6 }}>Dashboard</h1>
-          <p className="ad-sub">Here&apos;s how Aranya Ceylon is moving today.{live ? " · Fulfillment and wholesale panels show sample data." : " (demo data)"}</p>
+          <p className="ad-sub">Here&apos;s how Aranya Ceylon is moving today.{live ? "" : " (demo data)"}</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9 }}>

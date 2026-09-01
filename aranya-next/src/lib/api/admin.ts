@@ -6,6 +6,7 @@ import type { Order, Product } from "../types";
 
 // ---- dashboard ----
 export interface DashboardData {
+  fxRate: number;
   revenue: {
     local: { total: number; currency: string; orders: number };
     international: { total: number; currency: string; orders: number };
@@ -141,6 +142,15 @@ export interface AdminRecipe {
   cookMins: number;
   serves: number;
   createdAt: string;
+  // Present on the detail endpoint; omitted by the list endpoint.
+  dek?: string;
+  accent?: string;
+  slot?: string;
+  intro?: string;
+  spices?: string[];
+  ingredients?: Array<{ group?: string; items: string[] }>;
+  method?: string[];
+  tips?: string[];
 }
 
 export interface AdminRecipeInput {
@@ -196,6 +206,13 @@ export interface AdminGiftSet {
   status: string;
   contents: string[];
   createdAt: string;
+  // Present on the detail endpoint; omitted by the list endpoint.
+  tagline?: string;
+  blurb?: string;
+  color?: string;
+  base?: string;
+  deep?: string;
+  surface?: string;
 }
 
 export interface AdminGiftInput {
@@ -218,6 +235,10 @@ export interface AdminGiftInput {
 
 export function listAdminGifts(): Promise<{ gifts: AdminGiftSet[] }> {
   return apiFetch(`/admin/gifts`, { auth: true });
+}
+
+export function getAdminGift(id: string): Promise<{ gift: AdminGiftSet }> {
+  return apiFetch(`/admin/gifts/${encodeURIComponent(id)}`, { auth: true });
 }
 
 export function createGift(input: AdminGiftInput): Promise<{ gift: AdminGiftSet }> {

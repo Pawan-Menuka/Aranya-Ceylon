@@ -27,7 +27,8 @@ function backendProductToAdmin(p: Product): AdminProduct {
     color: pal.color, base: pal.base, deep: pal.deep, surface: pal.surface,
     usd: usdPrice, lkr: lkrPrice,
     weights: weights.length ? weights : ["50g", "100g", "250g"],
-    rating: 4.8, reviews: 0,
+    rating: p.ratingAvg ?? 0,
+    reviews: p._count?.reviews ?? p.reviews?.length ?? 0,
     badge: totalStock > 0 ? "In Stock" : "Out of Stock",
     stock: totalStock,
     status: p.status === "ACTIVE" ? "Active" : p.status === "ARCHIVED" ? "Archived" : "Active",
@@ -42,6 +43,10 @@ function backendProductToAdmin(p: Product): AdminProduct {
 function parseUsd(s: string) { return parseFloat(s.replace(/[^0-9.]/g, "")) || 0; }
 function parseLkr(s: string) { return parseFloat(s.replace(/[^0-9.,]/g, "").replace(/,/g, "")) || 0; }
 function toSlug(name: string) { return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
+
+function productIdentity(p: AdminProduct): string {
+  return (p as AdminProduct & { _backendId?: string })._backendId ?? `local:${p.slug}`;
+}
 
 // Build the variant array required by createProductSchema from the editor UI values.
 function buildVariants(p: AdminProduct): NonNullable<AdminProductInput["variants"]> {
@@ -80,12 +85,12 @@ function ProductsTable({ rows, onOpen, onToggle }: {
         <thead>
           <tr>
             <th>Product</th><th>SKU</th><th>Category</th><th className="num">Price</th>
-            <th>Stock</th><th className="num">Sold 30d</th><th>Status</th><th>Visible</th><th></th>
+            <th>Stock</th><th>Status</th><th>Visible</th><th></th>
           </tr>
         </thead>
         <tbody>
           {rows.map((p) => (
-            <tr key={p.sku} onClick={() => onOpen(p)}>
+            <tr key={productIdentity(p)} onClick={() => onOpen(p)}>
               <td>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <span className="swatch" style={{ width: 40, height: 40, background: `radial-gradient(70% 70% at 50% 35%, ${p.base}, ${p.deep})` }} />
@@ -102,7 +107,6 @@ function ProductsTable({ rows, onOpen, onToggle }: {
                 <div style={{ fontSize: 11.5, color: "var(--ad-faint)" }}>{p.lkr}</div>
               </td>
               <td><StockMeter stock={p.stock} threshold={p.category === "Gift Sets" ? 10 : 25} /></td>
-              <td className="num tnum" style={{ color: "var(--ad-muted)" }}>{p.sold30.toLocaleString()}</td>
               <td><Pill status={p.status === "Active" ? "active" : p.status === "Low stock" ? "low" : "out"} /></td>
               <td onClick={(e) => { e.stopPropagation(); onToggle(p); }}>
                 <span className={"ad-toggle" + (p.visible ? " on" : "")} />
@@ -263,7 +267,6 @@ function ProductEditor({
                   <input className="ad-input" defaultValue={Math.round(p.stock / (p.weights.length || 1)) + i * 3} style={{ width: 80, marginLeft: "auto", padding: "7px 10px", textAlign: "right" }} />
                 </div>
               ))}
-              <button className="ad-btn ad-btn-ghost ad-btn-sm" style={{ alignSelf: "flex-start" }}><AIcon name="plus" size={14} stroke="var(--ad-muted)" />Add weight</button>
             </div>
           </div>
 
@@ -310,7 +313,8 @@ export function AdminProducts() {
   const toggle = (p: AdminProduct) => {
     const next = !p.visible;
     const backendId = (p as AdminProduct & { _backendId?: string })._backendId;
-    setRows((prev) => prev.map((x) => (x.sku === p.sku ? { ...x, visible: next } : x)));
+    const identity = productIdentity(p);
+    setRows((prev) => prev.map((x) => (productIdentity(x) === identity ? { ...x, visible: next } : x)));
     if (backendId) bestEffort(updateAdminProduct(backendId, { status: next ? "ACTIVE" : "ARCHIVED" }));
   };
   const save = (p: AdminProduct, extra: { description: string; categoryId: string }) => {
@@ -319,7 +323,8 @@ export function AdminProducts() {
     const desc = extra.description || p.latin || "Premium Ceylon spice.";
     const catId = extra.categoryId || categories[0]?.id || "";
     setRows((prev) => {
-      const exists = prev.find((x) => x.sku === p.sku);
+      const identity = productIdentity(p);
+      const exists = prev.find((x) => productIdentity(x) === identity);
       if (exists && backendId) {
         bestEffort(updateAdminProduct(backendId, {
           name: p.name,
@@ -327,7 +332,7 @@ export function AdminProducts() {
           featured: p.featured,
           status: p.visible ? "ACTIVE" : "ARCHIVED",
         }));
-        return prev.map((x) => (x.sku === p.sku ? { ...x, ...p } : x));
+        return prev.map((x) => (productIdentity(x) === identity ? { ...x, ...p } : x));
       }
       const variants = buildVariants(p);
       if (catId && variants.length > 0) {

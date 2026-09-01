@@ -96,6 +96,9 @@ export async function getDashboard(_req: Request, res: Response) {
     }));
 
     return res.json({
+        // Return the exact conversion rate used for server-side aggregates so
+        // the dashboard never has to mirror a separate public environment var.
+        fxRate: LKR_USD_RATE,
         revenue: {
             local: { total: localRevenue._sum.total, currency: 'LKR', orders: localRevenue._count },
             international: { total: intlRevenue._sum.total, currency: 'USD', orders: intlRevenue._count },

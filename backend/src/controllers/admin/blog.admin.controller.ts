@@ -118,11 +118,27 @@ export async function updateBlog(req: Request, res: Response) {
     }
 
     // P3-3: audit log for updates (was missing entirely)
+    const beforeRecord = before as unknown as Record<string, unknown>;
+    const afterRecord = blog as unknown as Record<string, unknown>;
+    const auditValue = (value: unknown) => value instanceof Date ? value.toISOString() : value;
+    const changedFields = Object.keys(data).filter((field) =>
+        field !== 'content'
+        && JSON.stringify(auditValue(beforeRecord[field])) !== JSON.stringify(auditValue(afterRecord[field])),
+    );
+    const changes = Object.fromEntries(changedFields.map((field) => [
+        field,
+        { before: auditValue(beforeRecord[field]), after: auditValue(afterRecord[field]) },
+    ]));
     await writeAuditLog({
         req,
         event: data.status === 'PUBLISHED' && !before.publishedAt ? 'BLOG_PUBLISH' : 'BLOG_UPDATE',
         targetType: 'Blog', targetId: id,
-        diff: { before, after: blog },
+        diff: {
+            changes,
+            ...(data.content !== undefined && data.content !== before.content
+                ? { contentChanged: true }
+                : {}),
+        },
     });
 
     await revalidateFrontend(`/journal/${blog.slug}`);
