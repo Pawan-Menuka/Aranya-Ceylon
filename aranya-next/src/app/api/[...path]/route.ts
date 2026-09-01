@@ -12,7 +12,17 @@ import { NextRequest, NextResponse } from "next/server";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 // Hop-by-hop / managed headers we must not blindly forward.
-const STRIP_REQ = new Set(["host", "connection", "content-length", "accept-encoding"]);
+const STRIP_REQ = new Set([
+  "host",
+  "connection",
+  "content-length",
+  "accept-encoding",
+  // These must be set by trusted infrastructure. Forwarding client-provided
+  // values lets callers spoof req.ip in Express (rate limits + audit records).
+  "x-forwarded-for",
+  "x-real-ip",
+  "cf-connecting-ip",
+]);
 
 async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
   const search = req.nextUrl.search || "";

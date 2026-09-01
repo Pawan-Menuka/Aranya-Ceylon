@@ -6,7 +6,7 @@ import { parsePrice } from "@/lib/catalog-data";
 import { formatMoney } from "@/lib/money";
 import { AIcon, Pill, FlagRow } from "./AdminPrimitives";
 import {
-  listAdminGifts, createGift, updateGift, deleteGift,
+  listAdminGifts, getAdminGift, createGift, updateGift, deleteGift,
   bestEffort, type AdminGiftSet, type AdminGiftInput,
 } from "@/lib/api/admin";
 import { DEMO_MODE } from "@/lib/demo";
@@ -35,6 +35,12 @@ function staticRows(): AdminGiftSet[] {
     status: "PUBLISHED",
     contents: g.contents,
     createdAt: new Date().toISOString(),
+    tagline: g.tagline,
+    blurb: g.blurb,
+    color: g.color,
+    base: g.base,
+    deep: g.deep,
+    surface: g.surface,
   }));
 }
 
@@ -101,8 +107,8 @@ function GiftEditor({ gift, onClose, onSave, onDelete }: {
   const isNew = gift._isNew ?? !gift.id;
   const [name, setName] = React.useState(gift.name ?? "");
   const [slug, setSlug] = React.useState(gift.slug ?? "");
-  const [tagline, setTagline] = React.useState("");
-  const [blurb, setBlurb] = React.useState("");
+  const [tagline, setTagline] = React.useState(gift.tagline ?? "");
+  const [blurb, setBlurb] = React.useState(gift.blurb ?? "");
   const [badge, setBadge] = React.useState<string>(gift.badge ?? "");
   const [jar, setJar] = React.useState(gift.jar ?? "50g");
   const [usd, setUsd] = React.useState(gift.usd ?? "");
@@ -246,6 +252,7 @@ export function AdminGifts() {
   const [tab, setTab] = React.useState("all");
   const [q, setQ] = React.useState("");
   const [edit, setEdit] = React.useState<Draft | null>(null);
+  const [message, setMessage] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     listAdminGifts().then(({ gifts }) => {
@@ -264,6 +271,22 @@ export function AdminGifts() {
     PUBLISHED: rows.filter((g) => g.status === "PUBLISHED").length,
     DRAFT: rows.filter((g) => g.status === "DRAFT").length,
   }), [rows]);
+
+  const openGift = async (gift: AdminGiftSet) => {
+    setMessage(null);
+    if (gift.id.startsWith("demo-")) {
+      setEdit(gift);
+      return;
+    }
+    setMessage("Loading full gift-set details…");
+    try {
+      const { gift: detail } = await getAdminGift(gift.id);
+      setEdit(detail);
+      setMessage(null);
+    } catch {
+      setMessage("Could not load the full gift set. Editing is blocked to protect its existing copy.");
+    }
+  };
 
   const save = (input: AdminGiftInput & { id?: string }) => {
     const { id, ...body } = input;
@@ -297,6 +320,8 @@ export function AdminGifts() {
         </button>
       </div>
 
+      {message && <div role="status" style={{ marginBottom: 16, padding: "10px 14px", border: "1px solid var(--ad-line)", borderRadius: 10, color: "var(--ad-muted)", background: "var(--ad-card)" }}>{message}</div>}
+
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
         <div className="ad-seg">
           {TABS.map((t) => (
@@ -311,7 +336,7 @@ export function AdminGifts() {
         </div>
       </div>
 
-      <GiftTable rows={filtered} onOpen={(g) => setEdit(g)} />
+      <GiftTable rows={filtered} onOpen={(g) => { void openGift(g); }} />
       {edit && (
         <GiftEditor
           gift={edit}

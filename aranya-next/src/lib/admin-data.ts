@@ -115,6 +115,7 @@ export interface AdminBlogPost {
 }
 export interface AuditRow {
   ts: string;
+  createdAt?: string;
   actor: string;
   role: string;
   action: string;

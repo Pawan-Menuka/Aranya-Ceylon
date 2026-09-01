@@ -34,7 +34,9 @@ export async function writeAuditLog(params: {
     event: AuditEvent;
     targetType: string;
     targetId: string;
-    diff?: { before: any; after: any };
+    // Audit payloads may be full before/after snapshots or compact field-level
+    // changes, depending on the sensitivity and size of the target record.
+    diff?: Record<string, any>;
 }) {
     const { req, event, targetType, targetId, diff } = params;
 
