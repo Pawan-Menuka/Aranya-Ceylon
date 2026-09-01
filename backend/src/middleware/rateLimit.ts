@@ -55,6 +55,18 @@ export const globalLimiter = rateLimit({
     ...json429('Too many requests. Please slow down.'),
 });
 
+// Admin endpoints can fan out into expensive aggregation queries. Apply this
+// after authentication so limits are isolated per staff account (with the
+// resolved client IP as a defensive fallback) rather than shared by an office.
+export const adminLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 60,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    keyGenerator: (req: Request) => req.user?.userId ?? keyGenerator(req),
+    ...json429('Too many admin requests. Please wait a moment and try again.'),
+});
+
 // Tight limiter for checkout: POST /checkout/create-intent creates a Stripe
 // PaymentIntent (an external, billable API call) and is reachable by guests.
 // Without this, the endpoint can be hammered to run up gateway cost / noise.

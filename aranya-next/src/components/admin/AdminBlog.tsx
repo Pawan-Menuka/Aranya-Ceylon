@@ -142,7 +142,6 @@ function BlogEditor({ post, onClose, onSave }: { post: BlogDraft; onClose: () =>
         <div style={{ flex: 1, overflowY: "auto", padding: 24, display: "flex", flexDirection: "column", gap: 18 }}>
           <div style={{ height: 150, borderRadius: 12, background: `linear-gradient(135deg, ${p.accent} 0%, ${p.accent}aa 100%)`, position: "relative", overflow: "hidden", display: "grid", placeItems: "center" }}>
             <div className="grain" style={{ position: "absolute", inset: 0 }} />
-            <button className="ad-btn ad-btn-ghost ad-btn-sm" style={{ position: "relative", background: "rgba(255,255,255,.92)" }}><AIcon name="image" size={15} stroke="var(--ad-muted)" />Replace cover</button>
             <span style={{ position: "absolute", left: 12, bottom: 10, fontSize: 9, letterSpacing: ".12em", textTransform: "uppercase", color: "rgba(255,255,255,.7)", fontWeight: 700 }}>Cover image</span>
           </div>
 
@@ -166,9 +165,6 @@ function BlogEditor({ post, onClose, onSave }: { post: BlogDraft; onClose: () =>
 
           <div className="ad-field"><label className="ad-label">Body</label>
             <div style={{ border: "1px solid var(--ad-line-2)", borderRadius: 9, overflow: "hidden" }}>
-              <div style={{ display: "flex", gap: 2, padding: "7px 8px", borderBottom: "1px solid var(--ad-line)", background: "var(--ad-soft)" }}>
-                {["B", "i", "H", "❝", "🔗", "▦"].map((b, i) => <button key={i} style={{ width: 30, height: 28, border: 0, background: "transparent", borderRadius: 6, cursor: "pointer", fontWeight: i === 0 ? 800 : 600, fontStyle: i === 1 ? "italic" : "normal", color: "var(--ad-muted)", fontSize: 13 }}>{b}</button>)}
-              </div>
               <textarea className="ad-textarea" style={{ border: 0, borderRadius: 0, minHeight: 160, fontFamily: "var(--font-read)", fontSize: 15 }} placeholder="Write the story…" value={content} onChange={(e) => setContent(e.target.value)} />
             </div>
           </div>
@@ -198,7 +194,6 @@ function BlogEditor({ post, onClose, onSave }: { post: BlogDraft; onClose: () =>
 
         <div style={{ padding: "16px 24px", borderTop: "1px solid var(--ad-line)", display: "flex", gap: 10, background: "var(--ad-card)" }}>
           {!isNew && <button className="ad-btn ad-btn-danger ad-btn-sm"><AIcon name="trash" size={15} stroke="var(--neg)" /></button>}
-          <button className="ad-btn ad-btn-ghost ad-btn-sm"><AIcon name="external" size={15} stroke="var(--ad-muted)" />Preview</button>
           <button className="ad-btn ad-btn-ghost" style={{ marginLeft: "auto" }} onClick={onClose}>Cancel</button>
           <button className="ad-btn ad-btn-green" onClick={() => {
             const scheduledAt = publishMode === "schedule" && scheduleDate
