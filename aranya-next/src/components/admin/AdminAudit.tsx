@@ -28,6 +28,7 @@ function backendAuditToRow(log: AuditEntry): AuditRow {
   const d = new Date(log.createdAt);
   return {
     ts: d.toLocaleDateString("en-GB", { month: "short", day: "numeric" }) + ", " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+    createdAt: log.createdAt,
     actor: log.actor?.name ?? log.actorId ?? "System",
     role: log.actorRole ?? "ADMIN",
     action: eventMap[log.event] ?? log.event.toLowerCase().replace(/_/g, "."),
@@ -84,7 +85,12 @@ export function AdminAudit() {
 
   const groups = React.useMemo(() => {
     const g: Record<string, typeof rows> = {};
-    filtered.forEach((r) => { const day = r.ts.split(",")[0]; (g[day] = g[day] || []).push(r); });
+    filtered.forEach((r) => {
+      const day = r.createdAt
+        ? new Date(r.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+        : `${r.ts.split(",")[0]}, ${new Date().getFullYear()}`;
+      (g[day] = g[day] || []).push(r);
+    });
     return g;
   }, [filtered]);
 
@@ -112,7 +118,7 @@ export function AdminAudit() {
       <div className="ad-card" style={{ overflow: "hidden" }}>
         {Object.keys(groups).map((day) => (
           <div key={day}>
-            <div style={{ padding: "10px 18px", background: "var(--ad-soft)", borderBottom: "1px solid var(--ad-line)", fontSize: 11, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--ad-faint)" }}>{day}, 2026</div>
+            <div style={{ padding: "10px 18px", background: "var(--ad-soft)", borderBottom: "1px solid var(--ad-line)", fontSize: 11, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--ad-faint)" }}>{day}</div>
             {groups[day].map((r, i) => {
               const m = ACTION_META[r.action] || { icon: "audit", tone: "slate", label: r.action };
               const c = TONE[m.tone];

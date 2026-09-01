@@ -4,7 +4,7 @@ import * as React from "react";
 import { RECIPES } from "@/lib/recipes-data";
 import { AIcon, Pill, FlagRow } from "./AdminPrimitives";
 import {
-  listAdminRecipes, createRecipe, updateRecipe, deleteRecipe,
+  listAdminRecipes, getAdminRecipe, createRecipe, updateRecipe, deleteRecipe,
   bestEffort, type AdminRecipe, type AdminRecipeInput,
 } from "@/lib/api/admin";
 import { DEMO_MODE } from "@/lib/demo";
@@ -32,6 +32,14 @@ function staticRows(): AdminRecipe[] {
     cookMins: r.time.cook,
     serves: r.serves,
     createdAt: new Date().toISOString(),
+    dek: r.dek,
+    accent: r.accent,
+    slot: r.slot,
+    intro: r.intro,
+    spices: r.spices,
+    ingredients: r.ingredients,
+    method: r.method,
+    tips: r.tips,
   }));
 }
 
@@ -76,11 +84,12 @@ function RecipeTable({ rows, onOpen }: { rows: AdminRecipe[]; onOpen: (r: AdminR
 }
 
 type Draft = Partial<AdminRecipe> & { _isNew?: boolean };
+type RecipeSaveInput = Partial<AdminRecipeInput> & Pick<AdminRecipeInput, "title" | "slug" | "course"> & { id?: string };
 
 function RecipeEditor({ recipe, onClose, onSave, onDelete }: {
   recipe: Draft;
   onClose: () => void;
-  onSave: (r: AdminRecipeInput & { id?: string }) => void;
+  onSave: (r: RecipeSaveInput) => void | Promise<void>;
   onDelete?: (id: string) => void;
 }) {
   const isNew = recipe._isNew ?? !recipe.id;
@@ -111,15 +120,14 @@ function RecipeEditor({ recipe, onClose, onSave, onDelete }: {
   }, [onClose]);
 
   const handleSave = () => {
-    onSave({
+    void onSave({
       id: recipe.id,
       title, slug, course, difficulty,
       prepMins: Number(prepMins), cookMins: Number(cookMins),
       serves: Number(serves), featured, status,
-      // dek / intro / spices / ingredients / method / tips kept empty for new;
-      // full content editing is done directly in the DB or future rich editor
-      dek: title,
-      intro: "",
+      // Existing long-form fields are deliberately omitted from the PATCH.
+      // They are not editable in this drawer and must remain untouched.
+      ...(isNew ? { dek: title, intro: "" } : {}),
     });
   };
 
@@ -218,15 +226,16 @@ function RecipeEditor({ recipe, onClose, onSave, onDelete }: {
 export function AdminRecipes() {
   // Demo rows only in demo mode (BUG-20).
   const [rows, setRows] = React.useState<AdminRecipe[]>(() => DEMO_MODE ? staticRows() : []);
-  const [liveLoaded, setLiveLoaded] = React.useState(false);
+  const [loadState, setLoadState] = React.useState<"loading" | "loaded" | "failed">("loading");
   const [tab, setTab] = React.useState("all");
   const [q, setQ] = React.useState("");
   const [edit, setEdit] = React.useState<Draft | null>(null);
+  const [message, setMessage] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     listAdminRecipes().then(({ recipes }) => {
-      setRows(recipes ?? []); setLiveLoaded(true); // live responded — real data authoritative
-    }).catch(() => { /* fetch failed — keep whatever's there (demo only in demo mode) */ });
+      setRows(recipes ?? []); setLoadState("loaded"); // live responded — real data authoritative
+    }).catch(() => { setLoadState("failed"); });
   }, []);
 
   const filtered = React.useMemo(() => rows.filter((r) => {
@@ -241,27 +250,52 @@ export function AdminRecipes() {
     DRAFT: rows.filter((r) => r.status === "DRAFT").length,
   }), [rows]);
 
-  const save = (input: AdminRecipeInput & { id?: string }) => {
+  const openRecipe = async (recipe: AdminRecipe) => {
+    setMessage(null);
+    if (recipe.id.startsWith("demo-")) {
+      setEdit(recipe);
+      return;
+    }
+    setMessage("Loading full recipe details…");
+    try {
+      const { recipe: detail } = await getAdminRecipe(recipe.id);
+      setEdit(detail);
+      setMessage(null);
+    } catch {
+      setMessage("Could not load the full recipe. Editing is blocked to protect its existing content.");
+    }
+  };
+
+  const save = async (input: RecipeSaveInput) => {
     const { id, ...body } = input;
-    if (id && !id.startsWith("demo-")) {
-      bestEffort(updateRecipe(id, body));
-      setRows((prev) => prev.map((r) => r.id === id ? { ...r, ...body, status: body.status ?? r.status } : r));
-    } else if (liveLoaded) {
-      bestEffort(createRecipe(body).then(({ recipe }) => {
-        setRows((prev) => [recipe, ...prev.filter((r) => !r.id.startsWith("demo-"))]);
-      }));
-      if (!liveLoaded) {
+    setMessage(null);
+    if (!id && loadState === "loading") {
+      setMessage("Please wait for the recipe list to finish loading before creating a recipe.");
+      return;
+    }
+    try {
+      if (id && !id.startsWith("demo-")) {
+        const { recipe } = await updateRecipe(id, body);
+        setRows((prev) => prev.map((r) => r.id === id ? recipe : r));
+      } else if (id?.startsWith("demo-") || (DEMO_MODE && loadState === "failed")) {
         const newRow: AdminRecipe = {
-          id: `local-${Date.now()}`, slug: body.slug, title: body.title,
+          id: id ?? `local-${Date.now()}`, slug: body.slug, title: body.title,
           course: body.course, difficulty: body.difficulty ?? "Easy",
           featured: body.featured ?? false, status: body.status ?? "DRAFT",
           prepMins: body.prepMins ?? 0, cookMins: body.cookMins ?? 0,
           serves: body.serves ?? 0, createdAt: new Date().toISOString(),
+          dek: body.dek ?? body.title, intro: body.intro ?? "",
         };
-        setRows((prev) => [newRow, ...prev]);
+        setRows((prev) => id ? prev.map((r) => r.id === id ? newRow : r) : [newRow, ...prev]);
+      } else {
+        const createBody: AdminRecipeInput = { ...body, dek: body.dek ?? body.title };
+        const { recipe } = await createRecipe(createBody);
+        setRows((prev) => [recipe, ...prev.filter((r) => !r.id.startsWith("demo-"))]);
       }
+      setEdit(null);
+    } catch {
+      setMessage("The recipe could not be saved. No local success state was applied.");
     }
-    setEdit(null);
   };
 
   const remove = (id: string) => {
@@ -278,10 +312,12 @@ export function AdminRecipes() {
           <h1 className="ad-title" style={{ marginTop: 6 }}>Recipes</h1>
           <p className="ad-sub">{counts.PUBLISHED} published · {counts.DRAFT} draft{counts.DRAFT !== 1 ? "s" : ""}</p>
         </div>
-        <button className="ad-btn ad-btn-amber" onClick={() => setEdit({ _isNew: true })}>
+        <button className="ad-btn ad-btn-amber" disabled={loadState === "loading"} title={loadState === "loading" ? "Waiting for recipes to load" : undefined} onClick={() => setEdit({ _isNew: true })}>
           <AIcon name="plus" size={16} stroke="#fff" />New recipe
         </button>
       </div>
+
+      {message && <div role="status" style={{ marginBottom: 16, padding: "10px 14px", border: "1px solid var(--ad-line)", borderRadius: 10, color: "var(--ad-muted)", background: "var(--ad-card)" }}>{message}</div>}
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
         <div className="ad-seg">
@@ -297,7 +333,7 @@ export function AdminRecipes() {
         </div>
       </div>
 
-      <RecipeTable rows={filtered} onOpen={(r) => setEdit(r)} />
+      <RecipeTable rows={filtered} onOpen={(r) => { void openRecipe(r); }} />
       {edit && (
         <RecipeEditor
           recipe={edit}

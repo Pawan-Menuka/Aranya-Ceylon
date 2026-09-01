@@ -43,6 +43,10 @@ function parseUsd(s: string) { return parseFloat(s.replace(/[^0-9.]/g, "")) || 0
 function parseLkr(s: string) { return parseFloat(s.replace(/[^0-9.,]/g, "").replace(/,/g, "")) || 0; }
 function toSlug(name: string) { return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
 
+function productIdentity(p: AdminProduct): string {
+  return (p as AdminProduct & { _backendId?: string })._backendId ?? `local:${p.slug}`;
+}
+
 // Build the variant array required by createProductSchema from the editor UI values.
 function buildVariants(p: AdminProduct): NonNullable<AdminProductInput["variants"]> {
   const usd = parseUsd(p.usd);
@@ -85,7 +89,7 @@ function ProductsTable({ rows, onOpen, onToggle }: {
         </thead>
         <tbody>
           {rows.map((p) => (
-            <tr key={p.sku} onClick={() => onOpen(p)}>
+            <tr key={productIdentity(p)} onClick={() => onOpen(p)}>
               <td>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <span className="swatch" style={{ width: 40, height: 40, background: `radial-gradient(70% 70% at 50% 35%, ${p.base}, ${p.deep})` }} />
@@ -310,7 +314,8 @@ export function AdminProducts() {
   const toggle = (p: AdminProduct) => {
     const next = !p.visible;
     const backendId = (p as AdminProduct & { _backendId?: string })._backendId;
-    setRows((prev) => prev.map((x) => (x.sku === p.sku ? { ...x, visible: next } : x)));
+    const identity = productIdentity(p);
+    setRows((prev) => prev.map((x) => (productIdentity(x) === identity ? { ...x, visible: next } : x)));
     if (backendId) bestEffort(updateAdminProduct(backendId, { status: next ? "ACTIVE" : "ARCHIVED" }));
   };
   const save = (p: AdminProduct, extra: { description: string; categoryId: string }) => {
@@ -319,7 +324,8 @@ export function AdminProducts() {
     const desc = extra.description || p.latin || "Premium Ceylon spice.";
     const catId = extra.categoryId || categories[0]?.id || "";
     setRows((prev) => {
-      const exists = prev.find((x) => x.sku === p.sku);
+      const identity = productIdentity(p);
+      const exists = prev.find((x) => productIdentity(x) === identity);
       if (exists && backendId) {
         bestEffort(updateAdminProduct(backendId, {
           name: p.name,
@@ -327,7 +333,7 @@ export function AdminProducts() {
           featured: p.featured,
           status: p.visible ? "ACTIVE" : "ARCHIVED",
         }));
-        return prev.map((x) => (x.sku === p.sku ? { ...x, ...p } : x));
+        return prev.map((x) => (productIdentity(x) === identity ? { ...x, ...p } : x));
       }
       const variants = buildVariants(p);
       if (catId && variants.length > 0) {

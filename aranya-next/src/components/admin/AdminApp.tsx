@@ -13,7 +13,7 @@ import { AdminGifts } from "./AdminGifts";
 import { AdminAudit } from "./AdminAudit";
 import { ADMIN } from "@/lib/admin-data";
 import { DEMO_MODE } from "@/lib/demo";
-import { getDashboard } from "@/lib/api/admin";
+import { getDashboard, type DashboardData } from "@/lib/api/admin";
 
 // Aranya Ceylon — ADMIN app: role gate + hash router (ported from Admin.html).
 // Standalone full-screen shell (no storefront navbar/footer). Wrapped in its own
@@ -47,13 +47,16 @@ function AdminConsole() {
 
   // Real orders-awaiting-fulfilment count for the nav badge (was hardcoded to 18
   // — BUG-20). Stays 0 (badge hidden) offline / in demo, rather than fabricated.
-  const [pendingCount, setPendingCount] = React.useState(0);
+  const [dashboard, setDashboard] = React.useState<DashboardData | null>(null);
   React.useEffect(() => {
-    if (!isRealAdmin) return;
+    if (!isRealAdmin) {
+      setDashboard(null);
+      return;
+    }
     let alive = true;
     getDashboard()
-      .then((d) => { if (alive) setPendingCount(d.orders?.pendingFulfilment ?? 0); })
-      .catch(() => { /* leave 0 */ });
+      .then((d) => { if (alive) setDashboard(d); })
+      .catch(() => { if (alive) setDashboard(null); });
     return () => { alive = false; };
   }, [isRealAdmin]);
 
@@ -74,8 +77,6 @@ function AdminConsole() {
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
-
-  const [search, setSearch] = React.useState("");
 
   const onEnter = React.useCallback(async (email: string, password: string) => {
     setGateError(null);
@@ -114,10 +115,14 @@ function AdminConsole() {
   const go = (r: string) => setRoute(r);
   const name = isRealAdmin ? user!.name : demoAdmin?.name;
   const initials = name ? name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase() : undefined;
+  const role: "ADMIN" | "SUPERADMIN" | "DEMO" = user?.role === "SUPERADMIN"
+    ? "SUPERADMIN"
+    : isRealAdmin ? "ADMIN" : "DEMO";
+  const pendingCount = dashboard?.orders?.pendingFulfilment ?? 0;
 
   return (
-    <AdminShell route={route} setRoute={setRoute} search={search} setSearch={setSearch} pendingCount={pendingCount} onSignOut={onSignOut} userName={name} userInitials={initials}>
-      {route === "dashboard" && <AdminDashboard go={go} />}
+    <AdminShell route={route} setRoute={setRoute} pendingCount={pendingCount} onSignOut={onSignOut} userName={name} userInitials={initials} userRole={role}>
+      {route === "dashboard" && <AdminDashboard go={go} live={dashboard} />}
       {route === "orders" && <AdminOrders />}
       {route === "products" && <AdminProducts />}
       {route === "blog" && <AdminBlog />}
