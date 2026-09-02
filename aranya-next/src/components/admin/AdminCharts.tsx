@@ -17,7 +17,7 @@ export function AreaChart({
 }) {
   const W = 760, H = height, padL = compact ? 8 : 46, padR = 10, padT = 14, padB = 26;
   const xs = data.map((d) => d.value);
-  const max = Math.max(...xs) * 1.12, min = 0;
+  const max = Math.max(1, ...xs) * 1.12, min = 0;
   const iw = W - padL - padR, ih = H - padT - padB;
   const x = (i: number) => padL + (i / (data.length - 1)) * iw;
   const y = (v: number) => padT + ih - ((v - min) / (max - min)) * ih;
@@ -87,7 +87,7 @@ export function Donut({ segs, size = 132, thickness = 18, centerTop, centerSub }
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: "rotate(-90deg)" }}>
         <circle cx={c} cy={c} r={r} fill="none" stroke="#EFE9DD" strokeWidth={thickness} />
         {segs.map((s, i) => {
-          const len = (s.value / total) * circ;
+          const len = total > 0 ? (s.value / total) * circ : 0;
           const el = (
             <circle key={i} cx={c} cy={c} r={r} fill="none" stroke={s.color} strokeWidth={thickness}
               strokeDasharray={`${len} ${circ - len}`} strokeDashoffset={-acc} strokeLinecap="butt" />
@@ -110,9 +110,10 @@ export function Donut({ segs, size = 132, thickness = 18, centerTop, centerSub }
 
 /* Horizontal share bar */
 export function ShareBar({ value, color, track = "#EFE9DD", h = 7 }: { value: number; color: string; track?: string; h?: number }) {
+  const safeValue = Number.isFinite(value) ? Math.min(Math.max(value, 0), 100) : 0;
   return (
     <div style={{ height: h, borderRadius: 999, background: track, overflow: "hidden", flex: 1 }}>
-      <div style={{ height: "100%", width: value + "%", background: color, borderRadius: 999 }} />
+      <div style={{ height: "100%", width: safeValue + "%", background: color, borderRadius: 999 }} />
     </div>
   );
 }
@@ -120,7 +121,7 @@ export function ShareBar({ value, color, track = "#EFE9DD", h = 7 }: { value: nu
 /* light area chart for the dark hero */
 export function AreaChartLight({ data }: { data: { label: string; value: number }[] }) {
   const W = 700, H = 132, padT = 8, padB = 6;
-  const max = Math.max(...data.map((d) => d.value)) * 1.12;
+  const max = Math.max(1, ...data.map((d) => d.value)) * 1.12;
   const iw = W, ih = H - padT - padB;
   const x = (i: number) => (i / (data.length - 1)) * iw;
   const y = (v: number) => padT + ih - (v / max) * ih;

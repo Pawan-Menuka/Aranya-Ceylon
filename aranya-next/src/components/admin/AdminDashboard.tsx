@@ -12,58 +12,44 @@ import { AIcon, Delta, Pill, MarketTag, Avatar, SectionCard, StatCard } from "./
 
 type Market = "all" | "intl" | "local";
 
-/* ---------- market-aware series + kpis (demo fallback) ---------- */
+/* ---------- market-aware series + kpis (explicit demo fallback) ---------- */
 function useDashData(market: Market, live: DashboardData | null) {
   return React.useMemo(() => {
     const A = ADMIN;
     const key = market === "intl" ? "intl" : market === "local" ? "local" : "all";
-    const series = A.days.map((d) => ({
-      label: d.label,
-      value: key === "intl" ? d.intl : key === "local" ? d.revUsd - d.intl : d.revUsd,
-      orders: d.orders,
-    }));
+    const metricKey = market === "intl" ? "international" : market;
+    const series = live
+      ? live.series.map((day) => ({ label: day.label, value: day[metricKey], orders: day.orders[metricKey] }))
+      : A.days.map((d) => ({
+          label: d.label,
+          value: key === "intl" ? d.intl : key === "local" ? d.revUsd - d.intl : d.revUsd,
+          orders: d.orders,
+        }));
     const scale = key === "all" ? 1 : key === "intl" ? 0.61 : 0.39;
     const k = A.KPIS;
     const last7v = series.slice(-7).map((d) => d.value);
 
-    // Override KPI values with live data when available
-    const liveLocal = live?.revenue?.local;
-    const liveIntl = live?.revenue?.international;
-    const liveOrders = live?.orders;
-
-    // Use the exact rate the backend used for its USD-normalised aggregates.
-    const fxRate = live?.fxRate || 300;
-    const localRevUsd = liveLocal?.total ? Number(liveLocal.total) / fxRate : 0;
-    const intlRevUsd = liveIntl?.total ? Number(liveIntl.total) : 0;
-    const allRevUsd = localRevUsd + intlRevUsd;
-    const totalOrders = (liveOrders?.localCount ?? 0) + (liveOrders?.intlCount ?? 0);
-    // P6-3: paid-order count (contributed to revenue) for AOV denominator
-    const paidOrders = (liveLocal?.orders ?? 0) + (liveIntl?.orders ?? 0);
-
-    const last30Rev = live
-      ? key === "intl" ? intlRevUsd : key === "local" ? localRevUsd : allRevUsd
-      : series.reduce((a, d) => a + d.value, 0);
-
-    const last30Ord = live
-      ? key === "intl" ? (liveOrders?.intlCount ?? 0) : key === "local" ? (liveOrders?.localCount ?? 0) : totalOrders
-      : Math.round(k.last30Ord * scale);
-
-    const pending = live ? (liveOrders?.pendingFulfilment ?? 0) : (market === "local" ? 6 : market === "intl" ? 12 : k.pendingFulfillment);
+    const last30Rev = live ? live.metrics.current30.revenueUsd[metricKey] : series.slice(-30).reduce((a, d) => a + d.value, 0);
+    const last30Ord = live ? live.metrics.current30.orders[metricKey] : Math.round(k.last30Ord * scale);
+    const pending = live ? live.orders.pendingFulfilment : (market === "local" ? 6 : market === "intl" ? 12 : k.pendingFulfillment);
     const lowStockCount = live ? (live.lowStockVariants?.length ?? 0) : A.LOW_STOCK.length;
 
     return {
       series,
-      todayRev: live ? (key === "intl" ? intlRevUsd / 30 : key === "local" ? localRevUsd / 30 : allRevUsd / 30) : series[series.length - 1].value,
-      todayOrders: live ? Math.round(last30Ord / 30) : Math.round(k.todayOrders * scale),
+      todayRev: live ? live.metrics.today.revenueUsd[metricKey] : series[series.length - 1].value,
+      todayOrders: live ? live.metrics.today.orders[metricKey] : Math.round(k.todayOrders * scale),
       last30Rev,
       last30Ord,
-      aov: live && paidOrders > 0 ? Math.round(allRevUsd / paidOrders) : k.aov,
+      aov: live ? live.metrics.current30.aovUsd[metricKey] : k.aov,
       pending,
       lowStockCount,
       spark7: last7v,
-      revChange: k.revChange, ordChange: k.ordChange, aovChange: k.aovChange,
-      conversion: k.conversion, convChange: k.convChange,
-      newCustomers: Math.round(k.newCustomers * scale),
+      revChange: live ? live.metrics.changes.revenuePct[metricKey] : k.revChange,
+      ordChange: live ? live.metrics.changes.ordersPct[metricKey] : k.ordChange,
+      aovChange: live ? live.metrics.changes.aovPct[metricKey] : k.aovChange,
+      conversion: live ? live.metrics.conversionRate : k.conversion,
+      convChange: live ? live.metrics.conversionChangePct : k.convChange,
+      newCustomers: live ? live.metrics.newCustomers7d : Math.round(k.newCustomers * scale),
     };
   }, [market, live]);
 }
@@ -96,7 +82,7 @@ function RevenueCard({ d, market, setMarket, range, setRange, height = 230, titl
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             <span className="disp tnum" style={{ fontSize: 30, fontWeight: 600, color: "var(--ad-ink)", lineHeight: 1 }}>{fmtUSD0(d.last30Rev)}</span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-              <Delta value={d.revChange} />
+              {d.revChange != null && <Delta value={d.revChange} />}
               <span style={{ fontSize: 12, color: "var(--ad-faint)", fontWeight: 600 }}>vs prev. 30 days</span>
             </span>
           </div>
@@ -115,7 +101,7 @@ function RevenueCard({ d, market, setMarket, range, setRange, height = 230, titl
         </div>
       </div>
       <div style={{ padding: "16px 16px 10px" }}>
-        <AreaChart data={range === "7d" ? d.series.slice(-7) : d.series} height={height} stroke="#0F6E56" fill="#0F6E56" accent="#BA7517" />
+        <AreaChart data={range === "7d" ? d.series.slice(-7) : range === "30d" ? d.series.slice(-30) : d.series} height={height} stroke="#0F6E56" fill="#0F6E56" accent="#BA7517" />
       </div>
     </div>
   );
@@ -156,6 +142,7 @@ function MarketDonutCard({ live }: { live: DashboardData | null }) {
     : null;
   const segs = liveSegs ?? A.MARKET_SPLIT;
   const total = segs.reduce((a, s) => a + s.value, 0);
+  const shareOfTotal = (value: number) => total > 0 ? (value / total) * 100 : 0;
   return (
     <SectionCard title="Revenue by market" action={<span style={{ fontSize: 11.5, color: "var(--ad-faint)", fontWeight: 600 }}>Last 30 days</span>}
       style={{ display: "flex", flexDirection: "column" }} bodyStyle={{ flex: 1, display: "flex", flexDirection: "column" }}>
@@ -170,9 +157,9 @@ function MarketDonutCard({ live }: { live: DashboardData | null }) {
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12.5, fontWeight: 600, color: "var(--ad-ink)" }}>
                   <span style={{ width: 9, height: 9, borderRadius: 3, background: s.color }} />{s.label}
                 </span>
-                <span className="tnum" style={{ fontSize: 12.5, fontWeight: 700 }}>{Math.round((s.value / total) * 100)}%</span>
+                <span className="tnum" style={{ fontSize: 12.5, fontWeight: 700 }}>{Math.round(shareOfTotal(s.value))}%</span>
               </div>
-              <ShareBar value={(s.value / total) * 100} color={s.color} />
+              <ShareBar value={shareOfTotal(s.value)} color={s.color} />
             </div>
           ))}
         </div>
@@ -400,10 +387,10 @@ function DashCommand({ d, live, market, setMarket, range, setRange, go }: DashPr
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16 }}>
-        <StatCard label="Today's revenue" icon="money" big value={fmtUSD0(d.todayRev)} delta={d.revChange} spark={d.spark7} accentBar="#0F6E56" sub="Updated live" />
-        <StatCard label="Orders today" icon="orders" big value={d.todayOrders} delta={d.ordChange} spark={d.series.slice(-7).map((s) => s.orders)} sparkColor="#5E7587" sub="vs 7-day avg" />
-        <StatCard label="Avg. order value" icon="tag" big value={fmtUSD0(d.aov)} delta={d.aovChange} sub="Last 30 days" />
-        <StatCard label="Pending fulfillment" icon="truck" big value={d.pending} accentBar="#BA7517" sub="Awaiting shipment" delta={-2.0} deltaInvert />
+        <StatCard label="Today's revenue" icon="money" big value={fmtUSD0(d.todayRev)} delta={d.revChange ?? undefined} spark={d.spark7} accentBar="#0F6E56" sub={live ? "UTC calendar day" : "Demo data"} />
+        <StatCard label="Orders today" icon="orders" big value={d.todayOrders} delta={d.ordChange ?? undefined} spark={d.series.slice(-7).map((s) => s.orders)} sparkColor="#5E7587" sub={live ? "UTC calendar day" : "Demo data"} />
+        <StatCard label="Avg. order value" icon="tag" big value={fmtUSD0(d.aov)} delta={d.aovChange ?? undefined} sub="Last 30 days" />
+        <StatCard label="Pending fulfillment" icon="truck" big value={d.pending} accentBar="#BA7517" sub="Paid or processing" />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1.62fr 1fr", gap: 18, alignItems: "start" }}>
         <RevenueCard d={d} market={market} setMarket={setMarket} range={range} setRange={setRange} height={250} title="Revenue trend" />
@@ -442,7 +429,7 @@ function DashEditorial({ d, live, market, setMarket, range, go }: DashProps) {
                 <div className="disp" style={{ fontSize: 62, fontWeight: 600, lineHeight: 1, marginTop: 10, letterSpacing: ".01em" }}>{fmtUSD0(d.todayRev)}</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12 }}>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 13, fontWeight: 700, color: "#9FE3C4" }}>
-                    <AIcon name="arrowUp" size={14} stroke="#9FE3C4" w={2.4} />{d.revChange.toFixed(1)}% this week
+                    {d.revChange == null ? "No prior-period baseline" : <><AIcon name={d.revChange >= 0 ? "arrowUp" : "arrowDown"} size={14} stroke="#9FE3C4" w={2.4} />{Math.abs(d.revChange).toFixed(1)}% vs previous 30 days</>}
                   </span>
                   <span style={{ fontSize: 12.5, color: "rgba(253,250,245,.7)" }}>{d.todayOrders} orders today</span>
                 </div>
@@ -454,10 +441,10 @@ function DashEditorial({ d, live, market, setMarket, range, go }: DashProps) {
               </div>
             </div>
             <div style={{ marginTop: 18, marginLeft: -6, marginRight: -6 }}>
-              <AreaChartLight data={range === "7d" ? d.series.slice(-7) : d.series.slice(-14)} />
+              <AreaChartLight data={range === "7d" ? d.series.slice(-7) : range === "30d" ? d.series.slice(-30) : d.series} />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 0, marginTop: 18, borderTop: "1px solid rgba(253,250,245,.16)", paddingTop: 16 }}>
-              {[["30-day revenue", fmtUSD0(d.last30Rev)], ["Avg. order", fmtUSD0(d.aov)], ["Conversion", d.conversion + "%"]].map((s, i) => (
+              {[["30-day revenue", fmtUSD0(d.last30Rev)], ["Avg. order", fmtUSD0(d.aov)], ["Conversion", d.conversion == null ? "Not tracked" : d.conversion + "%"]].map((s, i) => (
                 <div key={s[0]} style={{ paddingLeft: i ? 20 : 0, borderLeft: i ? "1px solid rgba(253,250,245,.16)" : "none" }}>
                   <div className="disp tnum" style={{ fontSize: 26, fontWeight: 600, color: "#fff" }}>{s[1]}</div>
                   <div style={{ fontSize: 11, color: "rgba(253,250,245,.65)", fontWeight: 600, letterSpacing: ".04em", marginTop: 3 }}>{s[0]}</div>
@@ -472,7 +459,7 @@ function DashEditorial({ d, live, market, setMarket, range, go }: DashProps) {
           <AlertTile icon="truck" tone="amber" value={d.pending} label="to fulfill" sub="Orders awaiting shipment" onGo={() => go("orders")} />
           <AlertTile icon="alert" tone="red" value={d.lowStockCount} label="low stock" sub="Items below threshold — restock soon" onGo={() => go("products")} />
           {!live && <AlertTile icon="handshake" tone="brand" value={ADMIN.WHOLESALE.filter((w) => w.status !== "approved").length} label="wholesale" sub="Applications pending review" onGo={() => go("orders")} />}
-          <AlertTile icon="users" tone="slate" value={d.newCustomers} label="new customers" sub="Joined the Harvest Club this week" onGo={() => go("orders")} />
+          <AlertTile icon="users" tone="slate" value={d.newCustomers} label="new customers" sub="Customer accounts created in the last 7 days" onGo={() => go("orders")} />
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 18, alignItems: "start" }}>
@@ -505,12 +492,12 @@ function DashDense({ d, live, market, setMarket, range, setRange, go }: DashProp
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 12 }}>
-        <MiniStat label="Today rev." value={fmtUSD0(d.todayRev)} delta={d.revChange} bar="#0F6E56" />
-        <MiniStat label="Orders" value={d.todayOrders} delta={d.ordChange} />
-        <MiniStat label="AOV" value={fmtUSD0(d.aov)} delta={d.aovChange} />
-        <MiniStat label="Pending" value={d.pending} bar="#BA7517" delta={-2} deltaInvert />
+        <MiniStat label="Today rev." value={fmtUSD0(d.todayRev)} delta={d.revChange ?? undefined} bar="#0F6E56" />
+        <MiniStat label="Orders" value={d.todayOrders} delta={d.ordChange ?? undefined} />
+        <MiniStat label="AOV" value={fmtUSD0(d.aov)} delta={d.aovChange ?? undefined} />
+        <MiniStat label="Pending" value={d.pending} bar="#BA7517" />
         <MiniStat label="Low stock" value={d.lowStockCount} bar="#C0492F" />
-        <MiniStat label="Conversion" value={d.conversion + "%"} delta={d.convChange} />
+        <MiniStat label="Conversion" value={d.conversion == null ? "N/A" : d.conversion + "%"} delta={d.convChange ?? undefined} />
       </div>
       {/* chart row — chart + market split, balanced heights */}
       <div style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr", gap: 16, alignItems: "stretch" }}>
