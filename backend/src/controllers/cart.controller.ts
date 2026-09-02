@@ -159,3 +159,20 @@ export async function applyCoupon(req: Request, res: Response) {
         throw err; // unexpected → asyncHandler / error middleware
     }
 }
+
+// --- Remove an applied coupon ---
+// Previously there was no way to undo applyCoupon short of clearing the whole
+// cart (Storefront audit #2). Idempotent: removing when none is applied is a
+// no-op, same shape as clearCart.
+export async function removeCoupon(req: Request, res: Response) {
+    const userId = req.user?.userId;
+    const guestToken = req.cookies?.[GUEST_TOKEN_COOKIE];
+
+    const cart = await cartService.getOrCreateCart(userId, guestToken);
+    await prisma.cart.update({
+        where: { id: cart.id },
+        data: { couponId: null },
+    });
+
+    return res.status(204).send();
+}

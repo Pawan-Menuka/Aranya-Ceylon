@@ -101,5 +101,13 @@ export function verifyPayHereNotification(params: {
         .digest('hex')
         .toUpperCase();
 
-    return params.md5sig === expectedHash;
+    // Constant-time comparison — a plain `===` on a signature check leaks
+    // timing information about how many leading bytes matched. timingSafeEqual
+    // requires equal-length buffers and throws otherwise, so a length mismatch
+    // (e.g. a garbage/short forged signature) is checked first and simply
+    // treated as a non-match rather than a thrown error.
+    const received = Buffer.from(params.md5sig ?? '', 'utf8');
+    const expected = Buffer.from(expectedHash, 'utf8');
+    if (received.length !== expected.length) return false;
+    return crypto.timingSafeEqual(received, expected);
 }

@@ -43,6 +43,11 @@ export function applyCoupon(code: string): Promise<{ discount: unknown }> {
   return apiFetch(`/cart/coupon`, { method: "POST", body: { code }, auth: true });
 }
 
+/** Remove a previously applied coupon (Storefront audit #2). */
+export function removeCoupon(): Promise<void> {
+  return apiFetch(`/cart/coupon`, { method: "DELETE", auth: true });
+}
+
 export function removeCartItem(itemId: string): Promise<void> {
   return apiFetch(`/cart/items/${encodeURIComponent(itemId)}`, { method: "DELETE", auth: true });
 }
