@@ -12,6 +12,7 @@ const tx = {
     order: { updateMany: vi.fn(async () => ({ count: 1 })) },
     orderEvent: { create: vi.fn(async () => ({})) },
     variant: { update: vi.fn(async () => ({})) },
+    coupon: { update: vi.fn(async () => ({})) },
 };
 
 vi.mock('../../index.js', () => ({
@@ -92,6 +93,15 @@ describe('admin refunds', () => {
         expect(res.body.gatewayStatus).toBe('REFUNDED');
         expect(state.stripeCalls).toBe(1);
         expect(tx.variant.update).toHaveBeenCalledWith({ where: { id: 'v1' }, data: { stock: { increment: 2 } } });
+        expect(tx.coupon.update).not.toHaveBeenCalled();
+    });
+
+    it('restores the coupon usage count when the refunded order used one (Wave 3 #27)', async () => {
+        state.order.couponId = 'c1';
+        const res = resDouble();
+        await refundOrder({ params: { id: 'o1' }, body: {} } as any, res);
+        expect(res.statusCode).toBe(200);
+        expect(tx.coupon.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { usageCount: { decrement: 1 } } });
     });
 });
 

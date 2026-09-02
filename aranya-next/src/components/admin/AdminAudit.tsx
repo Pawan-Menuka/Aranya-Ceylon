@@ -22,8 +22,10 @@ function backendAuditToRow(log: AuditEntry): AuditRow {
     // The backend emits ORDER_STATUS_UPDATE, not ORDER_STATUS — the old key never
     // matched, so these fell through to the raw slug and the generic icon.
     ORDER_REFUND: "order.refund", ORDER_STATUS_UPDATE: "order.status",
-    BLOG_PUBLISH: "blog.publish", BLOG_DELETE: "blog.delete",
+    BLOG_CREATE: "blog.create", BLOG_UPDATE: "blog.update", BLOG_PUBLISH: "blog.publish", BLOG_DELETE: "blog.delete",
     PRODUCT_CREATE: "product.create", PRODUCT_UPDATE: "product.update", PRODUCT_ARCHIVE: "product.archive",
+    GIFT_CREATE: "gift.create", GIFT_UPDATE: "gift.update", GIFT_DELETE: "gift.delete",
+    RECIPE_CREATE: "recipe.create", RECIPE_UPDATE: "recipe.update", RECIPE_DELETE: "recipe.delete",
     ADMIN_LOGIN: "auth.login",
   };
   const d = new Date(log.createdAt);
@@ -35,7 +37,13 @@ function backendAuditToRow(log: AuditEntry): AuditRow {
     action: eventMap[log.event] ?? log.event.toLowerCase().replace(/_/g, "."),
     target: formatAuditTarget(log),
     meta: typeof log.diff === "object" ? JSON.stringify(log.diff ?? {}).slice(0, 160) : String(log.diff ?? ""),
-    level: ["ORDER_REFUND", "PRODUCT_DELETE"].includes(log.event) ? "warn" : "info",
+    // PRODUCT_DELETE isn't a real event the backend ever emits (the actual
+    // destructive product event is PRODUCT_ARCHIVE) — archived-product rows
+    // were silently missing the "warn" level/styling they should get. The
+    // other *_DELETE events are equally destructive and belong in this list
+    // too (BLOG_DELETE was previously missing despite having warn styling
+    // in ACTION_META already).
+    level: ["ORDER_REFUND", "PRODUCT_ARCHIVE", "BLOG_DELETE", "GIFT_DELETE", "RECIPE_DELETE"].includes(log.event) ? "warn" : "info",
   };
 }
 
@@ -50,10 +58,18 @@ const ACTION_META: Record<string, { icon: string; tone: string; label: string }>
   "product.create": { icon: "plus", tone: "pos", label: "Product created" },
   "product.images": { icon: "image", tone: "slate", label: "Images" },
   "wholesale.approve": { icon: "handshake", tone: "pos", label: "Wholesale" },
+  "blog.create": { icon: "blog", tone: "slate", label: "Post created" },
+  "blog.update": { icon: "edit", tone: "slate", label: "Post updated" },
   "blog.publish": { icon: "blog", tone: "pos", label: "Blog published" },
   "blog.schedule": { icon: "clock", tone: "slate", label: "Blog scheduled" },
   "blog.delete": { icon: "trash", tone: "neg", label: "Blog deleted" },
   "product.archive": { icon: "trash", tone: "neg", label: "Product archived" },
+  "gift.create": { icon: "plus", tone: "pos", label: "Gift set created" },
+  "gift.update": { icon: "edit", tone: "slate", label: "Gift set updated" },
+  "gift.delete": { icon: "trash", tone: "neg", label: "Gift set deleted" },
+  "recipe.create": { icon: "plus", tone: "pos", label: "Recipe created" },
+  "recipe.update": { icon: "edit", tone: "slate", label: "Recipe updated" },
+  "recipe.delete": { icon: "trash", tone: "neg", label: "Recipe deleted" },
   "auth.login": { icon: "user", tone: "slate", label: "Login" },
   "cart.expire": { icon: "orders", tone: "muted", label: "Job" },
 };
