@@ -39,11 +39,13 @@ export interface AdminOrder {
   units: number;
   subUsd: number;
   shipUsd: number;
+  discountUsd?: number;
   totalUsd: number;
   payment: string;
   fulfillment: string;
   coupon: string | null;
   tracking: string | null;
+  timeline?: Array<{ status: string; note: string; date: Date }>;
 }
 export interface TopProduct {
   name: string;
