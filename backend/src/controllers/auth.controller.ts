@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../index.js';
 import { issueTokenPair, rotateRefreshToken, revokeTokenFamily, revokeAllUserTokens, issueEmailVerificationToken, verifyEmailToken } from '../services/token.service.js';
 import { sendVerificationEmail } from '../services/email.service.js';
+import { writeAuditLog } from '../services/audit.service.js';
 import type { RegisterInput, LoginInput } from '@aranya/shared';
 
 const BCRYPT_ROUNDS = 12;
@@ -152,6 +153,17 @@ export async function login(req: Request, res: Response) {
     }
 
     const { accessToken, refreshTokenPlaintext } = await issueTokenPair(user);
+
+    if (user.role === 'ADMIN' || user.role === 'SUPERADMIN') {
+        await writeAuditLog({
+            req,
+            actorId: user.id,
+            event: 'ADMIN_LOGIN',
+            targetType: 'User',
+            targetId: user.id,
+            diff: { role: user.role },
+        });
+    }
 
     res.cookie(REFRESH_COOKIE_NAME, refreshTokenPlaintext, refreshCookieOptions);
 

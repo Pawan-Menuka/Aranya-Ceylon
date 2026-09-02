@@ -3,7 +3,7 @@
 import * as React from "react";
 import { ADMIN, type AdminBlogPost } from "@/lib/admin-data";
 import { AIcon, Pill, FlagRow } from "./AdminPrimitives";
-import { createBlog, updateBlog, getAdminBlog, listAdminBlogs, type BlogPublishMode, type AdminBlogPost as ApiBlogPost } from "@/lib/api/admin";
+import { createBlog, updateBlog, deleteBlog, getAdminBlog, listAdminBlogs, type BlogPublishMode, type AdminBlogPost as ApiBlogPost } from "@/lib/api/admin";
 import { DEMO_MODE } from "@/lib/demo";
 
 function backendBlogToAdmin(b: ApiBlogPost): AdminBlogPost {
@@ -26,8 +26,8 @@ function backendBlogToAdmin(b: ApiBlogPost): AdminBlogPost {
 }
 
 // Aranya Ceylon — ADMIN Blog (ported from admin-blog.jsx).
-// List + editor drawer with scheduling. Publishing best-effort hits the ISR
-// revalidate hook so /journal refreshes (spec §9).
+// List + editor drawer with scheduling. Successful mutations return the
+// canonical backend record and trigger backend ISR revalidation.
 
 const BLOG_TABS = [
   { key: "all", label: "All posts" },
@@ -75,7 +75,7 @@ function BlogTable({ rows, onOpen }: { rows: AdminBlogPost[]; onOpen: (p: AdminB
 type BlogDraft = Partial<AdminBlogPost>;
 
 type BlogSavePayload = AdminBlogPost & { content?: string; seoDesc?: string; scheduledAt?: string };
-function BlogEditor({ post, onClose, onSave }: { post: BlogDraft; onClose: () => void; onSave: (p: BlogSavePayload) => void }) {
+function BlogEditor({ post, onClose, onSave, onDelete }: { post: BlogDraft; onClose: () => void; onSave: (p: BlogSavePayload) => Promise<void>; onDelete: (p: BlogSavePayload) => Promise<void> }) {
   const isNew = !post.slug;
   const [p, setP] = React.useState<AdminBlogPost>(() => ({
     slug: "", title: "", category: "Sourcing", author: "Devika R.", role: "Head of Sourcing",
@@ -97,6 +97,8 @@ function BlogEditor({ post, onClose, onSave }: { post: BlogDraft; onClose: () =>
     return d.toISOString().slice(0, 10);
   });
   const [scheduleTime, setScheduleTime] = React.useState("09:00");
+  const [busy, setBusy] = React.useState(false);
+  const [editorError, setEditorError] = React.useState<string | null>(null);
   const set = <K extends keyof AdminBlogPost>(k: K, v: AdminBlogPost[K]) => setP((x) => ({ ...x, [k]: v }));
   React.useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -193,17 +195,20 @@ function BlogEditor({ post, onClose, onSave }: { post: BlogDraft; onClose: () =>
         </div>
 
         <div style={{ padding: "16px 24px", borderTop: "1px solid var(--ad-line)", display: "flex", gap: 10, background: "var(--ad-card)" }}>
-          {!isNew && <button className="ad-btn ad-btn-danger ad-btn-sm"><AIcon name="trash" size={15} stroke="var(--neg)" /></button>}
+          {!isNew && <button className="ad-btn ad-btn-danger ad-btn-sm" disabled={busy} title="Delete post" onClick={() => { if (window.confirm("Permanently delete this journal post?")) { setEditorError(null); setBusy(true); void onDelete({ ...p, content, seoDesc: excerpt }).catch((deleteError) => setEditorError(deleteError instanceof Error ? deleteError.message : "The post could not be deleted.")).finally(() => setBusy(false)); } }}><AIcon name="trash" size={15} stroke="var(--neg)" /></button>}
           <button className="ad-btn ad-btn-ghost" style={{ marginLeft: "auto" }} onClick={onClose}>Cancel</button>
-          <button className="ad-btn ad-btn-green" onClick={() => {
+          <button className="ad-btn ad-btn-green" disabled={busy} onClick={() => {
             const scheduledAt = publishMode === "schedule" && scheduleDate
               ? new Date(`${scheduleDate}T${scheduleTime || "09:00"}`).toISOString()
               : undefined;
-            onSave({ ...p, content, seoDesc: excerpt, scheduledAt, status: publishMode === "now" ? "Published" : publishMode === "schedule" ? "Scheduled" : "Draft" });
+            setEditorError(null);
+            setBusy(true);
+            void onSave({ ...p, content, seoDesc: excerpt, scheduledAt, status: publishMode === "now" ? "Published" : publishMode === "schedule" ? "Scheduled" : "Draft" }).catch((saveError) => setEditorError(saveError instanceof Error ? saveError.message : "The post could not be saved.")).finally(() => setBusy(false));
           }}>
-            <AIcon name="check" size={16} stroke="#fff" />{publishMode === "now" ? "Publish" : publishMode === "schedule" ? "Schedule" : "Save draft"}
+            <AIcon name="check" size={16} stroke="#fff" />{busy ? "Saving…" : publishMode === "now" ? "Publish" : publishMode === "schedule" ? "Schedule" : "Save draft"}
           </button>
         </div>
+        {editorError && <div role="alert" style={{ padding: "0 24px 16px", color: "var(--neg)", background: "var(--ad-card)", fontSize: 13 }}>{editorError}</div>}
       </aside>
     </>
   );
@@ -235,7 +240,7 @@ export function AdminBlog() {
     return c;
   }, [rows]);
 
-  const save = (p: BlogSavePayload) => {
+  const save = async (p: BlogSavePayload) => {
     const statusMap: Record<string, "DRAFT" | "SCHEDULED" | "PUBLISHED"> = { Draft: "DRAFT", Scheduled: "SCHEDULED", Published: "PUBLISHED" };
     const apiStatus = statusMap[p.status] ?? "DRAFT";
     const slug = p.slug || (p.title || "untitled").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -246,25 +251,42 @@ export function AdminBlog() {
     // instead of being sent and silently rejected.
     if (content.trim().length < 10) {
       setSaveError("Add at least a short body (10+ characters) before saving.");
-      return;
+      throw new Error("Invalid blog body");
     }
     // A scheduled post must carry a scheduledAt or the cron job can never select
     // it (its predicate is scheduledAt <= now) — it would sit SCHEDULED forever (FLOW-03).
     if (apiStatus === "SCHEDULED" && !p.scheduledAt) {
       setSaveError("Pick a publish date and time for the scheduled post.");
-      return;
+      throw new Error("Missing scheduled date");
     }
-    setRows((prev) => {
-      const exists = prev.find((x) => x.slug === p.slug);
-      const blogPayload = { title: p.title, slug, content, status: apiStatus, tags: [p.category], ...(p.seoDesc ? { seoDesc: p.seoDesc } : {}), ...(p.scheduledAt ? { scheduledAt: p.scheduledAt } : {}) };
-      if (exists && backendId) {
-        updateBlog(backendId, blogPayload).catch(() => setSaveError("Couldn't save changes to the server. They may not be persisted."));
-        return prev.map((x) => (x.slug === p.slug ? { ...x, ...p } : x));
+    const blogPayload = { title: p.title, slug, content, status: apiStatus, tags: [p.category], ...(p.seoDesc ? { seoDesc: p.seoDesc } : {}), ...(p.scheduledAt ? { scheduledAt: p.scheduledAt } : {}) };
+    try {
+      if (backendId) {
+        const { blog } = await updateBlog(backendId, blogPayload);
+        const row = backendBlogToAdmin(blog);
+        setRows((prev) => prev.map((x) => (x as AdminBlogPost & { _backendId?: string })._backendId === backendId ? row : x));
+      } else {
+        const { blog } = await createBlog(blogPayload);
+        setRows((prev) => [backendBlogToAdmin(blog), ...prev.filter((x) => x.slug !== slug)]);
       }
-      createBlog(blogPayload).catch(() => setSaveError("Couldn't create the post on the server. It may not be persisted."));
-      return exists ? prev.map((x) => (x.slug === p.slug ? { ...x, ...p } : x)) : [{ ...p, slug, views: 0, date: "Jun 4, 2026" }, ...prev];
-    });
-    setEdit(null);
+      setEdit(null);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "The post could not be saved. No local success state was applied.");
+      throw error;
+    }
+  };
+
+  const remove = async (p: BlogSavePayload) => {
+    const backendId = (p as AdminBlogPost & { _backendId?: string })._backendId;
+    setSaveError(null);
+    try {
+      if (backendId) await deleteBlog(backendId);
+      setRows((prev) => prev.filter((row) => (row as AdminBlogPost & { _backendId?: string })._backendId !== backendId && row.slug !== p.slug));
+      setEdit(null);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "The post could not be deleted.");
+      throw error;
+    }
   };
 
   return (
@@ -293,7 +315,7 @@ export function AdminBlog() {
         </div>
       </div>
       <BlogTable rows={filtered} onOpen={setEdit} />
-      {edit && <BlogEditor post={edit} onClose={() => setEdit(null)} onSave={save} />}
+      {edit && <BlogEditor post={edit} onClose={() => setEdit(null)} onSave={save} onDelete={remove} />}
     </div>
   );
 }
