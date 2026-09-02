@@ -22,18 +22,19 @@ function backendAuditToRow(log: AuditEntry): AuditRow {
     // The backend emits ORDER_STATUS_UPDATE, not ORDER_STATUS — the old key never
     // matched, so these fell through to the raw slug and the generic icon.
     ORDER_REFUND: "order.refund", ORDER_STATUS_UPDATE: "order.status",
-    BLOG_PUBLISH: "blog.publish", BLOG_DELETE: "blog.schedule",
-    PRODUCT_CREATE: "product.create", PRODUCT_UPDATE: "product.update",
+    BLOG_PUBLISH: "blog.publish", BLOG_DELETE: "blog.delete",
+    PRODUCT_CREATE: "product.create", PRODUCT_UPDATE: "product.update", PRODUCT_ARCHIVE: "product.archive",
+    ADMIN_LOGIN: "auth.login",
   };
   const d = new Date(log.createdAt);
   return {
     ts: d.toLocaleDateString("en-GB", { month: "short", day: "numeric" }) + ", " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
     createdAt: log.createdAt,
     actor: log.actor?.name ?? log.actorId ?? "System",
-    role: log.actorRole ?? "ADMIN",
+    role: log.actor?.role ?? "JOB",
     action: eventMap[log.event] ?? log.event.toLowerCase().replace(/_/g, "."),
     target: formatAuditTarget(log),
-    meta: typeof log.meta === "object" ? JSON.stringify(log.meta ?? {}).slice(0, 80) : String(log.meta ?? ""),
+    meta: typeof log.diff === "object" ? JSON.stringify(log.diff ?? {}).slice(0, 160) : String(log.diff ?? ""),
     level: ["ORDER_REFUND", "PRODUCT_DELETE"].includes(log.event) ? "warn" : "info",
   };
 }
@@ -51,6 +52,8 @@ const ACTION_META: Record<string, { icon: string; tone: string; label: string }>
   "wholesale.approve": { icon: "handshake", tone: "pos", label: "Wholesale" },
   "blog.publish": { icon: "blog", tone: "pos", label: "Blog published" },
   "blog.schedule": { icon: "clock", tone: "slate", label: "Blog scheduled" },
+  "blog.delete": { icon: "trash", tone: "neg", label: "Blog deleted" },
+  "product.archive": { icon: "trash", tone: "neg", label: "Product archived" },
   "auth.login": { icon: "user", tone: "slate", label: "Login" },
   "cart.expire": { icon: "orders", tone: "muted", label: "Job" },
 };

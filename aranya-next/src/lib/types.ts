@@ -93,8 +93,14 @@ export interface Order {
   market: BackendMarket;
   createdAt: string;
   trackingNumber?: string;
+  paymentIntentId?: string | null;
+  guestEmail?: string | null;
+  shippingCost: string;
+  discount: string;
+  shippingAddress: { city?: string; country?: string; firstName?: string; lastName?: string; [key: string]: unknown };
+  coupon?: { code: string } | null;
   items: OrderItem[];
-  timeline: OrderTimelineEntry[];
+  timeline?: OrderTimelineEntry[];
   user?: { id: string; name: string; email: string };
 }
 
