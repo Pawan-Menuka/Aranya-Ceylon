@@ -168,12 +168,12 @@ function MarketDonutCard({ live }: { live: DashboardData | null }) {
   );
 }
 
-function TopProductsCard({ compact, live }: { compact?: boolean; live: DashboardData | null }) {
+function TopProductsCard({ compact, live, go }: { compact?: boolean; live: DashboardData | null; go: (r: string) => void }) {
   const A = ADMIN;
   const liveProducts = live?.topProducts;
   const totalRev = liveProducts ? liveProducts.reduce((s, p) => s + p.revenue, 0) : 0;
   return (
-    <SectionCard title="Top products" pad={false} action={<button className="ad-btn ad-btn-ghost ad-btn-sm">View all</button>}>
+    <SectionCard title="Top products" pad={false} action={<button className="ad-btn ad-btn-ghost ad-btn-sm" onClick={() => go("products")}>View all</button>}>
       <table className="ad-table flat">
         <thead>
           <tr>
@@ -399,7 +399,7 @@ function DashCommand({ d, live, market, setMarket, range, setRange, go }: DashPr
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1.62fr 1fr", gap: 18, alignItems: "start" }}>
-        <TopProductsCard live={live} />
+        <TopProductsCard live={live} go={go} />
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           {!live && <WholesaleCard onGo={() => go("orders")} live={live} />}
         </div>
@@ -463,7 +463,7 @@ function DashEditorial({ d, live, market, setMarket, range, go }: DashProps) {
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 18, alignItems: "start" }}>
-        <TopProductsCard live={live} />
+        <TopProductsCard live={live} go={go} />
         <MarketDonutCard live={live} />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: live ? "1fr" : "1fr 1fr", gap: 18, alignItems: "start" }}>
@@ -512,7 +512,7 @@ function DashDense({ d, live, market, setMarket, range, setRange, go }: DashProp
       </div>
       {/* detail row — top products table + activity */}
       <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 16, alignItems: "stretch" }}>
-        <TopProductsCard compact live={live} />
+        <TopProductsCard compact live={live} go={go} />
         <ActivityCard live={live} />
       </div>
     </div>

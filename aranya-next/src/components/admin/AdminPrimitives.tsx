@@ -131,10 +131,15 @@ export function StatCard({ label, icon, value, delta, deltaInvert, spark, sparkC
 }
 
 /* Inventory stock meter (products table) */
-export function StockMeter({ stock, threshold = 25 }: { stock: number; threshold?: number }) {
+// `low` lets a caller override the warn/ok color with an authoritative
+// signal (e.g. "any variant is at/under threshold") instead of comparing the
+// single `stock` figure shown here against `threshold` — useful when `stock`
+// is an aggregate across variants that individually cross the line.
+export function StockMeter({ stock, threshold = 25, low }: { stock: number; threshold?: number; low?: boolean }) {
   const max = Math.max(threshold * 4, stock);
   const pct = Math.min(100, (stock / max) * 100);
-  const color = stock === 0 ? "var(--neg)" : stock < threshold ? "var(--warn)" : "var(--pos)";
+  const isLow = low ?? stock < threshold;
+  const color = stock === 0 ? "var(--neg)" : isLow ? "var(--warn)" : "var(--pos)";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
       <span className="tnum" style={{ fontWeight: 700, width: 34, color, fontSize: 13.5 }}>{stock}</span>

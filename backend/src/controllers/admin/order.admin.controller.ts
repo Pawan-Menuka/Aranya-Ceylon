@@ -216,6 +216,17 @@ export async function refundOrder(req: Request, res: Response) {
                 ),
             );
 
+            // The coupon's usageCount was incremented when the order was paid
+            // (webhook.controller.ts) and never restored on refund — a
+            // limited-use coupon was permanently "spent" by an order that got
+            // reversed (Wave 3 #27, confirmed a bug, not intended policy).
+            if (order.couponId) {
+                await tx.coupon.update({
+                    where: { id: order.couponId },
+                    data: { usageCount: { decrement: 1 } },
+                });
+            }
+
             return claimed;
         });
         count = result.count;
@@ -244,6 +255,7 @@ export async function refundOrder(req: Request, res: Response) {
         diff: {
             before: { status: order.status }, after: { status: 'REFUNDED' },
             gateway: order.market === 'LOCAL' ? 'PayHere (manual completion confirmed)' : 'Stripe',
+            ...(order.couponId && { couponUsageDecremented: order.couponId }),
         },
     });
 
