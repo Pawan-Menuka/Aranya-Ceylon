@@ -74,7 +74,7 @@ export async function getDashboard(_req: Request, res: Response) {
         prisma.auditLog.findMany({
             take: 10,
             orderBy: { createdAt: 'desc' },
-            include: { actor: { select: { name: true, email: true } } },
+            include: { actor: { select: { name: true, email: true, role: true } } },
         }),
         prisma.user.count({ where: { role: 'CUSTOMER', createdAt: { gte: sevenDaysAgo } } }),
     ]);
@@ -256,7 +256,7 @@ export async function getAuditLogs(req: Request, res: Response) {
             ...(targetType && { targetType }),
             ...(actorId && { actorId }),
         },
-        include: { actor: { select: { name: true, email: true } } },
+        include: { actor: { select: { name: true, email: true, role: true } } },
         orderBy: { createdAt: 'desc' },
         take: limit + 1,
         ...(cursor && { cursor: { id: cursor }, skip: 1 }),

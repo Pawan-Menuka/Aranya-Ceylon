@@ -47,12 +47,13 @@ export interface AdminOrderPatch {
   trackingNumber?: string;
 }
 
-export function listAdminOrders(params?: { status?: string; market?: string; q?: string; cursor?: string }): Promise<{ items: Order[]; nextCursor: string | null }> {
+export function listAdminOrders(params?: { status?: string; market?: string; q?: string; cursor?: string; limit?: number }): Promise<{ items: Order[]; nextCursor: string | null; total: number; counts: Record<string, number> }> {
   const qs = new URLSearchParams();
   if (params?.status && params.status !== "all") qs.set("status", params.status);
   if (params?.market && params.market !== "all") qs.set("market", params.market);
   if (params?.q) qs.set("q", params.q);
   if (params?.cursor) qs.set("cursor", params.cursor);
+  if (params?.limit) qs.set("limit", String(params.limit));
   const s = qs.toString();
   return apiFetch(`/admin/orders${s ? `?${s}` : ""}`, { auth: true });
 }
@@ -61,8 +62,8 @@ export function updateOrderStatus(id: string, patch: AdminOrderPatch): Promise<{
   return apiFetch(`/admin/orders/${encodeURIComponent(id)}`, { method: "PATCH", body: patch, auth: true });
 }
 
-export function refundOrder(id: string): Promise<{ order: Order }> {
-  return apiFetch(`/admin/orders/${encodeURIComponent(id)}/refund`, { method: "POST", auth: true });
+export function refundOrder(id: string, manualGatewayRefundCompleted = false): Promise<{ message: string; gatewayStatus: string }> {
+  return apiFetch(`/admin/orders/${encodeURIComponent(id)}/refund`, { method: "POST", body: { manualGatewayRefundCompleted }, auth: true });
 }
 
 // ---- products ----
@@ -259,6 +260,10 @@ export function listAdminGifts(): Promise<{ gifts: AdminGiftSet[] }> {
   return apiFetch(`/admin/gifts`, { auth: true });
 }
 
+export function getAdminOrder(id: string): Promise<{ order: Order }> {
+  return apiFetch(`/admin/orders/${encodeURIComponent(id)}`, { auth: true });
+}
+
 interface DashboardMarketValues { all: number; local: number; international: number }
 interface DashboardNullableMarketValues { all: number | null; local: number | null; international: number | null }
 
@@ -282,13 +287,12 @@ export function deleteGift(id: string): Promise<void> {
 export interface AuditEntry {
   id: string;
   event: string;
-  actorId: string;
-  actorRole: string;
+  actorId: string | null;
   targetType: string | null;
   targetId: string | null;
-  meta: unknown;
+  diff: unknown;
   createdAt: string;
-  actor?: { name: string; email: string };
+  actor?: { name: string; email: string; role: string } | null;
 }
 
 export async function listAuditLogs(params?: { limit?: number; cursor?: string }): Promise<{ logs: AuditEntry[]; nextCursor: string | null }> {

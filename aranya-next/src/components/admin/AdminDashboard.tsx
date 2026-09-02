@@ -337,7 +337,7 @@ function ActivityCard({ live }: { live: DashboardData | null }) {
   };
   const liveActivity = live?.recentAuditLogs?.map((e) => {
     const info = AUDIT_ICON[e.event] ?? { icon: "audit", tone: "slate" };
-    const who = (e.actor as { name?: string } | undefined)?.name ?? e.actorRole ?? "System";
+    const who = e.actor?.name ?? e.actor?.role ?? "System";
     const label = e.event.toLowerCase().replace(/_/g, " ");
     return { icon: info.icon, tone: info.tone, text: `**${label}**`, who, when: timeSince(e.createdAt) };
   });
