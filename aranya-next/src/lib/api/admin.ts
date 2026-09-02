@@ -12,6 +12,26 @@ export interface DashboardData {
     international: { total: number; currency: string; orders: number };
   };
   orders: { localCount: number; intlCount: number; pendingFulfilment: number };
+  series: Array<{
+    date: string;
+    label: string;
+    all: number;
+    local: number;
+    international: number;
+    orders: { all: number; local: number; international: number };
+  }>;
+  metrics: {
+    today: { revenueUsd: DashboardMarketValues; orders: DashboardMarketValues };
+    current30: { revenueUsd: DashboardMarketValues; orders: DashboardMarketValues; aovUsd: DashboardMarketValues };
+    changes: {
+      revenuePct: DashboardNullableMarketValues;
+      ordersPct: DashboardNullableMarketValues;
+      aovPct: DashboardNullableMarketValues;
+    };
+    newCustomers7d: number;
+    conversionRate: number | null;
+    conversionChangePct: number | null;
+  };
   topProducts: Array<{ name: string; slug: string; revenue: number; units: number }>;
   lowStockVariants: Array<{ id: string; sku: string; stock: number; product: { name: string } }>;
   recentAuditLogs: AuditEntry[];
@@ -238,6 +258,9 @@ export interface AdminGiftInput {
 export function listAdminGifts(): Promise<{ gifts: AdminGiftSet[] }> {
   return apiFetch(`/admin/gifts`, { auth: true });
 }
+
+interface DashboardMarketValues { all: number; local: number; international: number }
+interface DashboardNullableMarketValues { all: number | null; local: number | null; international: number | null }
 
 export function getAdminGift(id: string): Promise<{ gift: AdminGiftSet }> {
   return apiFetch(`/admin/gifts/${encodeURIComponent(id)}`, { auth: true });
