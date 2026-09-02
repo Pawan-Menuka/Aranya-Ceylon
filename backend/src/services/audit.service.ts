@@ -31,6 +31,9 @@ type AuditEvent =
 // deleted even if this function or the API is compromised.
 export async function writeAuditLog(params: {
     req: Request;
+    // Authentication events occur before req.user is populated, so callers may
+    // explicitly identify the actor after credentials have been verified.
+    actorId?: string;
     event: AuditEvent;
     targetType: string;
     targetId: string;
@@ -38,11 +41,11 @@ export async function writeAuditLog(params: {
     // changes, depending on the sensitivity and size of the target record.
     diff?: Record<string, any>;
 }) {
-    const { req, event, targetType, targetId, diff } = params;
+    const { req, actorId, event, targetType, targetId, diff } = params;
 
     await prisma.auditLog.create({
         data: {
-            actorId: req.user?.userId ?? null,
+            actorId: actorId ?? req.user?.userId ?? null,
             event,
             targetType,
             targetId,

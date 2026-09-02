@@ -5,7 +5,7 @@ import { RECIPES } from "@/lib/recipes-data";
 import { AIcon, Pill, FlagRow } from "./AdminPrimitives";
 import {
   listAdminRecipes, getAdminRecipe, createRecipe, updateRecipe, deleteRecipe,
-  bestEffort, type AdminRecipe, type AdminRecipeInput,
+  type AdminRecipe, type AdminRecipeInput,
 } from "@/lib/api/admin";
 import { DEMO_MODE } from "@/lib/demo";
 
@@ -298,10 +298,15 @@ export function AdminRecipes() {
     }
   };
 
-  const remove = (id: string) => {
-    if (!id.startsWith("demo-")) bestEffort(deleteRecipe(id));
-    setRows((prev) => prev.filter((r) => r.id !== id));
-    setEdit(null);
+  const remove = async (id: string) => {
+    setMessage(null);
+    try {
+      if (!id.startsWith("demo-")) await deleteRecipe(id);
+      setRows((prev) => prev.filter((r) => r.id !== id));
+      setEdit(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The recipe could not be deleted.");
+    }
   };
 
   return (

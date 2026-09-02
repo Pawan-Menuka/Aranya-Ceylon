@@ -3,6 +3,7 @@ import { productFilterSchema, createProductSchema, updateProductSchema } from '@
 import * as productService from '../services/product.service.js';
 import { uploadImage } from '../services/cloudinary.service.js';
 import { prisma } from '../index.js';
+import { writeAuditLog } from '../services/audit.service.js';
 
 // ----------------------------------------------------------------
 // PUBLIC CONTROLLERS
@@ -76,6 +77,10 @@ export async function createProduct(req: Request, res: Response) {
     const data = createProductSchema.parse(req.body);
     try {
         const product = await productService.createProduct(data);
+        await writeAuditLog({
+            req, event: 'PRODUCT_CREATE', targetType: 'Product', targetId: product!.id,
+            diff: { name: product!.name, slug: product!.slug, status: product!.status, variantCount: product!.variants.length },
+        });
         return res.status(201).json({ product });
     } catch (err) {
         if (isDuplicateSku(err)) return res.status(409).json({ error: SKU_CONFLICT });
@@ -87,8 +92,21 @@ export async function createProduct(req: Request, res: Response) {
 export async function updateProduct(req: Request, res: Response) {
     const id = req.params.id!;
     const data = updateProductSchema.parse(req.body);
+    const before = await prisma.product.findUnique({
+        where: { id },
+        include: { variants: true },
+    });
+    if (!before) return res.status(404).json({ error: 'Product not found' });
     try {
         const product = await productService.updateProduct(id, data);
+        const changedFields = Object.keys(data).filter((field) => field !== 'variants');
+        await writeAuditLog({
+            req, event: 'PRODUCT_UPDATE', targetType: 'Product', targetId: id,
+            diff: {
+                changedFields,
+                ...(data.variants ? { variants: { before: before.variants.length, after: product!.variants.length } } : {}),
+            },
+        });
         return res.json({ product });
     } catch (err) {
         if (isDuplicateSku(err)) return res.status(409).json({ error: SKU_CONFLICT });
@@ -105,7 +123,7 @@ export async function uploadProductImages(req: Request, res: Response) {
         return res.status(400).json({ error: 'No images provided' });
     }
 
-    const product = await prisma.product.findUnique({ where: { id }, select: { id: true } });
+    const product = await prisma.product.findUnique({ where: { id }, select: { id: true, name: true } });
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
     // Compute the next position after any existing images to avoid collisions.
@@ -127,12 +145,23 @@ export async function uploadProductImages(req: Request, res: Response) {
         ),
     );
 
+    await writeAuditLog({
+        req, event: 'PRODUCT_UPDATE', targetType: 'Product', targetId: id,
+        diff: { imagesUploaded: uploads.length, imageIds: uploads.map((image) => image.id) },
+    });
+
     return res.status(201).json({ images: uploads });
 }
 
 // --- Archive product (admin) ---
 export async function archiveProduct(req: Request, res: Response) {
     const id = req.params.id!;
-    await productService.archiveProduct(id);
+    const before = await prisma.product.findUnique({ where: { id }, select: { name: true, status: true } });
+    if (!before) return res.status(404).json({ error: 'Product not found' });
+    const product = await productService.archiveProduct(id);
+    await writeAuditLog({
+        req, event: 'PRODUCT_ARCHIVE', targetType: 'Product', targetId: id,
+        diff: { name: product.name, status: { before: before.status, after: 'ARCHIVED' } },
+    });
     return res.json({ message: 'Product archived' });
 }

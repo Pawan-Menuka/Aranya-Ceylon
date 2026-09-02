@@ -350,6 +350,7 @@ export async function updateProduct(id: string, data: UpdateProductInput) {
                 // applied, consistent with latin/originLabel below (BUG-23). The
                 // shared schema still enforces min lengths, so these can't be blanked.
                 ...(fields.name !== undefined && { name: fields.name }),
+                ...(fields.slug !== undefined && { slug: fields.slug }),
                 ...(fields.description !== undefined && { description: fields.description }),
                 ...(fields.categoryId !== undefined && { categoryId: fields.categoryId }),
                 ...(fields.featured !== undefined && { featured: fields.featured }),

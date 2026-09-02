@@ -4,13 +4,21 @@ import * as React from "react";
 import { ADMIN, type AdminProduct } from "@/lib/admin-data";
 import { AIcon, Pill, StockMeter, FlagRow } from "./AdminPrimitives";
 import { ShareBar } from "./AdminCharts";
-import { listAdminProducts, createAdminProduct, updateAdminProduct, listCategories, uploadProductImage, bestEffort, type Category, type AdminProductInput } from "@/lib/api/admin";
+import { listAdminProducts, createAdminProduct, updateAdminProduct, archiveAdminProduct, listCategories, uploadProductImage, type Category, type AdminProductInput } from "@/lib/api/admin";
 import { exportCsv } from "@/lib/csv";
 import { DEMO_MODE } from "@/lib/demo";
-import type { Product } from "@/lib/types";
+import type { Product, Variant } from "@/lib/types";
 import { paletteFor } from "@/lib/spice-data";
 
-function backendProductToAdmin(p: Product): AdminProduct {
+type VariantDraft = Omit<Variant, "price"> & { price: string };
+type ProductRow = AdminProduct & {
+  _backendId?: string;
+  _variants?: VariantDraft[];
+  _description?: string;
+  _categoryId?: string;
+};
+
+function backendProductToAdmin(p: Product): ProductRow {
   const usdVariant = p.variants?.find((v) => v.currency === "USD") ?? p.variants?.[0];
   const lkrVariant = p.variants?.find((v) => v.currency === "LKR") ?? p.variants?.[0];
   const usdPrice = usdVariant ? `$${parseFloat(String(usdVariant.price)).toFixed(2)}` : "$0.00";
@@ -20,7 +28,7 @@ function backendProductToAdmin(p: Product): AdminProduct {
   const totalStock = (p.variants ?? []).reduce((s, v) => s + (v.stock ?? 0), 0);
   return {
     name: p.name,
-    latin: p.description ?? "",
+    latin: p.latin ?? "",
     slug: p.slug,
     sku: p.variants?.[0]?.sku ?? p.id,
     category: p.category?.name ?? "Whole Spices",
@@ -36,7 +44,10 @@ function backendProductToAdmin(p: Product): AdminProduct {
     visible: p.status !== "ARCHIVED",
     featured: p.featured ?? false,
     _backendId: p.id,
-  } as AdminProduct & { _backendId: string };
+    _variants: (p.variants ?? []).map((v) => ({ ...v, price: String(v.price) })),
+    _description: p.description,
+    _categoryId: p.category?.id,
+  };
 }
 
 // Price-string parsers (match the display format from backendProductToAdmin)
@@ -45,7 +56,7 @@ function parseLkr(s: string) { return parseFloat(s.replace(/[^0-9.,]/g, "").repl
 function toSlug(name: string) { return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
 
 function productIdentity(p: AdminProduct): string {
-  return (p as AdminProduct & { _backendId?: string })._backendId ?? `local:${p.slug}`;
+  return (p as ProductRow)._backendId ?? `local:${p.slug}`;
 }
 
 // Build the variant array required by createProductSchema from the editor UI values.
@@ -64,9 +75,26 @@ function buildVariants(p: AdminProduct): NonNullable<AdminProductInput["variants
   });
 }
 
+function draftVariants(p: ProductRow): VariantDraft[] {
+  if (p._variants?.length) return p._variants.map((v) => ({ ...v }));
+  return buildVariants(p).map((v) => ({ ...v, id: "", price: String(v.price) })) as VariantDraft[];
+}
+
+function variantsForApi(variants: VariantDraft[]): NonNullable<AdminProductInput["variants"]> {
+  return variants.map((v) => ({
+    ...(v.id ? { id: v.id } : {}),
+    sku: v.sku.trim(),
+    weight: Number(v.weight),
+    price: Number(v.price),
+    stock: Number(v.stock),
+    market: v.market,
+    currency: v.currency,
+  }));
+}
+
 // Aranya Ceylon — ADMIN Products (ported from admin-products.jsx).
 // List + create/edit drawer (stock, images, per-market pricing, flags).
-// Writes are optimistic local state, best-effort synced to /admin/products.
+// Writes are awaited and the returned backend product replaces local state.
 
 const PROD_TABS = [
   { key: "all", label: "All" },
@@ -123,11 +151,12 @@ function ProductsTable({ rows, onOpen, onToggle }: {
 type EditDraft = Partial<AdminProduct>;
 
 function ProductEditor({
-  product, onClose, onSave, categories,
+  product, onClose, onSave, onDelete, categories,
 }: {
   product: EditDraft;
   onClose: () => void;
-  onSave: (p: AdminProduct, extra: { description: string; categoryId: string }) => void;
+  onSave: (p: AdminProduct, extra: { description: string; categoryId: string; variants: VariantDraft[] }) => Promise<void>;
+  onDelete: (p: AdminProduct) => Promise<void>;
   categories: Category[];
 }) {
   const isNew = !product.sku;
@@ -139,11 +168,15 @@ function ProductEditor({
     ...product,
   } as AdminProduct));
   const set = <K extends keyof AdminProduct>(k: K, v: AdminProduct[K]) => setP((x) => ({ ...x, [k]: v }));
-  const [description, setDescription] = React.useState<string>(product.latin ?? "");
-  const [categoryId, setCategoryId] = React.useState<string>("");
+  const productRow = product as ProductRow;
+  const [description, setDescription] = React.useState<string>(productRow._description ?? "");
+  const [categoryId, setCategoryId] = React.useState<string>(productRow._categoryId ?? "");
+  const [variants, setVariants] = React.useState<VariantDraft[]>(() => draftVariants(p as ProductRow));
   const [slugTouched, setSlugTouched] = React.useState(!isNew);
   const [uploadedImages, setUploadedImages] = React.useState<string[]>([]);
   const [uploading, setUploading] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const backendId = (p as AdminProduct & { _backendId?: string })._backendId;
 
@@ -164,7 +197,36 @@ function ProductEditor({
     try {
       const { images } = await uploadProductImage(backendId, file);
       setUploadedImages((prev) => [...prev, ...images.map((img) => img.url)]);
-    } catch { /* surface as empty state */ } finally { setUploading(false); }
+    } catch { setError("The image upload failed. Please try again."); } finally { setUploading(false); }
+  };
+
+  const updateVariant = <K extends keyof VariantDraft>(index: number, key: K, value: VariantDraft[K]) => {
+    setVariants((current) => current.map((variant, i) => i === index ? { ...variant, [key]: value } : variant));
+  };
+
+  const addVariant = () => {
+    const index = variants.length + 1;
+    setVariants((current) => [...current, {
+      id: "", sku: `${(p.sku || "SKU").toUpperCase()}-${index}`,
+      weight: 100, price: "0.00", stock: 0, market: "INTERNATIONAL", currency: "USD",
+    }]);
+  };
+
+  const submit = async () => {
+    setError(null);
+    if (!p.name.trim() || !p.slug.trim()) { setError("Product name and slug are required."); return; }
+    if (description.trim().length < 10) { setError("Description must contain at least 10 characters."); return; }
+    if (!categoryId) { setError("Choose a category before saving."); return; }
+    if (!variants.length || variants.some((v) => !v.sku.trim() || !Number.isInteger(Number(v.weight)) || Number(v.weight) <= 0 || Number(v.price) <= 0 || !Number.isInteger(Number(v.stock)) || Number(v.stock) < 0)) {
+      setError("Every variant needs a SKU, positive weight and price, and non-negative stock."); return;
+    }
+    if (variants.some((v) => (v.market === "LOCAL" && v.currency !== "LKR") || (v.market === "INTERNATIONAL" && v.currency === "LKR"))) {
+      setError("Sri Lanka variants must use LKR, and international variants must use a non-LKR currency."); return;
+    }
+    setBusy(true);
+    try { await onSave(p, { description, categoryId, variants }); }
+    catch (saveError) { setError(saveError instanceof Error ? saveError.message : "The product could not be saved."); }
+    finally { setBusy(false); }
   };
 
   React.useEffect(() => {
@@ -244,27 +306,20 @@ function ProductEditor({
           <hr className="ad-hr" />
 
           <div>
-            <div className="ad-label" style={{ marginBottom: 10 }}>Pricing by market</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div className="ad-field">
-                <label className="ad-label" style={{ display: "flex", alignItems: "center", gap: 6 }}><span className="mkt intl">USD</span> International</label>
-                <input className="ad-input" value={p.usd} onChange={(e) => set("usd", e.target.value)} />
-              </div>
-              <div className="ad-field">
-                <label className="ad-label" style={{ display: "flex", alignItems: "center", gap: 6 }}><span className="mkt local">LKR</span> Sri Lanka</label>
-                <input className="ad-input" value={p.lkr} onChange={(e) => set("lkr", e.target.value)} />
-              </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <div className="ad-label">Variants, pricing &amp; inventory</div>
+              <button type="button" className="ad-btn ad-btn-ghost ad-btn-sm" onClick={addVariant}><AIcon name="plus" size={14} />Add variant</button>
             </div>
-          </div>
-
-          <div>
-            <div className="ad-label" style={{ marginBottom: 10 }}>Weights & inventory</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {(p.weights || []).map((w, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--ad-soft)", borderRadius: 9, padding: "8px 12px" }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, width: 60 }}>{w}</span>
-                  <span style={{ fontSize: 12, color: "var(--ad-faint)" }}>in stock</span>
-                  <input className="ad-input" defaultValue={Math.round(p.stock / (p.weights.length || 1)) + i * 3} style={{ width: 80, marginLeft: "auto", padding: "7px 10px", textAlign: "right" }} />
+              {variants.map((variant, i) => (
+                <div key={variant.id || `new-${i}`} style={{ display: "grid", gridTemplateColumns: "1.3fr .75fr 1fr .8fr auto", gap: 8, alignItems: "end", background: "var(--ad-soft)", borderRadius: 9, padding: "10px" }}>
+                  <div className="ad-field"><label className="ad-label">SKU</label><input className="ad-input" value={variant.sku} onChange={(e) => updateVariant(i, "sku", e.target.value)} /></div>
+                  <div className="ad-field"><label className="ad-label">Weight (g)</label><input className="ad-input" type="number" min="1" value={variant.weight} onChange={(e) => updateVariant(i, "weight", Number(e.target.value))} /></div>
+                  <div className="ad-field"><label className="ad-label">Price</label><input className="ad-input" type="number" min="0.01" step="0.01" value={variant.price} onChange={(e) => updateVariant(i, "price", e.target.value)} /></div>
+                  <div className="ad-field"><label className="ad-label">Stock</label><input className="ad-input" type="number" min="0" step="1" value={variant.stock} onChange={(e) => updateVariant(i, "stock", Number(e.target.value))} /></div>
+                  <button type="button" className="ad-iconbtn" title="Remove variant" disabled={variants.length === 1} onClick={() => setVariants((current) => current.filter((_, index) => index !== i))}><AIcon name="trash" size={14} stroke="var(--neg)" /></button>
+                  <div className="ad-field" style={{ gridColumn: "1 / 3" }}><label className="ad-label">Market</label><select className="ad-select" value={variant.market} onChange={(e) => updateVariant(i, "market", e.target.value as VariantDraft["market"])}><option value="LOCAL">Sri Lanka</option><option value="INTERNATIONAL">International</option><option value="BOTH">Both</option></select></div>
+                  <div className="ad-field" style={{ gridColumn: "3 / 5" }}><label className="ad-label">Currency</label><select className="ad-select" value={variant.currency} onChange={(e) => updateVariant(i, "currency", e.target.value as VariantDraft["currency"])}><option value="LKR">LKR</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option></select></div>
                 </div>
               ))}
             </div>
@@ -279,10 +334,11 @@ function ProductEditor({
         </div>
 
         <div style={{ padding: "16px 24px", borderTop: "1px solid var(--ad-line)", display: "flex", gap: 10, background: "var(--ad-card)" }}>
-          {!isNew && <button className="ad-btn ad-btn-danger ad-btn-sm"><AIcon name="trash" size={15} stroke="var(--neg)" /></button>}
+          {!isNew && <button className="ad-btn ad-btn-danger ad-btn-sm" disabled={busy} title="Archive product" onClick={() => { if (window.confirm("Archive this product? It will be removed from the storefront.")) { setBusy(true); void onDelete(p).catch((archiveError) => setError(archiveError instanceof Error ? archiveError.message : "The product could not be archived.")).finally(() => setBusy(false)); } }}><AIcon name="trash" size={15} stroke="var(--neg)" /></button>}
           <button className="ad-btn ad-btn-ghost" style={{ marginLeft: "auto" }} onClick={onClose}>Cancel</button>
-          <button className="ad-btn ad-btn-green" onClick={() => onSave(p, { description, categoryId })}><AIcon name="check" size={16} stroke="#fff" />{isNew ? "Create product" : "Save changes"}</button>
+          <button className="ad-btn ad-btn-green" disabled={busy} onClick={() => { void submit(); }}><AIcon name="check" size={16} stroke="#fff" />{busy ? "Saving…" : isNew ? "Create product" : "Save changes"}</button>
         </div>
+        {error && <div role="alert" style={{ padding: "0 24px 16px", color: "var(--neg)", background: "var(--ad-card)", fontSize: 13 }}>{error}</div>}
       </aside>
     </>
   );
@@ -295,6 +351,7 @@ export function AdminProducts() {
   const [q, setQ] = React.useState("");
   const [edit, setEdit] = React.useState<EditDraft | null>(null);
   const [categories, setCategories] = React.useState<Category[]>([]);
+  const [message, setMessage] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     listAdminProducts().then(({ products }) => {
@@ -310,39 +367,66 @@ export function AdminProducts() {
     return true;
   }), [rows, tab, q]);
 
-  const toggle = (p: AdminProduct) => {
+  const toggle = async (p: AdminProduct) => {
     const next = !p.visible;
-    const backendId = (p as AdminProduct & { _backendId?: string })._backendId;
+    const backendId = (p as ProductRow)._backendId;
     const identity = productIdentity(p);
-    setRows((prev) => prev.map((x) => (productIdentity(x) === identity ? { ...x, visible: next } : x)));
-    if (backendId) bestEffort(updateAdminProduct(backendId, { status: next ? "ACTIVE" : "ARCHIVED" }));
+    setMessage(null);
+    if (!backendId) {
+      if (DEMO_MODE) setRows((prev) => prev.map((x) => productIdentity(x) === identity ? { ...x, visible: next } : x));
+      return;
+    }
+    try {
+      const { product } = await updateAdminProduct(backendId, { status: next ? "ACTIVE" : "ARCHIVED" });
+      setRows((prev) => prev.map((x) => productIdentity(x) === identity ? backendProductToAdmin(product) : x));
+    } catch {
+      setMessage("The product visibility change failed. No local success state was applied.");
+    }
   };
-  const save = (p: AdminProduct, extra: { description: string; categoryId: string }) => {
-    const backendId = (p as AdminProduct & { _backendId?: string })._backendId;
+  const save = async (p: AdminProduct, extra: { description: string; categoryId: string; variants: VariantDraft[] }) => {
+    const backendId = (p as ProductRow)._backendId;
     const slug = p.slug || toSlug(p.name);
     const desc = extra.description || p.latin || "Premium Ceylon spice.";
     const catId = extra.categoryId || categories[0]?.id || "";
-    setRows((prev) => {
-      const identity = productIdentity(p);
-      const exists = prev.find((x) => productIdentity(x) === identity);
-      if (exists && backendId) {
-        bestEffort(updateAdminProduct(backendId, {
+    const variants = variantsForApi(extra.variants);
+    setMessage(null);
+    try {
+      if (backendId) {
+        const { product } = await updateAdminProduct(backendId, {
           name: p.name,
-          description: desc || undefined,
+          slug,
+          description: desc,
+          categoryId: catId,
           featured: p.featured,
+          latin: p.latin || null,
           status: p.visible ? "ACTIVE" : "ARCHIVED",
-        }));
-        return prev.map((x) => (productIdentity(x) === identity ? { ...x, ...p } : x));
+          variants,
+        });
+        setRows((prev) => prev.map((x) => productIdentity(x) === backendId ? backendProductToAdmin(product) : x));
+      } else if (DEMO_MODE && !catId) {
+        setRows((prev) => [{ ...p, slug, stock: variants.reduce((sum, v) => sum + (v.stock ?? 0), 0) }, ...prev]);
+      } else {
+        const { product } = await createAdminProduct({ name: p.name, slug, description: desc, categoryId: catId, featured: p.featured, status: p.visible ? "ACTIVE" : "DRAFT", latin: p.latin || null, variants });
+        setRows((prev) => [backendProductToAdmin(product), ...prev.filter((row) => productIdentity(row) !== `local:${slug}`)]);
       }
-      const variants = buildVariants(p);
-      if (catId && variants.length > 0) {
-        // Send status so a product created as visible actually goes ACTIVE and
-        // reaches the storefront, instead of being stuck DRAFT forever (BUG-08).
-        bestEffort(createAdminProduct({ name: p.name, slug, description: desc, categoryId: catId, featured: p.featured, status: p.visible ? "ACTIVE" : "DRAFT", variants }));
-      }
-      return [{ ...p, slug }, ...prev];
-    });
-    setEdit(null);
+      setEdit(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The product could not be saved. No local success state was applied.");
+      throw error;
+    }
+  };
+
+  const archive = async (p: AdminProduct) => {
+    const backendId = (p as ProductRow)._backendId;
+    setMessage(null);
+    try {
+      if (backendId) await archiveAdminProduct(backendId);
+      setRows((prev) => prev.map((row) => productIdentity(row) === productIdentity(p) ? { ...row, visible: false, status: "Archived" } : row));
+      setEdit(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The product could not be archived.");
+      throw error;
+    }
   };
 
   const lowCount = rows.filter((p) => p.stock < (p.category === "Gift Sets" ? 10 : 25)).length;
@@ -369,6 +453,7 @@ export function AdminProducts() {
           <button className="ad-btn ad-btn-amber" onClick={() => setEdit({})}><AIcon name="plus" size={16} stroke="#fff" />New product</button>
         </div>
       </div>
+      {message && <div role="alert" style={{ marginBottom: 16, padding: "10px 14px", border: "1px solid var(--ad-line)", borderRadius: 10, color: "var(--neg)", background: "var(--ad-card)" }}>{message}</div>}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
         <div className="ad-seg">
           {PROD_TABS.map((t) => <button key={t.key} className={tab === t.key ? "on" : ""} onClick={() => setTab(t.key)}>{t.label}{t.key === "low" && lowCount > 0 && <span style={{ marginLeft: 6, color: "var(--neg)", fontWeight: 800 }}>{lowCount}</span>}</button>)}
@@ -378,8 +463,8 @@ export function AdminProducts() {
           <input placeholder="Search products…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
       </div>
-      <ProductsTable rows={filtered} onOpen={setEdit} onToggle={toggle} />
-      {edit && <ProductEditor product={edit} onClose={() => setEdit(null)} onSave={save} categories={categories} />}
+      <ProductsTable rows={filtered} onOpen={setEdit} onToggle={(product) => { void toggle(product); }} />
+      {edit && <ProductEditor product={edit} onClose={() => setEdit(null)} onSave={save} onDelete={archive} categories={categories} />}
     </div>
   );
 }

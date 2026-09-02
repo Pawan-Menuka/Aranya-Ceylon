@@ -7,7 +7,7 @@ import { formatMoney } from "@/lib/money";
 import { AIcon, Pill, FlagRow } from "./AdminPrimitives";
 import {
   listAdminGifts, getAdminGift, createGift, updateGift, deleteGift,
-  bestEffort, type AdminGiftSet, type AdminGiftInput,
+  type AdminGiftSet, type AdminGiftInput,
 } from "@/lib/api/admin";
 import { DEMO_MODE } from "@/lib/demo";
 
@@ -288,23 +288,46 @@ export function AdminGifts() {
     }
   };
 
-  const save = (input: AdminGiftInput & { id?: string }) => {
+  const save = async (input: AdminGiftInput & { id?: string }) => {
     const { id, ...body } = input;
-    if (id && !id.startsWith("demo-")) {
-      bestEffort(updateGift(id, body));
-      setRows((prev) => prev.map((g) => g.id === id ? { ...g, ...body, status: body.status ?? g.status } : g));
-    } else if (liveLoaded) {
-      bestEffort(createGift(body).then(({ gift }) => {
+    setMessage(null);
+    try {
+      if (id && !id.startsWith("demo-")) {
+        const { gift } = await updateGift(id, body);
+        setRows((prev) => prev.map((g) => g.id === id ? gift : g));
+      } else if (liveLoaded) {
+        const { gift } = await createGift(body);
         setRows((prev) => [gift, ...prev.filter((g) => !g.id.startsWith("demo-"))]);
-      }));
+      } else if (DEMO_MODE) {
+        const local: AdminGiftSet = {
+          ...body,
+          id: id ?? `demo-${Date.now()}`,
+          createdAt: new Date().toISOString(),
+          status: body.status ?? "DRAFT",
+          featured: body.featured ?? false,
+          badge: body.badge ?? null,
+          jar: body.jar ?? "50g",
+        };
+        setRows((prev) => id ? prev.map((g) => g.id === id ? local : g) : [local, ...prev]);
+      } else {
+        setMessage("Gift sets are still loading. Please try again before saving.");
+        return;
+      }
+      setEdit(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The gift set could not be saved. No local success state was applied.");
     }
-    setEdit(null);
   };
 
-  const remove = (id: string) => {
-    if (!id.startsWith("demo-")) bestEffort(deleteGift(id));
-    setRows((prev) => prev.filter((g) => g.id !== id));
-    setEdit(null);
+  const remove = async (id: string) => {
+    setMessage(null);
+    try {
+      if (!id.startsWith("demo-")) await deleteGift(id);
+      setRows((prev) => prev.filter((g) => g.id !== id));
+      setEdit(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The gift set could not be deleted.");
+    }
   };
 
   return (
