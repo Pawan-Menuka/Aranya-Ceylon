@@ -44,6 +44,7 @@ export const createProductSchema = z.object({
 // variants absent from the array are removed (only if unreferenced by orders).
 export const updateProductSchema = z.object({
     name: z.string().min(2).max(200).optional(),
+    slug: z.string().min(2).max(200).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase with hyphens only').optional(),
     description: z.string().min(10).optional(),
     categoryId: z.string().min(1).optional(),
     certifications: z.array(z.string()).optional(),

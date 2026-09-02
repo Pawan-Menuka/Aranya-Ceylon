@@ -1,8 +1,8 @@
 import { apiFetch, getAccessToken } from "./http";
 import type { Order, Product } from "../types";
 
-// Admin endpoints (ADMIN / SUPERADMIN role-gated). Optimistic local state stays
-// authoritative offline; these are best-effort syncs to the backend.
+// Admin endpoints (ADMIN / SUPERADMIN role-gated). Mutations return their
+// canonical backend records; callers only apply success state after awaiting.
 
 // ---- dashboard ----
 export interface DashboardData {
@@ -53,7 +53,9 @@ export interface AdminProductInput {
   categoryId?: string;
   featured?: boolean;
   status?: string;
+  latin?: string | null;
   variants?: Array<{
+    id?: string;
     sku: string;
     weight: number;
     price: number;
@@ -311,12 +313,4 @@ export async function uploadProductImage(
   );
   if (!res.ok) throw new Error(`Image upload failed (${res.status})`);
   return res.json();
-}
-
-// Fire-and-forget: attempt a backend write, swallow failures so optimistic
-// local state stays authoritative offline (acceptance criterion §11).
-export function bestEffort<T>(p: Promise<T>): void {
-  p.catch(() => {
-    /* offline / demo — local state already updated */
-  });
 }
