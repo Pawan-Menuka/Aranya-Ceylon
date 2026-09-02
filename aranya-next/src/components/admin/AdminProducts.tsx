@@ -7,6 +7,7 @@ import { ShareBar } from "./AdminCharts";
 import { listAdminProducts, createAdminProduct, updateAdminProduct, archiveAdminProduct, listCategories, uploadProductImage, type Category, type AdminProductInput } from "@/lib/api/admin";
 import { exportCsv } from "@/lib/csv";
 import { DEMO_MODE } from "@/lib/demo";
+import { LOW_STOCK_THRESHOLD } from "@/lib/inventory";
 import type { Product, Variant } from "@/lib/types";
 import { paletteFor } from "@/lib/spice-data";
 
@@ -17,6 +18,17 @@ type ProductRow = AdminProduct & {
   _description?: string;
   _categoryId?: string;
 };
+
+// Matches the dashboard's Low Stock panel: flag a product the moment ANY of
+// its variants is at/under the shared threshold, not when its total stock
+// (summed across every variant) crosses a separate, category-based number —
+// the two previously disagreed on the same inventory (Wave 3 #25). Demo rows
+// carry no _variants, so they fall back to the aggregate figure.
+function isLowStock(p: AdminProduct): boolean {
+  const variants = (p as ProductRow)._variants;
+  if (variants?.length) return variants.some((v) => Number(v.stock) <= LOW_STOCK_THRESHOLD);
+  return p.stock <= LOW_STOCK_THRESHOLD;
+}
 
 function backendProductToAdmin(p: Product): ProductRow {
   const usdVariant = p.variants?.find((v) => v.currency === "USD") ?? p.variants?.[0];
@@ -134,7 +146,7 @@ function ProductsTable({ rows, onOpen, onToggle }: {
                 <div style={{ fontWeight: 700 }}>{p.usd}</div>
                 <div style={{ fontSize: 11.5, color: "var(--ad-faint)" }}>{p.lkr}</div>
               </td>
-              <td><StockMeter stock={p.stock} threshold={p.category === "Gift Sets" ? 10 : 25} /></td>
+              <td><StockMeter stock={p.stock} threshold={LOW_STOCK_THRESHOLD} low={isLowStock(p)} /></td>
               <td><Pill status={p.status === "Active" ? "active" : p.status === "Low stock" ? "low" : "out"} /></td>
               <td onClick={(e) => { e.stopPropagation(); onToggle(p); }}>
                 <span className={"ad-toggle" + (p.visible ? " on" : "")} />
@@ -275,7 +287,7 @@ function ProductEditor({
               </button>
               <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) { void handleUpload(f); e.target.value = ""; } }} />
             </div>
-            <div className="ad-hint" style={{ marginTop: 8 }}>JPG or PNG, square, ≥1200px. Drag to reorder; first image is the cover.</div>
+            <div className="ad-hint" style={{ marginTop: 8 }}>JPG or PNG, square, ≥1200px. First uploaded image is the cover.</div>
           </div>
 
           <hr className="ad-hr" />
@@ -361,7 +373,7 @@ export function AdminProducts() {
   }, []);
 
   const filtered = React.useMemo(() => rows.filter((p) => {
-    if (tab === "low") { if (p.stock >= (p.category === "Gift Sets" ? 10 : 25)) return false; }
+    if (tab === "low") { if (!isLowStock(p)) return false; }
     else if (tab !== "all" && p.category !== tab) return false;
     if (q && !p.name.toLowerCase().includes(q.toLowerCase()) && !p.sku.toLowerCase().includes(q.toLowerCase())) return false;
     return true;
@@ -429,7 +441,7 @@ export function AdminProducts() {
     }
   };
 
-  const lowCount = rows.filter((p) => p.stock < (p.category === "Gift Sets" ? 10 : 25)).length;
+  const lowCount = rows.filter(isLowStock).length;
 
   const exportProducts = () => {
     exportCsv(

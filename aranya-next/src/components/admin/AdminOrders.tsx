@@ -219,7 +219,6 @@ function OrderDrawer({ order, onClose, onStatus, onRefund }: {
                 }}>
                   <AIcon name="truck" size={15} stroke="#fff" />{o.status === "paid" ? "Start processing" : o.status === "processing" ? "Mark as shipped" : o.status === "shipped" ? "Mark delivered" : "Fulfilled"}
                 </button>
-                <button className="ad-btn ad-btn-ghost ad-btn-sm"><AIcon name="download" size={15} stroke="var(--ad-muted)" />Packing slip</button>
               </div>
             </div>
           )}
