@@ -46,7 +46,13 @@ export async function getOrCreateCart(userId?: string, guestToken?: string) {
     if (userId) {
         return prisma.cart.upsert({
             where: { userId },
-            update: {},
+            // Every cart-touching controller action calls this first, so
+            // clearing abandonedEmailSentAt here means any activity — not
+            // just adding an item — makes the cart eligible for a future
+            // recovery email again once it goes quiet (roadmap: abandoned-
+            // cart recovery). update:{} would otherwise leave a user who
+            // came back and looked, but didn't buy, permanently unreachable.
+            update: { abandonedEmailSentAt: null },
             create: { userId },
             include: cartIncludes,
         });

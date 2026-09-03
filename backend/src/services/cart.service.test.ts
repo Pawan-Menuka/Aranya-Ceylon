@@ -11,6 +11,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 const store = vi.hoisted(() => {
     const s = {
         cart: null as any,
+        carts: [] as any[],
         couponsById: new Map<string, any>(),
         couponsByCode: new Map<string, any>(),
     };
@@ -21,6 +22,12 @@ vi.mock('../index.js', () => ({
     prisma: {
         cart: {
             findUnique: async () => store.s.cart,
+            upsert: async ({ where, update, create }: any) => {
+                let c = store.s.carts.find((x) => x.userId === where.userId);
+                if (c) Object.assign(c, update);
+                else { c = { id: `cart_${store.s.carts.length + 1}`, abandonedEmailSentAt: null, ...create }; store.s.carts.push(c); }
+                return c;
+            },
         },
         coupon: {
             findUnique: async ({ where }: any) =>
@@ -29,7 +36,7 @@ vi.mock('../index.js', () => ({
     },
 }));
 
-import { calculateCartTotal, validateCoupon } from './cart.service.js';
+import { calculateCartTotal, validateCoupon, getOrCreateCart } from './cart.service.js';
 
 const { s } = store;
 
@@ -46,6 +53,7 @@ function setCart(prices: (number | string)[], couponId: string | null = null) {
 
 beforeEach(() => {
     s.cart = null;
+    s.carts = [];
     s.couponsById.clear();
     s.couponsByCode.clear();
 });
@@ -140,5 +148,18 @@ describe('validateCoupon', () => {
             discountValue: 10, usageLimit: 5, usageCount: 5, expiresAt: null,
         });
         await expect(validateCoupon('MAXED', 5997)).rejects.toThrow('COUPON_USAGE_LIMIT_REACHED');
+    });
+});
+
+describe('getOrCreateCart — clears abandonedEmailSentAt on every touch (roadmap: abandoned-cart recovery)', () => {
+    it('clears a previously-set flag on an existing user cart', async () => {
+        s.carts = [{ id: 'cart_1', userId: 'user_1', abandonedEmailSentAt: new Date() }];
+        const cart = await getOrCreateCart('user_1', undefined);
+        expect(cart.abandonedEmailSentAt).toBeNull();
+    });
+
+    it('leaves a freshly-created cart with no flag set (nothing to clear yet)', async () => {
+        const cart = await getOrCreateCart('user_2', undefined);
+        expect(cart.abandonedEmailSentAt).toBeNull();
     });
 });
