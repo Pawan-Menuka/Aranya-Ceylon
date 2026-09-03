@@ -69,7 +69,7 @@ actually purchasable.
 - **#20:** `MarketContext.setMarket` now flips the visible market label only once `overrideMarket()` confirms the cookie (or on failure, still flips so the switcher isn't stuck offline) — shrinks the mismatched-currency window from the full round-trip to near-zero.
 - **#21:** Added `.max(200)` to `productFilterSchema.search`, consistent with every other string field in the schema. Confirmed this schema is actually applied (`productFilterSchema.parse(req.query)` in `product.controller.ts`'s `listProducts`), not dead validation.
 - **#22:** Rather than reordering/renaming the existing public routes (`/products/featured` etc. are live API paths the frontend already calls), added a reserved-slug check to `createProductSchema`/`updateProductSchema` so a product can never be assigned a slug that collides with a fixed route segment going forward. Does not retroactively rename an already-existing colliding product, if one exists.
-- **Verification:** cannot run `npx tsc --noEmit` / `npx vitest run` / `prisma migrate deploy` from this worktree (no `node_modules`, no DB access). See the recipe below.
+- **Verification (confirmed 2026-09-03):** `prisma migrate deploy` applied `20260903120000_add_user_phone_and_newsletter` cleanly; `prisma generate` + `pnpm typecheck` clean; `npx vitest run` from `backend/` — 88/88 passing (`auth.controller.test.ts` at 7 tests, `token.service.test.ts` at 15, both up from their pre-wave counts, confirming the new tests actually ran).
 
 ## Wave 4 — Informational (no fix required, or needs a product decision first)
 
