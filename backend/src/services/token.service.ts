@@ -179,3 +179,55 @@ export async function verifyEmailToken(plaintext: string): Promise<void> {
         prisma.token.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
     ]);
 }
+
+// How long a password-reset link stays valid — shorter than email verification
+// (24h) since a leaked reset link grants an account takeover, not just a
+// verification nuisance.
+const PASSWORD_RESET_TOKEN_EXPIRY_HOURS = 1;
+
+// --- Issue a single-use password-reset token ---
+// Same opaque-token + SHA-256-hash pattern as email verification.
+export async function issuePasswordResetToken(userId: string): Promise<string> {
+    const plaintext = createId() + createId(); // 48 random chars
+
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + PASSWORD_RESET_TOKEN_EXPIRY_HOURS);
+
+    await prisma.token.create({
+        data: {
+            userId,
+            tokenHash: hashToken(plaintext),
+            type: 'PASSWORD_RESET',
+            expiresAt,
+        },
+    });
+
+    return plaintext;
+}
+
+// --- Consume a password-reset token ---
+// Validates the token, sets the new password hash, burns the token, and
+// revokes every existing REFRESH-token session in one transaction. Session
+// revocation matters: a password reset must end every other logged-in device,
+// the same guarantee a "change password" flow would give — otherwise a
+// stolen session survives the very reset meant to kill it.
+export async function resetPasswordWithToken(plaintext: string, newPasswordHash: string): Promise<void> {
+    if (!plaintext) throw new Error('INVALID_RESET_TOKEN');
+
+    const record = await prisma.token.findUnique({ where: { tokenHash: hashToken(plaintext) } });
+
+    if (!record || record.type !== 'PASSWORD_RESET' || record.usedAt !== null) {
+        throw new Error('INVALID_RESET_TOKEN');
+    }
+
+    if (record.expiresAt < new Date()) {
+        await prisma.token.delete({ where: { id: record.id } });
+        throw new Error('RESET_TOKEN_EXPIRED');
+    }
+
+    await prisma.$transaction([
+        prisma.user.update({ where: { id: record.userId }, data: { passwordHash: newPasswordHash } }),
+        prisma.token.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
+        prisma.token.deleteMany({ where: { userId: record.userId, type: 'REFRESH' } }),
+    ]);
+}

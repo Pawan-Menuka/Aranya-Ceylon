@@ -33,8 +33,20 @@ const testUser = {
     updatedAt: new Date(),
 } as User;
 
+const userUpdateCalls: Array<{ where: { id: string }; data: Record<string, unknown> }> = [];
+
 vi.mock('../index.js', () => ({
     prisma: {
+        user: {
+            update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+                userUpdateCalls.push(args);
+                return { ...testUser, ...args.data };
+            },
+        },
+        // Array-form $transaction: the real Prisma client runs these atomically;
+        // the fake just awaits each already-invoked operation in order, which is
+        // enough for these unit tests (no real DB/rollback semantics needed).
+        $transaction: async (ops: Promise<unknown>[]) => Promise.all(ops),
         token: {
             create: async ({ data }: { data: Partial<Token> }) => {
                 const row = {
@@ -83,11 +95,12 @@ vi.mock('../index.js', () => ({
     },
 }));
 
-import { issueTokenPair, rotateRefreshToken, revokeTokenFamily, revokeAllUserTokens } from './token.service.js';
+import { issueTokenPair, rotateRefreshToken, revokeTokenFamily, revokeAllUserTokens, issuePasswordResetToken, resetPasswordWithToken, issueEmailVerificationToken } from './token.service.js';
 
 beforeEach(() => {
     rows = [];
     idSeq = 0;
+    userUpdateCalls.length = 0;
 });
 
 describe('issueTokenPair', () => {
@@ -171,5 +184,69 @@ describe('revocation', () => {
         await issueTokenPair(testUser);
         await revokeAllUserTokens(testUser.id);
         expect(rows).toHaveLength(0);
+    });
+});
+
+describe('issuePasswordResetToken', () => {
+    it('stores a PASSWORD_RESET token hash, never the plaintext', async () => {
+        const plaintext = await issuePasswordResetToken(testUser.id);
+
+        expect(plaintext.length).toBeGreaterThanOrEqual(40);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]!.type).toBe('PASSWORD_RESET');
+        expect(rows[0]!.tokenHash).not.toBe(plaintext);
+        expect(rows[0]!.usedAt).toBeNull();
+    });
+});
+
+describe('resetPasswordWithToken', () => {
+    it('updates the password, burns the token, and revokes every REFRESH session', async () => {
+        // Two existing logged-in devices for this user.
+        await issueTokenPair(testUser);
+        await issueTokenPair(testUser);
+        const plaintext = await issuePasswordResetToken(testUser.id);
+
+        await resetPasswordWithToken(plaintext, '$2b$12$newhashvalue');
+
+        expect(userUpdateCalls).toHaveLength(1);
+        expect(userUpdateCalls[0]).toEqual({
+            where: { id: testUser.id },
+            data: { passwordHash: '$2b$12$newhashvalue' },
+        });
+
+        const remaining = rows.filter((r) => r.type === 'REFRESH');
+        expect(remaining).toHaveLength(0); // both sessions killed
+
+        const resetRow = rows.find((r) => r.type === 'PASSWORD_RESET');
+        expect(resetRow!.usedAt).not.toBeNull(); // single-use, burned
+    });
+
+    it('rejects an unknown token', async () => {
+        await expect(resetPasswordWithToken('not-a-real-token', 'x')).rejects.toThrow('INVALID_RESET_TOKEN');
+        expect(userUpdateCalls).toHaveLength(0);
+    });
+
+    it('rejects a replayed (already-used) token', async () => {
+        const plaintext = await issuePasswordResetToken(testUser.id);
+        await resetPasswordWithToken(plaintext, '$2b$12$first');
+
+        await expect(resetPasswordWithToken(plaintext, '$2b$12$second')).rejects.toThrow('INVALID_RESET_TOKEN');
+        expect(userUpdateCalls).toHaveLength(1); // only the first call went through
+    });
+
+    it('rejects an expired token and deletes it', async () => {
+        const plaintext = await issuePasswordResetToken(testUser.id);
+        rows[0]!.expiresAt = new Date(Date.now() - 1000);
+
+        await expect(resetPasswordWithToken(plaintext, 'x')).rejects.toThrow('RESET_TOKEN_EXPIRED');
+        expect(rows).toHaveLength(0);
+        expect(userUpdateCalls).toHaveLength(0);
+    });
+
+    it('rejects a token of the wrong type (e.g. an email-verification token)', async () => {
+        const verifyPlaintext = await issueEmailVerificationToken(testUser.id);
+
+        await expect(resetPasswordWithToken(verifyPlaintext, 'x')).rejects.toThrow('INVALID_RESET_TOKEN');
+        expect(userUpdateCalls).toHaveLength(0);
     });
 });

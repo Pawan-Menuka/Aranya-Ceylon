@@ -3,10 +3,10 @@ import { hash, verify } from '@node-rs/bcrypt';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../index.js';
-import { issueTokenPair, rotateRefreshToken, revokeTokenFamily, revokeAllUserTokens, issueEmailVerificationToken, verifyEmailToken } from '../services/token.service.js';
-import { sendVerificationEmail } from '../services/email.service.js';
+import { issueTokenPair, rotateRefreshToken, revokeTokenFamily, revokeAllUserTokens, issueEmailVerificationToken, verifyEmailToken, issuePasswordResetToken, resetPasswordWithToken } from '../services/token.service.js';
+import { sendVerificationEmail, sendPasswordResetEmail } from '../services/email.service.js';
 import { writeAuditLog } from '../services/audit.service.js';
-import type { RegisterInput, LoginInput } from '@aranya/shared';
+import type { RegisterInput, LoginInput, ForgotPasswordInput, ResetPasswordInput } from '@aranya/shared';
 
 const BCRYPT_ROUNDS = 12;
 const REFRESH_COOKIE_NAME = 'refreshToken';
@@ -126,6 +126,48 @@ export async function resendVerification(req: Request, res: Response) {
     }
 
     return res.status(200).json({ message: NEUTRAL_RESEND_MESSAGE });
+}
+
+// --- Forgot password ---
+// Neutral response (anti-enumeration), same shape as resendVerification:
+// always 200 with an identical message whether or not the email is
+// registered. A reset token is only actually issued + emailed for a real
+// account, and fire-and-forget for the same reason register()'s send is —
+// a slow mail send must not make "account exists" distinguishable by timing.
+const NEUTRAL_FORGOT_PASSWORD_MESSAGE = 'If that email is registered, a password reset link has been sent.';
+export async function forgotPassword(req: Request, res: Response) {
+    const { email } = req.body as ForgotPasswordInput;
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (user) {
+        void (async () => {
+            try {
+                const token = await issuePasswordResetToken(user.id);
+                await sendPasswordResetEmail({ to: user.email, token });
+            } catch (err) {
+                console.error('[forgot-password] failed:', err);
+            }
+        })();
+    }
+
+    return res.status(200).json({ message: NEUTRAL_FORGOT_PASSWORD_MESSAGE });
+}
+
+// --- Reset password ---
+// Consumes the single-use token, sets the new password, and revokes every
+// existing session (see token.service.resetPasswordWithToken). Errors are
+// collapsed to one generic message — never reveal whether a token was
+// invalid, expired, or already used.
+export async function resetPassword(req: Request, res: Response) {
+    const { token, password } = req.body as ResetPasswordInput;
+
+    try {
+        const passwordHash = await hash(password, BCRYPT_ROUNDS);
+        await resetPasswordWithToken(token, passwordHash);
+        return res.status(200).json({ message: 'Your password has been reset. Please sign in.' });
+    } catch {
+        return res.status(400).json({ error: 'That reset link is invalid or has expired. Please request a new one.' });
+    }
 }
 
 // --- Login ---

@@ -42,6 +42,20 @@ export async function resendVerification(email: string): Promise<{ message: stri
   return apiFetch("/auth/resend-verification", { method: "POST", body: { email } });
 }
 
+// Request a password-reset link. Neutral by design (anti-enumeration) — the
+// backend always returns the same message regardless of whether the email
+// is registered.
+export async function forgotPassword(email: string): Promise<{ message: string }> {
+  return apiFetch("/auth/forgot-password", { method: "POST", body: { email } });
+}
+
+// Consume a reset token and set a new password. Ends every other session
+// server-side, so the caller should route back to sign-in afterward rather
+// than assume the user is still authenticated anywhere.
+export async function resetPassword(token: string, password: string): Promise<{ message: string }> {
+  return apiFetch("/auth/reset-password", { method: "POST", body: { token, password } });
+}
+
 export async function refresh(): Promise<boolean> {
   try {
     const data = await apiFetch<{ accessToken: string }>("/auth/refresh", { method: "POST" });
