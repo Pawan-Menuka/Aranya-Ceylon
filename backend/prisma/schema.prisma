@@ -397,6 +397,23 @@ model AuditLog {
   @@index([targetType, targetId])
 }
 
+// Raw gateway deliveries (Stripe + PayHere), stored verbatim for replay and
+// dispute debugging — "the payment disappeared" is unanswerable from
+// OrderEvent's human-readable notes alone. Immutable by design, same as
+// AuditLog: no UPDATE/DELETE route exists.
+model WebhookEvent {
+  id        String   @id @default(cuid())
+  gateway   String   // 'Stripe' | 'PayHere'
+  eventType String   // Stripe event.type, or PayHere's status_code
+  eventId   String?  // Stripe event.id — PayHere has no native delivery id
+  orderId   String?  // best-effort link; null when the event can't be resolved to an order
+  payload   Json     // the verified event/notification body, verbatim
+  createdAt DateTime @default(now())
+
+  @@index([gateway, createdAt])
+  @@index([orderId])
+}
+
 // ============================================================
 // WHOLESALE, CONTENT & UTILITY MODELS
 // ============================================================

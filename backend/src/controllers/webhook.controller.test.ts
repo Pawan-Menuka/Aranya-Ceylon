@@ -40,6 +40,7 @@ const store = vi.hoisted(() => {
         products: [] as ProductRow[],
         giftSets: [] as GiftSetRow[],
         cartItemsDeleted: 0,
+        webhookEvents: [] as Array<{ gateway: string; eventType: string; eventId: string | null; orderId: string | null; payload: unknown }>,
     };
 
     // Does an order row satisfy a `where` of scalar fields?
@@ -114,6 +115,9 @@ const store = vi.hoisted(() => {
         cartItem: {
             deleteMany: async () => { s.cartItemsDeleted++; return { count: 1 }; },
         },
+        webhookEvent: {
+            create: async ({ data }: any) => { s.webhookEvents.push(data); return data; },
+        },
     };
 
     return { s, db };
@@ -130,12 +134,15 @@ vi.mock('../index.js', () => ({
 
 vi.mock('../services/stripe.service.js', () => ({ constructWebhookEvent: vi.fn() }));
 vi.mock('../services/payhere.service.js', () => ({ verifyPayHereNotification: vi.fn() }));
-vi.mock('../services/email.service.js', () => ({ sendOrderConfirmation: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('../services/email.service.js', () => ({
+    sendOrderConfirmation: vi.fn().mockResolvedValue(undefined),
+    sendNewOrderAdminNotification: vi.fn().mockResolvedValue(undefined),
+}));
 
 import { confirmOrderPaid, cancelOrderAndReleaseStock, stripeWebhook, payHereWebhook } from './webhook.controller.js';
 import { constructWebhookEvent } from '../services/stripe.service.js';
 import { verifyPayHereNotification } from '../services/payhere.service.js';
-import { sendOrderConfirmation } from '../services/email.service.js';
+import { sendOrderConfirmation, sendNewOrderAdminNotification } from '../services/email.service.js';
 
 const { s } = store;
 
@@ -170,6 +177,7 @@ beforeEach(() => {
     s.products = [{ id: 'prod_a', slug: 'ceylon-cinnamon', name: 'Ceylon Cinnamon Quills' }, { id: 'prod_b', slug: 'black-pepper', name: 'Black Peppercorns' }];
     s.giftSets = [];
     s.cartItemsDeleted = 0;
+    s.webhookEvents = [];
     process.env.PAYHERE_MERCHANT_ID = 'MERCHANT_OK';
     vi.mocked(verifyPayHereNotification).mockReturnValue(true);
 });
@@ -341,6 +349,86 @@ describe('confirmOrderPaid — order confirmation email', () => {
         s.orders[0]!.guestEmail = null;
         await confirmOrderPaid('order_1', 'ref', 'Stub');
         expect(sendOrderConfirmation).not.toHaveBeenCalled();
+    });
+});
+
+describe('confirmOrderPaid — admin new-order notification (roadmap: operational hardening)', () => {
+    it('notifies the admin once on the first PAID flip and not on a duplicate', async () => {
+        await confirmOrderPaid('order_1', 'ref', 'Stripe');
+        await confirmOrderPaid('order_1', 'ref', 'Stripe');
+
+        expect(sendNewOrderAdminNotification).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(sendNewOrderAdminNotification).mock.calls[0]![0]).toMatchObject({
+            orderId: 'order_1', currency: 'LKR', market: 'LOCAL', itemCount: 2,
+        });
+    });
+
+    it('still notifies the admin for a guest order with no email at all', async () => {
+        s.orders[0]!.userId = null;
+        s.orders[0]!.guestEmail = null;
+        await confirmOrderPaid('order_1', 'ref', 'Stub');
+        expect(sendNewOrderAdminNotification).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ── webhook event log (roadmap: replay/dispute debugging) ───────────────
+describe('stripeWebhook — event log', () => {
+    const stripeReq = () => ({ headers: { 'stripe-signature': 'sig' }, body: Buffer.from('{}') }) as any;
+
+    it('logs every verified delivery verbatim, linked to the order via metadata', async () => {
+        vi.mocked(constructWebhookEvent).mockReturnValue({
+            id: 'evt_1',
+            type: 'payment_intent.succeeded',
+            data: { object: { id: 'pi_123', metadata: { orderId: 'order_1' } } },
+        } as any);
+
+        await stripeWebhook(stripeReq(), mockRes());
+
+        expect(s.webhookEvents).toHaveLength(1);
+        expect(s.webhookEvents[0]).toMatchObject({
+            gateway: 'Stripe', eventType: 'payment_intent.succeeded', eventId: 'evt_1', orderId: 'order_1',
+        });
+    });
+
+    it('logs a delivery it cannot resolve to an order with orderId null, without throwing', async () => {
+        vi.mocked(constructWebhookEvent).mockReturnValue({
+            id: 'evt_2',
+            type: 'charge.dispute.created',
+            data: { object: { id: 'ch_1' } },
+        } as any);
+
+        await stripeWebhook(stripeReq(), mockRes());
+
+        expect(s.webhookEvents).toHaveLength(1);
+        expect(s.webhookEvents[0]).toMatchObject({ gateway: 'Stripe', eventType: 'charge.dispute.created', orderId: null });
+    });
+
+    it('never logs when signature verification fails', async () => {
+        vi.mocked(constructWebhookEvent).mockImplementation(() => { throw new Error('bad sig'); });
+        await stripeWebhook(stripeReq(), mockRes());
+        expect(s.webhookEvents).toHaveLength(0);
+    });
+});
+
+describe('payHereWebhook — event log', () => {
+    it('logs a verified notification with the PayHere payment_id as eventId', async () => {
+        await payHereWebhook(payHereReq(), mockRes());
+
+        expect(s.webhookEvents).toHaveLength(1);
+        expect(s.webhookEvents[0]).toMatchObject({
+            gateway: 'PayHere', eventType: '2', eventId: 'ph_pay_1', orderId: 'order_1',
+        });
+    });
+
+    it('never logs a notification with an invalid signature', async () => {
+        vi.mocked(verifyPayHereNotification).mockReturnValue(false);
+        await payHereWebhook(payHereReq(), mockRes());
+        expect(s.webhookEvents).toHaveLength(0);
+    });
+
+    it('never logs a notification for the wrong merchant', async () => {
+        await payHereWebhook(payHereReq({ merchant_id: 'SOMEONE_ELSE' }), mockRes());
+        expect(s.webhookEvents).toHaveLength(0);
     });
 });
 

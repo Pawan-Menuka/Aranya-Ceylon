@@ -575,10 +575,15 @@ Ordered by value-for-effort. None are bugs; all are revenue or trust levers.
 **Operational / invisible**
 11. **Error monitoring + structured logging** — Sentry (or similar); production debugging is currently
     `console.log` with emojis.
-12. **Webhook event log table** — persist raw gateway events for replay and dispute debugging. You'll
-    want this the first time a payment "disappears".
-13. **Admin notification on new orders** — the alert merchants actually care about (low-stock alerts
-    exist; this doesn't).
+12. ✅ **DONE (2026-09-04)** — ~~Webhook event log table~~ — every verified Stripe/PayHere delivery is
+    now persisted verbatim in `WebhookEvent` (gateway, event type, gateway event id, best-effort order
+    link, raw payload), logged in `webhook.controller.ts` right after signature verification and before
+    branching on the event. Best-effort and outside any order transaction, so a logging failure never
+    blocks a gateway ack or rolls back a payment.
+13. ✅ **DONE (2026-09-04)** — ~~Admin notification on new orders~~ — `confirmOrderPaid` now emails
+    `ADMIN_EMAIL` once per order, on the same first PENDING→PAID flip that triggers the customer's
+    confirmation email (so retries/duplicates never double-notify), regardless of whether the order has
+    a customer email to send its own confirmation to.
 14. **Currency display conversion** — charge USD internationally, *display* approximate LKR alongside.
 15. **Redis/in-memory caching** — product catalog reads + a shared rate-limit store (pairs with #10).
 
