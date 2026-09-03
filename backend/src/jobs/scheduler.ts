@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { prisma } from '../index.js';
 import { sendLowStockAlert } from '../services/email.service.js';
 import { revalidateFrontend } from '../lib/revalidate.js';
+import { cancelOrderAndReleaseStock } from '../controllers/webhook.controller.js';
 
 // --- Job 1: Publish scheduled blog posts ---
 // Runs every minute. Checks for posts where scheduledAt <= now
@@ -96,20 +97,30 @@ export function startLowStockAlertJob() {
 // Runs hourly. Cancels orders stuck in PENDING for more than 24h — a failed or
 // abandoned checkout. This is the real cancellation path now that the payment
 // webhooks no longer cancel on a single failed attempt (#16), since the same
-// PaymentIntent / PayHere order can be retried. The `status: 'PENDING'` guard
-// makes it race-safe against a late successful payment.
+// PaymentIntent / PayHere order can be retried.
+//
+// Goes through cancelOrderAndReleaseStock (one order at a time, not a bulk
+// updateMany) because each stale order reserved real stock at checkout-intent
+// creation (roadmap: stock reservation at checkout) that must be released
+// back — a bulk status flip would silently leak that stock forever. The
+// per-order `status: 'PENDING'` guard inside it is still race-safe against a
+// payment that completes in the gap between this query and the cancel call.
 const STALE_ORDER_HOURS = 24;
 
 export function startStaleOrderCancellationJob() {
     cron.schedule('0 * * * *', async () => {
         try {
             const cutoff = new Date(Date.now() - STALE_ORDER_HOURS * 60 * 60 * 1000);
-            const { count } = await prisma.order.updateMany({
+            const stale = await prisma.order.findMany({
                 where: { status: 'PENDING', createdAt: { lt: cutoff } },
-                data: { status: 'CANCELLED' },
+                select: { id: true },
             });
 
-            if (count > 0) console.log(`🛒 Cancelled ${count} stale unpaid order(s)`);
+            for (const o of stale) {
+                await cancelOrderAndReleaseStock(o.id, `Cancelled — stale PENDING order older than ${STALE_ORDER_HOURS}h.`);
+            }
+
+            if (stale.length > 0) console.log(`🛒 Cancelled ${stale.length} stale unpaid order(s)`);
         } catch (err) {
             console.error('[CRON] Stale order cancellation job failed:', err);
         }

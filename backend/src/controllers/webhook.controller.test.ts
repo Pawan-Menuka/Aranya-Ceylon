@@ -1,10 +1,16 @@
 /**
- * Regression tests for the payment webhooks (KNOWN_ISSUES #3, #4, #15, #16).
+ * Regression tests for the payment webhooks (KNOWN_ISSUES #3, #4, #15, #16)
+ * and stock reservation at checkout (roadmap).
  *
- *  #3  — idempotency: a duplicate delivery must NOT decrement stock again.
- *  #4  — stock decrement is atomic, never oversells; shortfalls are flagged.
+ *  #3  — idempotency: a duplicate delivery must NOT re-process the same payment.
+ *  #4  — regular-item stock is reserved at checkout-intent time, not here —
+ *        confirmOrderPaid must never touch it (superseded the old oversell
+ *        detect-and-flag path). Gift-component stock is still decremented
+ *        here (remaining-surfaces audit #11) and is separately tested.
  *  #15 — PayHere webhook rejects wrong merchant_id and mismatched amount.
- *  #16 — a failed payment does NOT cancel the order (retry is allowed).
+ *  #16 — a failed payment does NOT cancel the order (retry is allowed); an
+ *        explicit cancellation does, and must release the reserved stock
+ *        (cancelOrderAndReleaseStock).
  *
  * Uses an in-memory fake of prisma that models the conditional updateMany
  * semantics the real fixes rely on. No DB needed.
@@ -66,6 +72,14 @@ const store = vi.hoisted(() => {
                 v.stock -= data.stock.decrement;
                 return { count: 1 };
             },
+            // Used by cancelOrderAndReleaseStock to release stock reserved at
+            // checkout-intent time (roadmap: stock reservation at checkout).
+            update: async ({ where, data }: any) => {
+                const v = s.variants.find((x) => x.id === where.id);
+                if (!v) throw new Error('NOT_FOUND');
+                if (data.stock?.increment !== undefined) v.stock += data.stock.increment;
+                return v;
+            },
             findFirst: async ({ where }: any) => {
                 const marketOk = (v: VariantRow) =>
                     where.market === undefined ||
@@ -118,7 +132,7 @@ vi.mock('../services/stripe.service.js', () => ({ constructWebhookEvent: vi.fn()
 vi.mock('../services/payhere.service.js', () => ({ verifyPayHereNotification: vi.fn() }));
 vi.mock('../services/email.service.js', () => ({ sendOrderConfirmation: vi.fn().mockResolvedValue(undefined) }));
 
-import { confirmOrderPaid, stripeWebhook, payHereWebhook } from './webhook.controller.js';
+import { confirmOrderPaid, cancelOrderAndReleaseStock, stripeWebhook, payHereWebhook } from './webhook.controller.js';
 import { constructWebhookEvent } from '../services/stripe.service.js';
 import { verifyPayHereNotification } from '../services/payhere.service.js';
 import { sendOrderConfirmation } from '../services/email.service.js';
@@ -162,17 +176,17 @@ beforeEach(() => {
 
 // ── #3 / #4 ─────────────────────────────────────────────────────────────
 describe('confirmOrderPaid — #3 idempotency', () => {
-    it('marks the order PAID and decrements stock once', async () => {
+    it('marks the order PAID exactly once, without touching regular-item stock', async () => {
         await confirmOrderPaid('order_1', 'ref', 'Stripe');
         expect(s.orders[0]!.status).toBe('PAID');
-        expect(s.variants.find((v) => v.id === 'var_a')!.stock).toBe(8);
+        expect(s.variants.find((v) => v.id === 'var_a')!.stock).toBe(10); // unchanged — reserved earlier at checkout
         expect(s.cartItemsDeleted).toBe(1);
     });
 
     it('is a no-op on a duplicate delivery', async () => {
         await confirmOrderPaid('order_1', 'ref', 'Stripe');
         await confirmOrderPaid('order_1', 'ref', 'Stripe');
-        expect(s.variants.find((v) => v.id === 'var_a')!.stock).toBe(8); // not 6
+        expect(s.variants.find((v) => v.id === 'var_a')!.stock).toBe(10); // untouched either way
         expect(s.events.filter((e) => e.note.includes('Payment confirmed'))).toHaveLength(1);
     });
 
@@ -184,13 +198,50 @@ describe('confirmOrderPaid — #3 idempotency', () => {
     });
 });
 
-describe('confirmOrderPaid — #4 oversell handling', () => {
-    it('flags oversold lines but still marks the order PAID', async () => {
-        s.variants.find((v) => v.id === 'var_a')!.stock = 1;
+describe('confirmOrderPaid — #4 stock reservation superseded the old oversell path', () => {
+    it('never touches regular-item variant stock — it was already reserved at checkout-intent time', async () => {
+        // Previously confirmOrderPaid decremented stock here and flagged an
+        // "OVERSOLD" event on insufficient stock. Stock is now reserved
+        // earlier, at checkout-intent creation (see checkout.controller.ts),
+        // so confirmation must leave it untouched regardless of its value.
+        s.variants.find((v) => v.id === 'var_a')!.stock = 1; // even "already low"
         await confirmOrderPaid('order_1', 'ref', 'PayHere');
         expect(s.orders[0]!.status).toBe('PAID');
-        expect(s.variants.find((v) => v.id === 'var_a')!.stock).toBe(1);
-        expect(s.events.some((e) => e.note.includes('OVERSOLD'))).toBe(true);
+        expect(s.variants.find((v) => v.id === 'var_a')!.stock).toBe(1); // unchanged
+        expect(s.events.some((e) => e.note.includes('OVERSOLD'))).toBe(false);
+    });
+});
+
+describe('cancelOrderAndReleaseStock', () => {
+    it('releases every item\'s reserved stock and marks the order CANCELLED', async () => {
+        const beforeA = s.variants.find((v) => v.id === 'var_a')!.stock;
+        const beforeB = s.variants.find((v) => v.id === 'var_b')!.stock;
+
+        await cancelOrderAndReleaseStock('order_1', 'test cancel');
+
+        expect(s.orders[0]!.status).toBe('CANCELLED');
+        expect(s.variants.find((v) => v.id === 'var_a')!.stock).toBe(beforeA + 2); // qty 2 from beforeEach
+        expect(s.variants.find((v) => v.id === 'var_b')!.stock).toBe(beforeB + 1); // qty 1
+        expect(s.events.some((e) => e.note === 'test cancel')).toBe(true);
+    });
+
+    it('never releases stock for an order that already got PAID (idempotent against a race)', async () => {
+        await confirmOrderPaid('order_1', 'ref', 'Stripe');
+        const stockAfterPaid = s.variants.find((v) => v.id === 'var_a')!.stock;
+
+        await cancelOrderAndReleaseStock('order_1', 'late cancel attempt');
+
+        expect(s.orders[0]!.status).toBe('PAID'); // not flipped to CANCELLED
+        expect(s.variants.find((v) => v.id === 'var_a')!.stock).toBe(stockAfterPaid); // untouched
+    });
+
+    it('does not double-release stock when called twice on an already-cancelled order', async () => {
+        await cancelOrderAndReleaseStock('order_1', 'first cancel');
+        const stockAfterFirstCancel = s.variants.find((v) => v.id === 'var_a')!.stock;
+
+        await cancelOrderAndReleaseStock('order_1', 'second cancel attempt');
+
+        expect(s.variants.find((v) => v.id === 'var_a')!.stock).toBe(stockAfterFirstCancel);
     });
 });
 
@@ -353,9 +404,11 @@ describe('payHereWebhook — #16 failure handling', () => {
         expect(s.events.some((e) => e.note.includes('failed') && e.note.includes('retry'))).toBe(true);
     });
 
-    it('cancels the order on explicit cancellation (-1)', async () => {
+    it('cancels the order on explicit cancellation (-1) and releases its reserved stock', async () => {
+        const beforeA = s.variants.find((v) => v.id === 'var_a')!.stock;
         await payHereWebhook(payHereReq({ status_code: '-1' }), mockRes());
         expect(s.orders[0]!.status).toBe('CANCELLED');
+        expect(s.variants.find((v) => v.id === 'var_a')!.stock).toBe(beforeA + 2); // qty 2 released
     });
 });
 
@@ -374,7 +427,8 @@ describe('stripeWebhook — #16 failure handling', () => {
         expect(s.events.some((e) => e.note.includes('card_declined'))).toBe(true);
     });
 
-    it('cancels the order on payment_intent.canceled', async () => {
+    it('cancels the order on payment_intent.canceled and releases its reserved stock', async () => {
+        const beforeA = s.variants.find((v) => v.id === 'var_a')!.stock;
         vi.mocked(constructWebhookEvent).mockReturnValue({
             type: 'payment_intent.canceled',
             data: { object: { id: 'pi_123' } },
@@ -382,6 +436,7 @@ describe('stripeWebhook — #16 failure handling', () => {
 
         await stripeWebhook(stripeReq(), mockRes());
         expect(s.orders[0]!.status).toBe('CANCELLED');
+        expect(s.variants.find((v) => v.id === 'var_a')!.stock).toBe(beforeA + 2); // qty 2 released
     });
 
     it('confirms the order on payment_intent.succeeded', async () => {

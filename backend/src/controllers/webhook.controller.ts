@@ -8,7 +8,10 @@ import { prisma } from '../index.js';
 // Called by both Stripe and PayHere handlers after payment is confirmed.
 // Idempotent and concurrency-safe: the PENDING→PAID flip is a conditional
 // updateMany INSIDE the transaction, so two concurrent webhook deliveries
-// (Stripe retries!) can never both decrement stock.
+// (Stripe retries!) can never both process the same payment twice (e.g.
+// double-decrementing gift-component stock, or double-counting a coupon).
+// Regular-item stock isn't touched here at all — it's reserved at checkout-
+// intent creation instead (see checkout.controller.ts).
 export async function confirmOrderPaid(orderId: string, paymentRef: string, gateway: string) {
     // The transaction returns the data needed for the confirmation email — but
     // ONLY when this delivery is the one that flipped PENDING→PAID, so retries
@@ -30,22 +33,13 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
         });
         if (!order) return null;
 
-        // 2. Decrement stock with an atomic guard (#4): the `stock >= qty`
-        //    filter both checks and decrements in one statement, so stock
-        //    never goes negative even under concurrency, and the DB CHECK
-        //    constraint is a pure backstop. Items that can't be satisfied
-        //    are collected and flagged — the customer has already paid, so
-        //    the order stays PAID and ops handles the oversell.
-        const oversold: string[] = [];
-        for (const item of order.items) {
-            const dec = await tx.variant.updateMany({
-                where: { id: item.variantId, stock: { gte: item.quantity } },
-                data: { stock: { decrement: item.quantity } },
-            });
-            if (dec.count === 0) oversold.push(item.variantId);
-        }
-
-        // 3. Log order event for the timeline shown in /account/orders
+        // 2. Log order event for the timeline shown in /account/orders.
+        // Regular-item stock is NOT decremented here — it was already
+        // reserved atomically at checkout-intent creation (roadmap: stock
+        // reservation at checkout; see checkout.controller.ts), which closes
+        // the race this used to only detect-and-flag after the customer had
+        // already paid. Cancelling a PENDING order releases that reservation
+        // — see cancelOrderAndReleaseStock below.
         await tx.orderEvent.create({
             data: {
                 orderId,
@@ -54,19 +48,7 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
             },
         });
 
-        // 3b. Flag any oversold lines for manual fulfilment review
-        if (oversold.length > 0) {
-            await tx.orderEvent.create({
-                data: {
-                    orderId,
-                    status: 'PAID',
-                    note: `⚠ OVERSOLD — insufficient stock for variant(s): ${oversold.join(', ')}. Needs manual review (backorder or refund).`,
-                },
-            });
-            console.error(`⚠ Order ${orderId} oversold variants: ${oversold.join(', ')}`);
-        }
-
-        // 3c. Gift-box orders also decrement each listed component's real
+        // 3. Gift-box orders also decrement each listed component's real
         // stock (remaining-surfaces audit #11) — previously only the gift
         // box's own (deliberately high, synthetic) Variant stock moved, so a
         // component could sell out on its own product page while a box
@@ -158,6 +140,37 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
     }
 }
 
+// ── Cancel a PENDING order and release its reserved stock ───────────
+// Stock for a regular line item is reserved (decremented) at checkout-intent
+// creation, not at payment time — see checkout.controller.ts. If the order
+// never gets paid (explicit gateway cancellation, or the stale-order cron
+// sweep after 24h), that reservation must be released back to real stock,
+// or it's gone forever. Idempotent and concurrency-safe the same way
+// confirmOrderPaid is: the PENDING→CANCELLED flip is a conditional
+// updateMany, so calling this twice (or racing a late successful payment)
+// can never release stock twice or cancel an order that just got paid.
+export async function cancelOrderAndReleaseStock(orderId: string, note: string) {
+    await prisma.$transaction(async (tx) => {
+        const claimed = await tx.order.updateMany({
+            where: { id: orderId, status: 'PENDING' },
+            data: { status: 'CANCELLED' },
+        });
+        if (claimed.count === 0) return; // already paid, already cancelled, or unknown order
+
+        const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
+        if (!order) return;
+
+        for (const item of order.items) {
+            await tx.variant.update({
+                where: { id: item.variantId },
+                data: { stock: { increment: item.quantity } },
+            });
+        }
+
+        await tx.orderEvent.create({ data: { orderId, status: 'CANCELLED', note } });
+    });
+}
+
 // ── Stripe webhook ─────────────────────────────────────────────────
 // Handles international market payments (USD).
 // express.raw() must be used on this route — see webhook.routes.ts
@@ -204,12 +217,16 @@ export async function stripeWebhook(req: Request, res: Response) {
             break;
         }
         case 'payment_intent.canceled': {
-            // Explicit cancellation (e.g. PI abandoned/expired) — cancel if open.
+            // Explicit cancellation (e.g. PI abandoned/expired) — cancel if
+            // open and release the stock reserved at checkout-intent time.
             const pi = event.data.object;
-            await prisma.order.updateMany({
-                where: { paymentIntentId: pi.id, status: 'PENDING' },
-                data: { status: 'CANCELLED' },
+            const order = await prisma.order.findUnique({
+                where: { paymentIntentId: pi.id },
+                select: { id: true },
             });
+            if (order) {
+                await cancelOrderAndReleaseStock(order.id, 'Cancelled via Stripe payment_intent.canceled.');
+            }
             break;
         }
         default:
@@ -285,11 +302,9 @@ export async function payHereWebhook(req: Request, res: Response) {
 
         await confirmOrderPaid(order_id, payment_id, 'PayHere');
     } else if (status_code === '-1') {
-        // Customer explicitly cancelled — cancel the order if still open.
-        await prisma.order.updateMany({
-            where: { id: order_id, status: 'PENDING' },
-            data: { status: 'CANCELLED' },
-        });
+        // Customer explicitly cancelled — cancel the order if still open and
+        // release the stock reserved at checkout-intent time.
+        await cancelOrderAndReleaseStock(order_id, 'Cancelled via PayHere (customer cancelled).');
         console.log(`❌ PayHere payment cancelled for order ${order_id}`);
     } else if (status_code === '-2') {
         // Payment failed — leave PENDING so the customer can retry (#16).
