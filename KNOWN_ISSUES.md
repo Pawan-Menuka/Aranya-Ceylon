@@ -555,8 +555,11 @@ Ordered by value-for-effort. None are bugs; all are revenue or trust levers.
    (`jobs/scheduler.ts`); one job + one email template. Highest-ROI feature in e-commerce.
 4. **i18n** — Sinhala/Tamil for LOCAL, English for INTERNATIONAL. The market split is already in the
    architecture; language is its natural twin.
-5. **Stock reservation at checkout** — hold inventory ~15 min when an intent is created; properly closes
-   the oversell window that #4 only patches.
+5. ✅ **DONE (2026-09-03)** — ~~Stock reservation at checkout~~ — stock is now reserved (decremented)
+   atomically inside the same transaction as order creation in `checkout.controller.ts`, not left as a
+   read-only check. Reservation is released back via `cancelOrderAndReleaseStock()` in
+   `webhook.controller.ts` on explicit gateway cancellation or the stale-order cron sweep (24h). Closes
+   the #4 oversell window at its source instead of only detecting it after the customer had already paid.
 
 **Medium value**
 6. **Order-tracking integration** — local couriers (Koombiyo/Pronto) for LK, AfterShip for international,

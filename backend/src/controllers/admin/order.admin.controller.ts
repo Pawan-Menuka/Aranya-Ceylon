@@ -111,8 +111,26 @@ export async function updateOrderStatus(req: Request, res: Response) {
                 status,
                 ...(trackingNumber && { trackingNumber }),
             },
-            include: { user: true },
+            include: { user: true, items: true },
         });
+
+        // A still-PENDING order already reserved its stock at checkout-intent
+        // creation (roadmap: stock reservation at checkout). If an admin
+        // cancels it here before it was ever paid, that reservation must be
+        // released — mirrors refundOrder's restock-on-reversal above; without
+        // this an admin cancellation would silently leak the reserved stock
+        // forever (a PAID→CANCELLED/REFUNDED transition is refundOrder's job
+        // and already restocks there, so this only fires for PENDING).
+        if (before.status === 'PENDING' && status === 'CANCELLED') {
+            await Promise.all(
+                updated.items.map((item) =>
+                    tx.variant.update({
+                        where: { id: item.variantId },
+                        data: { stock: { increment: item.quantity } },
+                    }),
+                ),
+            );
+        }
 
         await tx.orderEvent.create({
             data: { orderId: id, status, note: note ?? `Status updated to ${status}` },

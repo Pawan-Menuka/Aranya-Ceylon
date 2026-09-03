@@ -1,6 +1,9 @@
 /**
- * Tests for checkout: market re-validation (#19), guest checkout (#17), and
- * stub vs live payment routing.
+ * Tests for checkout: market re-validation (#19), guest checkout (#17), stub
+ * vs live payment routing, and stock reservation at checkout (roadmap) — the
+ * atomic reserve-then-create-order transaction that replaced a read-only
+ * stock check, closing the race where two concurrent checkouts for the last
+ * unit could both pass validation and only one would fail at payment time.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
@@ -8,6 +11,11 @@ const store = vi.hoisted(() => ({
     cart: null as any,
     createdOrder: { id: 'order_1' },
     lastOrderData: null as any,
+    // Live stock, separate from cart.items[].variant.stock (a moments-old
+    // cached read) — mutated only by the atomic tx.variant.updateMany below,
+    // so tests can simulate a race: the cache says available, live stock
+    // doesn't. Keyed by variantId.
+    variantStock: {} as Record<string, number>,
 }));
 
 const couponStore = vi.hoisted(() => ({
@@ -22,13 +30,47 @@ vi.mock('../index.js', () => ({
             update: async (args: any) => { couponStore.cartUpdated = args.data; return store.cart; },
         },
         coupon: { findUnique: async () => couponStore.coupon },
+        // Used only to build a helpful error response AFTER a rolled-back
+        // reservation — see the StockReservationError catch block.
+        variant: {
+            findMany: async ({ where }: any) => {
+                const ids: string[] = where.id.in;
+                return ids.map((id) => ({ id, stock: store.variantStock[id] ?? 0 }));
+            },
+        },
         order: {
-            create: async (args: any) => { store.lastOrderData = args.data; return store.createdOrder; },
             update: async () => store.createdOrder,
             findUnique: async () => store.createdOrder,
         },
         address: { create: async () => ({}) },
         user: { findUnique: async () => ({ name: 'Test', email: 't@e.com' }) },
+        // Models the real atomic reserve-then-create transaction: each
+        // tx.variant.updateMany call decrements live stock only if enough is
+        // available, and any failure part-way through must be observable as
+        // "nothing committed" (tests assert stock is unchanged after a 409).
+        $transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+            const snapshot = { ...store.variantStock };
+            const tx = {
+                variant: {
+                    updateMany: async ({ where, data }: any) => {
+                        const cur = store.variantStock[where.id] ?? 0;
+                        const minStock = where.stock?.gte ?? 0;
+                        if (cur < minStock) return { count: 0 };
+                        store.variantStock[where.id] = cur - data.stock.decrement;
+                        return { count: 1 };
+                    },
+                },
+                order: {
+                    create: async (args: any) => { store.lastOrderData = args.data; return store.createdOrder; },
+                },
+            };
+            try {
+                return await fn(tx);
+            } catch (err) {
+                store.variantStock = snapshot; // roll back partial decrements
+                throw err;
+            }
+        },
     },
 }));
 
@@ -80,9 +122,28 @@ function cartWith(variant: { market: string; currency: string }) {
     };
 }
 
+function multiItemCart() {
+    return {
+        id: 'cart_1', couponId: null,
+        items: [
+            {
+                productId: 'p1', variantId: 'v1', quantity: 1,
+                variant: { id: 'v1', stock: 10, price: '50.00', market: 'INTERNATIONAL', currency: 'USD' },
+                product: { id: 'p1' },
+            },
+            {
+                productId: 'p2', variantId: 'v2', quantity: 1,
+                variant: { id: 'v2', stock: 10, price: '25.00', market: 'INTERNATIONAL', currency: 'USD' },
+                product: { id: 'p2' },
+            },
+        ],
+    };
+}
+
 beforeEach(() => {
     store.cart = cartWith({ market: 'INTERNATIONAL', currency: 'USD' });
     store.lastOrderData = null;
+    store.variantStock = { v1: 10, v2: 10 };
     vi.unstubAllEnvs(); // default → stub payments
     vi.clearAllMocks();
 });
@@ -188,6 +249,42 @@ describe('createIntent — P1-1 couponCode at checkout', () => {
         await createIntent(userReq({ body: { couponCode: 'SAVE10' } }), res);
         expect(res.statusCode).toBe(200);
         expect(couponStore.cartUpdated).toEqual({ couponId: 'c1' });
+    });
+});
+
+describe('createIntent — stock reservation at checkout (roadmap)', () => {
+    it('reserves (decrements) live stock atomically as part of order creation', async () => {
+        const res = mockRes();
+        await createIntent(userReq(), res);
+        expect(res.statusCode).toBe(200);
+        expect(store.variantStock.v1).toBe(9); // 10 - 1
+    });
+
+    it('rejects with 409 when live stock is insufficient, even though the cached cart read looked fine', async () => {
+        // The cart's own cached variant.stock still says 10 (loaded moments
+        // ago) — only the live store, checked atomically inside the
+        // transaction, reflects that someone else just took the last unit.
+        store.variantStock.v1 = 0;
+        const res = mockRes();
+        await createIntent(userReq(), res);
+
+        expect(res.statusCode).toBe(409);
+        expect(res.body.items).toEqual([
+            { productId: 'p1', variantId: 'v1', requested: 1, available: 0 },
+        ]);
+        expect(store.lastOrderData).toBeNull(); // no order was created
+    });
+
+    it('rolls back an already-reserved line when a LATER line in the same order fails', async () => {
+        store.cart = multiItemCart();
+        store.variantStock = { v1: 10, v2: 0 }; // v1 has stock, v2 doesn't
+
+        const res = mockRes();
+        await createIntent(userReq(), res);
+
+        expect(res.statusCode).toBe(409);
+        expect(store.variantStock.v1).toBe(10); // NOT left decremented
+        expect(store.lastOrderData).toBeNull();
     });
 });
 

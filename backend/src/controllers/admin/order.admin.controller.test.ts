@@ -9,7 +9,15 @@ const state = vi.hoisted(() => ({
 }));
 
 const tx = {
-    order: { updateMany: vi.fn(async () => ({ count: 1 })) },
+    order: {
+        updateMany: vi.fn(async () => ({ count: 1 })),
+        // updateOrderStatus uses .update() (singular), not updateMany — this
+        // was missing from the mock entirely before (the one pre-existing
+        // updateOrderStatus test never reached the transaction to exercise
+        // it). Returns the merged row so callers reading `updated.items` see
+        // the order's real line items.
+        update: vi.fn(async (args: any) => ({ ...state.order, ...args.data })),
+    },
     orderEvent: { create: vi.fn(async () => ({})) },
     variant: { update: vi.fn(async () => ({})) },
     coupon: { update: vi.fn(async () => ({})) },
@@ -109,5 +117,34 @@ describe('shipping status', () => {
     it('rejects SHIPPED without a tracking number before touching the database', async () => {
         await expect(updateOrderStatus({ params: { id: 'o1' }, body: { status: 'SHIPPED' } } as any, resDouble())).rejects.toThrow();
         expect(state.transactionCalls).toBe(0);
+    });
+});
+
+describe('updateOrderStatus — cancelling a PENDING order releases its reserved stock', () => {
+    it('releases stock when an admin cancels a still-PENDING order', async () => {
+        state.order.status = 'PENDING';
+        const res = resDouble();
+        await updateOrderStatus({ params: { id: 'o1' }, body: { status: 'CANCELLED' } } as any, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(tx.variant.update).toHaveBeenCalledWith({ where: { id: 'v1' }, data: { stock: { increment: 2 } } });
+    });
+
+    it('does not touch stock cancelling an already-PAID order — that is refundOrder\'s job', async () => {
+        state.order.status = 'PAID';
+        const res = resDouble();
+        await updateOrderStatus({ params: { id: 'o1' }, body: { status: 'CANCELLED' } } as any, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(tx.variant.update).not.toHaveBeenCalled();
+    });
+
+    it('does not touch stock for a non-cancellation status change', async () => {
+        state.order.status = 'PAID';
+        const res = resDouble();
+        await updateOrderStatus({ params: { id: 'o1' }, body: { status: 'PROCESSING' } } as any, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(tx.variant.update).not.toHaveBeenCalled();
     });
 });

@@ -1,7 +1,8 @@
 import cron from 'node-cron';
 import { prisma } from '../index.js';
-import { sendLowStockAlert } from '../services/email.service.js';
+import { sendLowStockAlert, sendAbandonedCartEmail } from '../services/email.service.js';
 import { revalidateFrontend } from '../lib/revalidate.js';
+import { cancelOrderAndReleaseStock } from '../controllers/webhook.controller.js';
 
 // --- Job 1: Publish scheduled blog posts ---
 // Runs every minute. Checks for posts where scheduledAt <= now
@@ -96,20 +97,30 @@ export function startLowStockAlertJob() {
 // Runs hourly. Cancels orders stuck in PENDING for more than 24h — a failed or
 // abandoned checkout. This is the real cancellation path now that the payment
 // webhooks no longer cancel on a single failed attempt (#16), since the same
-// PaymentIntent / PayHere order can be retried. The `status: 'PENDING'` guard
-// makes it race-safe against a late successful payment.
+// PaymentIntent / PayHere order can be retried.
+//
+// Goes through cancelOrderAndReleaseStock (one order at a time, not a bulk
+// updateMany) because each stale order reserved real stock at checkout-intent
+// creation (roadmap: stock reservation at checkout) that must be released
+// back — a bulk status flip would silently leak that stock forever. The
+// per-order `status: 'PENDING'` guard inside it is still race-safe against a
+// payment that completes in the gap between this query and the cancel call.
 const STALE_ORDER_HOURS = 24;
 
 export function startStaleOrderCancellationJob() {
     cron.schedule('0 * * * *', async () => {
         try {
             const cutoff = new Date(Date.now() - STALE_ORDER_HOURS * 60 * 60 * 1000);
-            const { count } = await prisma.order.updateMany({
+            const stale = await prisma.order.findMany({
                 where: { status: 'PENDING', createdAt: { lt: cutoff } },
-                data: { status: 'CANCELLED' },
+                select: { id: true },
             });
 
-            if (count > 0) console.log(`🛒 Cancelled ${count} stale unpaid order(s)`);
+            for (const o of stale) {
+                await cancelOrderAndReleaseStock(o.id, `Cancelled — stale PENDING order older than ${STALE_ORDER_HOURS}h.`);
+            }
+
+            if (stale.length > 0) console.log(`🛒 Cancelled ${stale.length} stale unpaid order(s)`);
         } catch (err) {
             console.error('[CRON] Stale order cancellation job failed:', err);
         }
@@ -132,6 +143,56 @@ export function startTokenPruningJob() {
     });
 }
 
+// --- Job 6: Abandoned-cart recovery ---
+// Runs hourly (offset 30 past, so it doesn't pile onto every other job at the
+// top of the hour). Emails a signed-in user whose cart has sat untouched for
+// a few hours — guest carts are never targeted, since no email is captured
+// before checkout, so there's nowhere to send a reminder. Sends at most once
+// per abandonment episode: getOrCreateCart clears abandonedEmailSentAt on
+// any cart activity, so a renewed-then-abandoned-again cart is eligible
+// again once it's gone quiet for another full window.
+const ABANDONED_CART_HOURS = 3;
+
+// Extracted from the cron callback so the actual targeting/sending logic is
+// directly unit-testable without faking node-cron.
+export async function runAbandonedCartRecovery(): Promise<number> {
+    const cutoff = new Date(Date.now() - ABANDONED_CART_HOURS * 60 * 60 * 1000);
+    const carts = await prisma.cart.findMany({
+        where: {
+            userId: { not: null },
+            updatedAt: { lt: cutoff },
+            abandonedEmailSentAt: null,
+            items: { some: {} },
+        },
+        include: {
+            user: { select: { email: true } },
+            items: { include: { product: { select: { name: true } } } },
+        },
+    });
+
+    for (const cart of carts) {
+        if (!cart.user?.email) continue;
+        await sendAbandonedCartEmail({
+            to: cart.user.email,
+            items: cart.items.map((item) => ({ name: item.product.name, quantity: item.quantity })),
+        }).catch((err) => console.error(`[CRON] Abandoned-cart email failed for cart ${cart.id}:`, err));
+        await prisma.cart.update({ where: { id: cart.id }, data: { abandonedEmailSentAt: new Date() } });
+    }
+
+    return carts.length;
+}
+
+export function startAbandonedCartRecoveryJob() {
+    cron.schedule('30 * * * *', async () => {
+        try {
+            const sent = await runAbandonedCartRecovery();
+            if (sent > 0) console.log(`📧 Sent ${sent} abandoned-cart recovery email(s)`);
+        } catch (err) {
+            console.error('[CRON] Abandoned-cart recovery job failed:', err);
+        }
+    });
+}
+
 // Start all jobs
 export function startAllJobs() {
     startScheduledPostsJob();
@@ -139,5 +200,6 @@ export function startAllJobs() {
     startLowStockAlertJob();
     startStaleOrderCancellationJob();
     startTokenPruningJob();
+    startAbandonedCartRecoveryJob();
     console.log('⏰ Cron jobs started');
 }
