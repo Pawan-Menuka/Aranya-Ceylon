@@ -10,8 +10,10 @@ jobs:
     needs: []
 
     env:
-      DATABASE_URL:      ${{ secrets.DATABASE_URL }}
-      DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # prisma.config.ts reads DIRECT_URL (not DIRECT_DATABASE_URL) for the
+      # non-pooled migration connection — keep this key name in sync with that.
+      DIRECT_URL: ${{ secrets.DIRECT_DATABASE_URL }}
 
     steps:
       - uses: actions/checkout@v7
