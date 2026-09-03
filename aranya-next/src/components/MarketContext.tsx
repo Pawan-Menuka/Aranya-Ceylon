@@ -33,11 +33,17 @@ export function MarketProvider({
 
   const setMarket = React.useCallback(
     (m: Market) => {
-      setMarketState(m); // optimistic
       setPending(true);
       overrideMarket(m)
+        // Flip the visible market only once the cookie is confirmed set —
+        // flipping immediately left a brief window where price components
+        // rendered the NEW market's label against data still fetched under
+        // the OLD market cookie (remaining-surfaces audit #20).
+        .then(() => setMarketState(m))
         .catch(() => {
-          // Offline / API down: keep the optimistic value for this session.
+          // Offline / API down: flip anyway so the switcher doesn't get
+          // stuck — there's no server cookie to disagree with this session.
+          setMarketState(m);
         })
         .finally(() => {
           setPending(false);

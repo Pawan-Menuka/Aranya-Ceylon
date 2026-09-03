@@ -211,7 +211,7 @@ export async function login(req: Request, res: Response) {
 
     return res.json({
         accessToken,
-        user: { id: user.id, name: user.name, email: user.email, role: user.role },
+        user: { id: user.id, name: user.name, email: user.email, role: user.role, phone: user.phone, newsletterOptIn: user.newsletterOptIn },
     });
 }
 
@@ -230,7 +230,7 @@ export async function refresh(req: Request, res: Response) {
 
         return res.json({
             accessToken,
-            user: { id: user.id, name: user.name, email: user.email, role: user.role },
+            user: { id: user.id, name: user.name, email: user.email, role: user.role, phone: user.phone, newsletterOptIn: user.newsletterOptIn },
         });
     } catch (err: unknown) {
         // Clear cookie on any token error
@@ -273,6 +273,7 @@ export async function getMe(req: Request, res: Response) {
             id: true, name: true, email: true,
             role: true, verified: true,
             twoFactorEnabled: true, createdAt: true,
+            phone: true, newsletterOptIn: true,
         },
     });
 
@@ -281,11 +282,15 @@ export async function getMe(req: Request, res: Response) {
 }
 
 export async function patchMe(req: Request, res: Response) {
-    const { name } = req.body as { name?: string };
+    const { name, phone, newsletterOptIn } = req.body as { name?: string; phone?: string; newsletterOptIn?: boolean };
     const user = await prisma.user.update({
         where: { id: req.user!.userId },
-        data: { ...(name !== undefined && { name: name.trim() }) },
-        select: { id: true, name: true, email: true, role: true, verified: true, createdAt: true },
+        data: {
+            ...(name !== undefined && { name: name.trim() }),
+            ...(phone !== undefined && { phone: phone.trim() }),
+            ...(newsletterOptIn !== undefined && { newsletterOptIn }),
+        },
+        select: { id: true, name: true, email: true, role: true, verified: true, createdAt: true, phone: true, newsletterOptIn: true },
     });
     return res.json({ user });
 }

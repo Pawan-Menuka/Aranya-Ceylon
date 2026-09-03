@@ -22,9 +22,20 @@ function refineVariantMarket<T extends { market: string; currency: string }>(v: 
 
 const variantInput = variantShape.superRefine(refineVariantMarket);
 
+// GET /products/:slug shares its path with three fixed public routes
+// (/products/featured, /bestsellers, /search), which are registered first and
+// always win — a product slugged exactly one of these would be permanently
+// unreachable via its own product page (remaining-surfaces audit #22). Reject
+// the collision at creation instead of reordering routes (which would make
+// one of the fixed listing endpoints the one that breaks instead).
+const RESERVED_PRODUCT_SLUGS = new Set(['featured', 'bestsellers', 'search']);
+const slugSchema = z.string().min(2).max(200)
+    .regex(/^[a-z0-9-]+$/, 'Slug must be lowercase with hyphens only')
+    .refine((s) => !RESERVED_PRODUCT_SLUGS.has(s), { message: `Slug can't be one of: ${[...RESERVED_PRODUCT_SLUGS].join(', ')} (reserved by the catalog routes)` });
+
 export const createProductSchema = z.object({
     name: z.string().min(2).max(200),
-    slug: z.string().min(2).max(200).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase with hyphens only'),
+    slug: slugSchema,
     description: z.string().min(10),
     categoryId: z.string().min(1),
     certifications: z.array(z.string()).default([]),
@@ -44,7 +55,7 @@ export const createProductSchema = z.object({
 // variants absent from the array are removed (only if unreferenced by orders).
 export const updateProductSchema = z.object({
     name: z.string().min(2).max(200).optional(),
-    slug: z.string().min(2).max(200).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase with hyphens only').optional(),
+    slug: slugSchema.optional(),
     description: z.string().min(10).optional(),
     categoryId: z.string().min(1).optional(),
     certifications: z.array(z.string()).optional(),
@@ -70,7 +81,10 @@ export const productFilterSchema = z.object({
     minPrice: z.coerce.number().min(0).optional(),
     maxPrice: z.coerce.number().min(0).optional(),
     sort: z.enum(['newest', 'price_asc', 'price_desc', 'bestselling']).default('newest'),
-    search: z.string().optional(),
+    // Capped like every other string field in this schema — an unbounded
+    // value feeds plainto_tsquery/similarity() on every request (remaining-
+    // surfaces audit #21).
+    search: z.string().max(200).optional(),
 }).superRefine((v, ctx) => {
     if (v.minPrice !== undefined && v.maxPrice !== undefined && v.minPrice > v.maxPrice) {
         ctx.addIssue({ code: 'custom', path: ['minPrice'], message: 'minPrice must be ≤ maxPrice' });

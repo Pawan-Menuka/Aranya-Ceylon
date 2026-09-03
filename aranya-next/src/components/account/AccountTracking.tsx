@@ -211,10 +211,6 @@ export function OrderDetailView({ order, market, address, onBack, onReorder }: {
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button onClick={() => onReorder(order)} className={market === "local" ? "btn btn-local" : "btn btn-intl"} style={{ width: "auto", padding: "12px 20px" }}>Reorder these spices</button>
-          <button style={{ width: "auto", padding: "12px 18px", background: "transparent", border: "1.5px solid var(--brand)", color: "var(--brand)", borderRadius: "var(--radius)", cursor: "pointer", fontFamily: "var(--font-ui)", fontWeight: 700, fontSize: 14, display: "inline-flex", alignItems: "center", gap: 8 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
-            Invoice
-          </button>
         </div>
       </div>
       <div className="ac-detail-cols" style={{ marginTop: 26 }}>
@@ -262,12 +258,6 @@ export function OrderDetailView({ order, market, address, onBack, onReorder }: {
                 <div style={{ color: "var(--muted)", marginTop: 6 }}>{address.phone}</div>
               </div>
             </div>
-          )}
-          {delivered && (
-            <button style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, background: "transparent", border: "1.5px solid var(--line)", color: "var(--muted)", borderRadius: 10, padding: "13px", cursor: "pointer", fontFamily: "var(--font-ui)", fontWeight: 700, fontSize: 13.5 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v5M12 16h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /></svg>
-              Report an issue with this order
-            </button>
           )}
         </div>
       </div>
