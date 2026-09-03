@@ -81,12 +81,16 @@ const BADGE_FROM_CERT = (p: Product): string => {
 
 function headlinePrice(p: Product, market: Market): string {
   const want = market === "local" ? "LKR" : "USD";
-  // Prefer a 100g variant, else the cheapest matching-currency variant.
+  // Prefer a 100g variant, else the cheapest matching-currency variant. A
+  // product with variants in only the OTHER market has none here — fall
+  // through to the "no price" sentinel below rather than reusing a
+  // wrong-currency variant's number under this market's symbol, which
+  // silently mislabeled the value (e.g. an LKR amount printed as "$"),
+  // ~150x off (remaining-surfaces audit #1).
   const matching = p.variants.filter((v) => v.currency === want);
-  const pool = matching.length ? matching : p.variants;
   const v =
-    pool.find((x) => x.weight === 100) ??
-    [...pool].sort((a, b) => parseFloat(a.price) - parseFloat(b.price))[0];
+    matching.find((x) => x.weight === 100) ??
+    [...matching].sort((a, b) => parseFloat(a.price) - parseFloat(b.price))[0];
   if (!v) return market === "local" ? "Rs 0" : "$0.00";
   return market === "local"
     ? "Rs " + Math.round(parseFloat(v.price)).toLocaleString("en-US")

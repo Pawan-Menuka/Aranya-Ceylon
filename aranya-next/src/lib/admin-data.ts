@@ -82,6 +82,7 @@ export interface WholesaleApp {
 export interface AdminProduct {
   name: string;
   latin: string;
+  flavour: string[];
   slug: string;
   sku: string;
   category: string;
@@ -343,6 +344,7 @@ function build(): AdminData {
     return {
       name: sp.name,
       latin: sp.latin,
+      flavour: [],
       slug: sp.name.toLowerCase().replace(/\s+/g, "-"),
       sku: "AC-" + sp.name.split(" ").map((w) => w[0]).join("").toUpperCase(),
       category: cat,
@@ -364,13 +366,13 @@ function build(): AdminData {
     };
   });
   PRODUCTS.push({
-    name: "Hill Country Gift Box", latin: "Curated set of five", slug: "hill-country-gift-box",
+    name: "Hill Country Gift Box", latin: "Curated set of five", flavour: [], slug: "hill-country-gift-box",
     sku: "AC-GIFT-01", category: "Gift Sets", color: "#9A6A3C", base: "#B57441", deep: "#7A451F", surface: "#F0E2D2",
     usd: "$58.00", lkr: "Rs 8,600", weights: ["Set of 5"], rating: 5.0, reviews: 64, badge: "New",
     stock: 36, status: "Active", sold30: 142, visible: true, featured: true,
   });
   PRODUCTS.push({
-    name: "Ceylon Curry Kit", latin: "Roast-and-grind blend set", slug: "ceylon-curry-kit",
+    name: "Ceylon Curry Kit", latin: "Roast-and-grind blend set", flavour: [], slug: "ceylon-curry-kit",
     sku: "AC-KIT-01", category: "Gift Sets", color: "#7A4A2A", base: "#8A5A34", deep: "#4A2A14", surface: "#EBDDCD",
     usd: "$34.00", lkr: "Rs 5,050", weights: ["Kit"], rating: 4.9, reviews: 38, badge: "New",
     stock: 0, status: "Out of stock", sold30: 88, visible: true, featured: false,

@@ -66,6 +66,52 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
             console.error(`⚠ Order ${orderId} oversold variants: ${oversold.join(', ')}`);
         }
 
+        // 3c. Gift-box orders also decrement each listed component's real
+        // stock (remaining-surfaces audit #11) — previously only the gift
+        // box's own (deliberately high, synthetic) Variant stock moved, so a
+        // component could sell out on its own product page while a box
+        // containing it kept selling indefinitely. `GiftSet.contents` has no
+        // direct FK (it's product names), so resolution is best-effort: match
+        // by exact product name, then by the box's `jar` weight (seed-gifts.ts
+        // packs exactly one jar-sized portion of each component per box) and
+        // the order's market. An unresolvable component is logged for manual
+        // review, never blocks the order.
+        const giftIssues: string[] = [];
+        for (const item of order.items) {
+            const product = await tx.product.findUnique({ where: { id: item.productId }, select: { slug: true } });
+            if (!product || !product.slug.startsWith('gift-')) continue;
+
+            const giftSet = await tx.giftSet.findUnique({ where: { slug: product.slug.slice('gift-'.length) } });
+            if (!giftSet) continue;
+
+            const jarGrams = parseInt(giftSet.jar, 10) || 50;
+            for (const name of giftSet.contents) {
+                const component = await tx.product.findFirst({ where: { name } });
+                if (!component) { giftIssues.push(`${name}: no matching product`); continue; }
+
+                const variant = await tx.variant.findFirst({
+                    where: { productId: component.id, weight: jarGrams, market: { in: [order.market, 'BOTH'] } },
+                });
+                if (!variant) { giftIssues.push(`${name}: no ${jarGrams}g variant for ${order.market}`); continue; }
+
+                const dec = await tx.variant.updateMany({
+                    where: { id: variant.id, stock: { gte: item.quantity } },
+                    data: { stock: { decrement: item.quantity } },
+                });
+                if (dec.count === 0) giftIssues.push(`${name}: insufficient stock`);
+            }
+        }
+        if (giftIssues.length > 0) {
+            await tx.orderEvent.create({
+                data: {
+                    orderId,
+                    status: 'PAID',
+                    note: `⚠ Gift-set component stock could not be fully decremented: ${giftIssues.join('; ')}. Needs manual review.`,
+                },
+            });
+            console.error(`⚠ Order ${orderId} gift-component stock issues: ${giftIssues.join('; ')}`);
+        }
+
         // 4. Count the coupon redemption now that payment succeeded (#5).
         if (order.couponId) {
             await tx.coupon.update({

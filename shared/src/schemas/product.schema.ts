@@ -47,6 +47,7 @@ export const createProductSchema = z.object({
     latin: z.string().optional().nullable(),
     originLabel: z.string().optional().nullable(),
     color: z.string().optional().nullable(),
+    flavour: z.array(z.string().max(50)).max(20).default([]),
     variants: z.array(variantInput).min(1, 'At least one variant is required'),
 });
 
@@ -65,6 +66,7 @@ export const updateProductSchema = z.object({
     latin: z.string().optional().nullable(),
     originLabel: z.string().optional().nullable(),
     color: z.string().optional().nullable(),
+    flavour: z.array(z.string().max(50)).max(20).optional(),
     variants: z.array(variantShape.extend({ id: z.string().optional() }).superRefine(refineVariantMarket)).min(1).optional(),
 });
 

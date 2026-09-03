@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import type { CatalogSpice } from "@/lib/types";
 import type { Recipe } from "@/lib/recipes-data";
-import { recipeTotal, fmtMinsLong, recipeServes, recipeSpices } from "@/lib/recipes-data";
+import { recipeTotal, fmtMinsLong, recipeServes } from "@/lib/recipes-data";
 import { Reveal } from "../primitives/Reveal";
 import { Liyawel, Eyebrow } from "../primitives/Motif";
 import { SpicePhoto } from "../primitives/SpicePhoto";
@@ -151,10 +151,9 @@ function SpiceRow({ p, market, accentBtn }: { p: CatalogSpice; market: "intl" | 
   );
 }
 
-function SpiceShop({ recipe }: { recipe: Recipe }) {
+function SpiceShop({ recipe, items }: { recipe: Recipe; items: CatalogSpice[] }) {
   const { market } = useMarket();
   const cart = useCart();
-  const items = recipeSpices(recipe);
   if (!items.length) return null;
   const accentBtn = market === "local" ? "var(--brand)" : "var(--accent)";
   const addAll = () => {
@@ -205,7 +204,7 @@ function RelatedRecipes({ related }: { related: Recipe[] }) {
   );
 }
 
-export function RecipeDetailClient({ recipe, related }: { recipe: Recipe; related: Recipe[] }) {
+export function RecipeDetailClient({ recipe, related, shopSpices }: { recipe: Recipe; related: Recipe[]; shopSpices: CatalogSpice[] }) {
   return (
     <div data-screen-label="Recipe detail">
       <header data-hero style={{ position: "relative", minHeight: "74vh", background: "#161412", color: "#FDFAF5", overflow: "hidden", display: "flex", alignItems: "flex-end" }}>
@@ -238,7 +237,7 @@ export function RecipeDetailClient({ recipe, related }: { recipe: Recipe; relate
         </div>
       </section>
 
-      <SpiceShop recipe={recipe} />
+      <SpiceShop recipe={recipe} items={shopSpices} />
       <RelatedRecipes related={related} />
     </div>
   );
