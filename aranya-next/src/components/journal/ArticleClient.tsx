@@ -76,7 +76,22 @@ function RelatedPosts({ related }: { related: Post[] }) {
   );
 }
 
+// Facebook/Pinterest have real web share-intent URLs; Instagram has no public
+// one for arbitrary links, so it falls back to copy-link (remaining-surfaces
+// audit #18 — these were previously bare non-interactive spans).
+function shareArticle(network: "instagram" | "facebook" | "pinterest", url: string, title: string, onCopied: () => void) {
+  if (network === "facebook") {
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, "_blank", "noopener,noreferrer,width=600,height=520");
+  } else if (network === "pinterest") {
+    window.open(`https://pinterest.com/pin/create/button/?url=${encodeURIComponent(url)}&description=${encodeURIComponent(title)}`, "_blank", "noopener,noreferrer,width=750,height=520");
+  } else {
+    try { navigator.clipboard.writeText(url); } catch { /* ignore */ }
+    onCopied();
+  }
+}
+
 export function ArticleClient({ post, blocks, related }: { post: Post; blocks: PostBlock[]; related: Post[] }) {
+  const [copied, setCopied] = React.useState(false);
   return (
     <div data-screen-label="Article">
       <header data-hero style={{ position: "relative", minHeight: "78vh", background: "#161412", color: "#FDFAF5", overflow: "hidden", display: "flex", alignItems: "flex-end" }}>
@@ -103,12 +118,13 @@ export function ArticleClient({ post, blocks, related }: { post: Post; blocks: P
           <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 28 }}>
             <span style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--muted)" }}>Share</span>
             <div style={{ display: "flex", gap: 10 }}>
-              {["instagram", "facebook", "pinterest"].map((s) => (
-                <span key={s} style={{ width: 36, height: 36, borderRadius: 999, border: "1px solid var(--line)", display: "grid", placeItems: "center" }}>
+              {(["instagram", "facebook", "pinterest"] as const).map((s) => (
+                <button key={s} type="button" aria-label={`Share on ${s}`} onClick={() => shareArticle(s, typeof window !== "undefined" ? window.location.href : "", post.title, () => { setCopied(true); setTimeout(() => setCopied(false), 1600); })} style={{ width: 36, height: 36, borderRadius: 999, border: "1px solid var(--line)", display: "grid", placeItems: "center", background: "none", cursor: "pointer" }}>
                   <span style={{ width: 6, height: 6, borderRadius: 9, background: post.accent }} />
-                </span>
+                </button>
               ))}
             </div>
+            {copied && <span style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--brand)", fontWeight: 600 }}>Link copied — share on Instagram</span>}
           </div>
         </div>
       </article>

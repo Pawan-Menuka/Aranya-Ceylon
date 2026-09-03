@@ -68,6 +68,27 @@ export async function sendVerificationEmail(params: { to: string; token: string 
     });
 }
 
+// --- Password reset ---
+// Link points at the FRONTEND (not the API): unlike email verification this
+// needs a form (choose a new password), not a one-click redirect.
+export async function sendPasswordResetEmail(params: { to: string; token: string }) {
+    const { to, token } = params;
+    const frontend = (process.env.FRONTEND_URL ?? 'http://localhost:3000').split(',')[0]!.trim();
+    const resetUrl = `${frontend}/account?resetToken=${encodeURIComponent(token)}`;
+
+    await resend.emails.send({
+        from: FROM,
+        to,
+        subject: 'Reset your Aranya Ceylon password',
+        html: `
+            <h2>Reset your password</h2>
+            <p>We received a request to reset your password. Click below to choose a new one.</p>
+            <p><a href="${resetUrl}">Reset my password</a></p>
+            <p>This link expires in 1 hour and can only be used once. If you didn't request this, you can safely ignore this email — your password will not change.</p>
+        `,
+    });
+}
+
 // --- Shipping notification ---
 export async function sendShippingNotification(params: {
     to: string;

@@ -32,6 +32,8 @@ export const resetPasswordSchema = z.object({
 
 export const patchMeSchema = z.object({
     name: z.string().min(2).max(100).optional(),
+    phone: z.string().max(30).optional(),
+    newsletterOptIn: z.boolean().optional(),
 });
 
 const addressFields = {

@@ -12,23 +12,25 @@ export const metadata: Metadata = {
   alternates: { canonical: "/journal" },
 };
 
-async function loadPosts(): Promise<Post[]> {
+async function loadPosts(): Promise<{ posts: Post[]; nextCursor: string | null }> {
   try {
     const res = await listBlog({ limit: 30 });
     const posts = (res.items || []).map(toPost);
-    if (posts.length) return posts;
+    // Cursor pagination only makes sense against the live API — the static
+    // JOURNAL fallback below is the whole demo set, nothing more to page to.
+    if (posts.length) return { posts, nextCursor: res.nextCursor };
   } catch {
     /* fall through */
   }
-  return JOURNAL;
+  return { posts: JOURNAL, nextCursor: null };
 }
 
 export default async function JournalPage() {
   const market = resolveMarket();
-  const posts = await loadPosts();
+  const { posts, nextCursor } = await loadPosts();
   return (
     <SiteChrome initialMarket={market}>
-      <JournalClient posts={posts} />
+      <JournalClient posts={posts} initialCursor={nextCursor} />
     </SiteChrome>
   );
 }

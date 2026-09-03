@@ -5,7 +5,7 @@ import { Seal } from "../primitives/Seal";
 import { Liyawel, Eyebrow } from "../primitives/Motif";
 import { useMarket } from "../MarketContext";
 import { useAuth } from "../AuthContext";
-import { resendVerification } from "@/lib/api/auth";
+import { resendVerification, forgotPassword, resetPassword } from "@/lib/api/auth";
 
 // Signed-out gate (ported from account.jsx SignedOutGate), wired to real auth.
 // Sign in / register call the AuthContext; on success the parent swaps to the
@@ -14,10 +14,11 @@ import { resendVerification } from "@/lib/api/auth";
 export function SignedOutGate() {
   const { market } = useMarket();
   const { signIn, signUp } = useAuth();
-  const [mode, setMode] = React.useState<"in" | "up">("in");
+  const [mode, setMode] = React.useState<"in" | "up" | "forgot" | "reset">("in");
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [resetToken, setResetToken] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
@@ -27,15 +28,23 @@ export function SignedOutGate() {
   // Surface the result of the email-verification link the backend redirects to
   // (/account?verified=1|0) — previously it pointed at a non-existent /login and
   // nothing read the flag, so the whole signup funnel dead-ended (FLOW-01).
+  // Also picks up ?resetToken=… from the password-reset email link.
   React.useEffect(() => {
     try {
-      const v = new URLSearchParams(window.location.search).get("verified");
+      const params = new URLSearchParams(window.location.search);
+      const v = params.get("verified");
       if (v === "1") {
         setMode("in");
         setNotice("Your email is verified — sign in below to continue.");
       } else if (v === "0") {
         setMode("in");
         setError("That verification link is invalid or has expired. Enter your email below and resend a new one.");
+      }
+
+      const rt = params.get("resetToken");
+      if (rt) {
+        setMode("reset");
+        setResetToken(rt);
       }
     } catch { /* no window / bad URL — ignore */ }
   }, []);
@@ -65,7 +74,7 @@ export function SignedOutGate() {
       if (mode === "in") {
         await signIn(email, password);
         // success: parent re-renders to the dashboard (user is now set)
-      } else {
+      } else if (mode === "up") {
         const res = await signUp(name, email, password);
         // Real registration establishes no session (verify email first); only the
         // offline demo path signs in. Show the pending notice and switch to sign-in.
@@ -74,6 +83,22 @@ export function SignedOutGate() {
           setMode("in");
           setPassword("");
         }
+      } else if (mode === "forgot") {
+        // Neutral response — same reassurance whether or not the email exists.
+        const res = await forgotPassword(email);
+        setNotice(res.message ?? "If that email is registered, a password reset link has been sent.");
+      } else if (mode === "reset") {
+        if (!resetToken) {
+          setError("This reset link is invalid. Please request a new one.");
+          return;
+        }
+        const res = await resetPassword(resetToken, password);
+        setNotice(res.message ?? "Your password has been reset. Please sign in.");
+        setMode("in");
+        setPassword("");
+        setResetToken(null);
+        // Drop the token from the URL so a page refresh can't replay it.
+        try { window.history.replaceState({}, "", window.location.pathname); } catch { /* ignore */ }
       }
     } catch (err) {
       setError((err as Error)?.message || "Something went wrong. Please try again.");
@@ -120,23 +145,23 @@ export function SignedOutGate() {
               <div style={{ position: "absolute", inset: 0, background: "radial-gradient(120% 100% at 100% 0%, rgba(29,158,117,.5), transparent 55%)" }} />
               <div style={{ position: "relative" }}>
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}><Seal size={46} tone="light" /></div>
-                <h2 className="disp" style={{ fontSize: 27, margin: 0, fontWeight: 600 }}>{mode === "in" ? "Welcome back" : "Create your account"}</h2>
-                <p style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "rgba(253,250,245,.78)", margin: "5px 0 0" }}>{mode === "in" ? "Sign in to track orders & reorder favourites" : "Save your details for a faster checkout"}</p>
+                <h2 className="disp" style={{ fontSize: 27, margin: 0, fontWeight: 600 }}>{mode === "in" ? "Welcome back" : mode === "up" ? "Create your account" : mode === "forgot" ? "Reset your password" : "Choose a new password"}</h2>
+                <p style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "rgba(253,250,245,.78)", margin: "5px 0 0" }}>{mode === "in" ? "Sign in to track orders & reorder favourites" : mode === "up" ? "Save your details for a faster checkout" : mode === "forgot" ? "Enter your email and we'll send you a reset link" : "Enter a new password for your account"}</p>
               </div>
             </div>
             <form onSubmit={submit} style={{ padding: "26px 32px 30px" }}>
               {mode === "up" && field("Full name", "text", "Your name", name, setName)}
-              {field("Email", "email", "you@example.com", email, setEmail)}
-              {field("Password", "password", "••••••••", password, setPassword)}
-              {/* No self-service reset route exists yet — point at support instead of
-                  a dead href="#" (BUG-25). TODO: wire /auth/forgot-password + reset page. */}
-              {mode === "in" && <div style={{ textAlign: "right", marginTop: -6, marginBottom: 12 }}><a href="mailto:hello@aranyaceylon.com?subject=Password%20reset%20request" style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, fontWeight: 600, color: "var(--brand)" }}>Forgot password?</a></div>}
+              {(mode === "in" || mode === "up" || mode === "forgot") && field("Email", "email", "you@example.com", email, setEmail)}
+              {(mode === "in" || mode === "up") && field("Password", "password", "••••••••", password, setPassword)}
+              {mode === "reset" && field("New password", "password", "••••••••", password, setPassword)}
+              {mode === "in" && <div style={{ textAlign: "right", marginTop: -6, marginBottom: 12 }}><button type="button" onClick={() => { setMode("forgot"); setError(null); setNotice(null); }} style={{ background: "none", border: 0, cursor: "pointer", padding: 0, fontFamily: "var(--font-ui)", fontSize: 12.5, fontWeight: 600, color: "var(--brand)" }}>Forgot password?</button></div>}
               {error && <div style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "#C0531F", fontWeight: 600, marginBottom: 12 }}>{error}</div>}
               {notice && <div style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--brand)", fontWeight: 600, marginBottom: 12 }}>{notice}</div>}
-              <button type="submit" className={accentBtn} disabled={busy} style={{ marginTop: 4, opacity: busy ? 0.7 : 1 }}>{busy ? "Please wait…" : mode === "in" ? "Sign in" : "Create account"}</button>
+              <button type="submit" className={accentBtn} disabled={busy} style={{ marginTop: 4, opacity: busy ? 0.7 : 1 }}>{busy ? "Please wait…" : mode === "in" ? "Sign in" : mode === "up" ? "Create account" : mode === "forgot" ? "Send reset link" : "Set new password"}</button>
               <div style={{ textAlign: "center", marginTop: 16, fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--muted)" }}>
-                {mode === "in" ? "New to Aranya? " : "Already have an account? "}
-                <button type="button" onClick={() => { setMode(mode === "in" ? "up" : "in"); setError(null); setNotice(null); }} style={{ background: "none", border: 0, cursor: "pointer", fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 700, color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: 3 }}>{mode === "in" ? "Create an account" : "Sign in"}</button>
+                {mode === "in" && <>New to Aranya?{" "}<button type="button" onClick={() => { setMode("up"); setError(null); setNotice(null); }} style={{ background: "none", border: 0, cursor: "pointer", fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 700, color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: 3 }}>Create an account</button></>}
+                {mode === "up" && <>Already have an account?{" "}<button type="button" onClick={() => { setMode("in"); setError(null); setNotice(null); }} style={{ background: "none", border: 0, cursor: "pointer", fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 700, color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: 3 }}>Sign in</button></>}
+                {(mode === "forgot" || mode === "reset") && <button type="button" onClick={() => { setMode("in"); setError(null); setNotice(null); setResetToken(null); }} style={{ background: "none", border: 0, cursor: "pointer", fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 700, color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: 3 }}>Back to sign in</button>}
               </div>
               {mode === "in" && (
                 <div style={{ textAlign: "center", marginTop: 10, fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--muted)" }}>
