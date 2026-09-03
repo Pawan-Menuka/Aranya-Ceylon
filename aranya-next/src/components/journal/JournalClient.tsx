@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import type { Post } from "@/lib/journal-data";
-import { JOURNAL_CATEGORIES, toPost } from "@/lib/journal-data";
+import { toPost } from "@/lib/journal-data";
 import { listBlog } from "@/lib/api/blog";
 import { Reveal } from "../primitives/Reveal";
 import { Liyawel, Eyebrow } from "../primitives/Motif";
@@ -85,10 +85,10 @@ function PostCard({ post }: { post: Post }) {
   );
 }
 
-function JournalChips({ value, onChange }: { value: string; onChange: (c: string) => void }) {
+function JournalChips({ value, onChange, categories }: { value: string; onChange: (c: string) => void; categories: string[] }) {
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 9, justifyContent: "center" }}>
-      {JOURNAL_CATEGORIES.map((c) => {
+      {categories.map((c) => {
         const on = value === c;
         return (
           <button key={c} onClick={() => onChange(c)} style={{ fontFamily: "var(--font-ui)", fontSize: 13.5, fontWeight: 700, cursor: "pointer", padding: "9px 18px", borderRadius: 999, transition: "all .15s", border: on ? "1px solid var(--brand)" : "1px solid var(--line)", background: on ? "var(--brand)" : "#fff", color: on ? "#fff" : "var(--ink)" }}>{c}</button>
@@ -104,6 +104,15 @@ export function JournalClient({ posts: initialPosts, initialCursor }: { posts: P
   const [cursor, setCursor] = React.useState(initialCursor);
   const [loadingMore, setLoadingMore] = React.useState(false);
   const featured = posts.find((p) => p.featured) || posts[0];
+  // Derived from whatever categories are actually present, instead of a fixed
+  // 3-value list — a live post tagged anything else used to be visible under
+  // "All" but permanently unreachable through any specific chip (remaining-
+  // surfaces audit #7).
+  const categories = React.useMemo(() => {
+    const seen = new Set<string>();
+    for (const p of posts) seen.add(p.category);
+    return ["All", ...seen];
+  }, [posts]);
   const grid = React.useMemo(() => {
     if (cat === "All") return posts.filter((p) => p.slug !== featured.slug);
     return posts.filter((p) => p.category === cat);
@@ -139,7 +148,7 @@ export function JournalClient({ posts: initialPosts, initialCursor }: { posts: P
       {cat === "All" && <FeaturedPost post={featured} />}
       <section style={{ background: "var(--bg)", padding: "48px 0 96px" }}>
         <div style={{ maxWidth: 1280, margin: "0 auto", padding: "0 40px" }}>
-          <div style={{ marginBottom: 44 }}><JournalChips value={cat} onChange={setCat} /></div>
+          <div style={{ marginBottom: 44 }}><JournalChips value={cat} onChange={setCat} categories={categories} /></div>
           {grid.length === 0 ? (
             <div style={{ textAlign: "center", padding: "70px 0" }}>
               <h3 className="disp" style={{ fontSize: 28, color: "var(--ink)", margin: 0 }}>No posts in {cat} yet</h3>

@@ -89,7 +89,7 @@ export function toCatalogSpice(p: Product): CatalogSpice {
     ...base,
     category: deriveCategory(p),
     form: deriveForm(p),
-    flavour: [],
+    flavour: p.flavour ?? [],
     popularity: p._count?.orderItems ?? 0,
     added: p.createdAt || new Date().toISOString(),
     featured: !!p.featured,

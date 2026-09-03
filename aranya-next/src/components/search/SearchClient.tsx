@@ -153,7 +153,9 @@ export function SearchClient({ products, journal, initialQuery = "" }: { product
 
   const productResults = React.useMemo(() => {
     if (!tokens.length) return [];
-    const num = (p: CatalogSpice) => parseFloat(p.usd.replace(/[^0-9.]/g, "")) || 0;
+    // Sort by the price the shopper is actually seeing, not always USD
+    // (remaining-surfaces audit #9).
+    const num = (p: CatalogSpice) => parseFloat((market === "local" ? p.lkr : p.usd).replace(/[^0-9.]/g, "")) || 0;
     const applySort = (list: CatalogSpice[]): CatalogSpice[] => {
       if (sort === "price-asc") return [...list].sort((a, b) => num(a) - num(b));
       if (sort === "price-desc") return [...list].sort((a, b) => num(b) - num(a));
@@ -170,7 +172,7 @@ export function SearchClient({ products, journal, initialQuery = "" }: { product
       .sort((a, b) => b[1] - a[1])
       .map(([p]) => p);
     return applySort(scored);
-  }, [remoteProducts, products, tokens, sort]);
+  }, [remoteProducts, products, tokens, sort, market]);
 
   const postResults = React.useMemo(() => {
     if (!tokens.length) return [];

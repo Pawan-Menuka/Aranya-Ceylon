@@ -43,6 +43,7 @@ export interface Product {
   status?: string; // "ACTIVE" | "ARCHIVED" | "DRAFT" (returned by admin endpoints)
   latin?: string;
   originLabel?: string;
+  flavour?: string[];
   color?: string; // #hex accent
   category?: { id: string; name: string; slug: string };
   variants: Variant[];

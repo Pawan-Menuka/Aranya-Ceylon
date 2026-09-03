@@ -1,17 +1,29 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../index.js';
 
 export async function listPublishedBlogs(limit = 10, cursor?: string) {
-    return prisma.blog.findMany({
-        where: { status: 'PUBLISHED' },
-        orderBy: { publishedAt: 'desc' },
-        take: limit + 1,
-        ...(cursor && { cursor: { id: cursor }, skip: 1 }),
-        select: {
-            id: true, title: true, slug: true,
-            tags: true, publishedAt: true,
-            seoDesc: true, viewCount: true,
-        },
-    });
+    try {
+        return await prisma.blog.findMany({
+            where: { status: 'PUBLISHED' },
+            orderBy: { publishedAt: 'desc' },
+            take: limit + 1,
+            ...(cursor && { cursor: { id: cursor }, skip: 1 }),
+            select: {
+                id: true, title: true, slug: true,
+                tags: true, publishedAt: true,
+                seoDesc: true, viewCount: true,
+            },
+        });
+    } catch (err) {
+        // A stale (since-deleted-post) or forged cursor makes Prisma throw
+        // P2025 while trying to locate the anchor row for `cursor: { id }`.
+        // Treat it as "no more results" instead of 500ing this public,
+        // unauthenticated endpoint (remaining-surfaces audit #6).
+        if (cursor && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+            return [];
+        }
+        throw err;
+    }
 }
 
 export async function getBlogBySlug(slug: string) {

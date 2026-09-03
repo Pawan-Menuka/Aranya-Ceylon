@@ -12,6 +12,37 @@ import { DEMO_MODE } from "@/lib/demo";
 const COURSES = ["Curries & Mains", "Sweet & Bakes", "Drinks", "Sides & Basics"];
 const DIFFICULTIES = ["Easy", "Medium", "Hard"];
 
+type IngredientGroup = { group?: string; items: string[] };
+
+// Ingredients are grouped ({ group?, items[] }) — represented as one line per
+// item, with a "# Group name" line starting a new group. Mirrors the
+// comma-separated-textarea pattern AdminGifts already uses for its `contents`
+// field, adapted for a nested shape.
+function parseIngredients(raw: string): IngredientGroup[] {
+  const groups: IngredientGroup[] = [];
+  let current: IngredientGroup | null = null;
+  for (const rawLine of raw.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (line.startsWith("# ")) {
+      current = { group: line.slice(2).trim(), items: [] };
+      groups.push(current);
+    } else {
+      if (!current) { current = { items: [] }; groups.push(current); }
+      current.items.push(line);
+    }
+  }
+  return groups;
+}
+function serializeIngredients(groups: IngredientGroup[] | undefined): string {
+  return (groups ?? [])
+    .map((g) => [...(g.group ? [`# ${g.group}`] : []), ...g.items].join("\n"))
+    .join("\n");
+}
+function linesToArray(raw: string): string[] {
+  return raw.split("\n").map((l) => l.trim()).filter(Boolean);
+}
+
 const TABS = [
   { key: "all", label: "All" },
   { key: "PUBLISHED", label: "Published" },
@@ -105,6 +136,14 @@ function RecipeEditor({ recipe, onClose, onSave, onDelete }: {
     (recipe.status as "DRAFT" | "PUBLISHED") ?? "DRAFT"
   );
   const [confirmDelete, setConfirmDelete] = React.useState(false);
+  // Content fields — previously omitted from the save payload entirely, so a
+  // recipe could be published with no real content and no way to add it
+  // (remaining-surfaces audit #12).
+  const [intro, setIntro] = React.useState(recipe.intro ?? "");
+  const [spicesRaw, setSpicesRaw] = React.useState((recipe.spices ?? []).join(", "));
+  const [ingredientsRaw, setIngredientsRaw] = React.useState(serializeIngredients(recipe.ingredients));
+  const [methodRaw, setMethodRaw] = React.useState((recipe.method ?? []).join("\n"));
+  const [tipsRaw, setTipsRaw] = React.useState((recipe.tips ?? []).join("\n"));
 
   // Auto-slug from title when new
   React.useEffect(() => {
@@ -125,9 +164,12 @@ function RecipeEditor({ recipe, onClose, onSave, onDelete }: {
       title, slug, course, difficulty,
       prepMins: Number(prepMins), cookMins: Number(cookMins),
       serves: Number(serves), featured, status,
-      // Existing long-form fields are deliberately omitted from the PATCH.
-      // They are not editable in this drawer and must remain untouched.
-      ...(isNew ? { dek: title, intro: "" } : {}),
+      intro,
+      spices: spicesRaw.split(",").map((s) => s.trim()).filter(Boolean),
+      ingredients: parseIngredients(ingredientsRaw),
+      method: linesToArray(methodRaw),
+      tips: linesToArray(tipsRaw),
+      ...(isNew ? { dek: title } : {}),
     });
   };
 
@@ -180,6 +222,30 @@ function RecipeEditor({ recipe, onClose, onSave, onDelete }: {
           </div>
 
           <FlagRow label="Feature this recipe" sub="Pin to the recipes hero" value={featured} onChange={setFeatured} />
+
+          <hr className="ad-hr" />
+
+          <div className="ad-field"><label className="ad-label">Intro</label>
+            <textarea className="ad-textarea" style={{ minHeight: 60 }} value={intro} onChange={(e) => setIntro(e.target.value)} placeholder="A short lead-in shown above the ingredients…" />
+          </div>
+
+          <div className="ad-field"><label className="ad-label">Shop the spices (comma-separated)</label>
+            <textarea className="ad-textarea" style={{ minHeight: 50 }} value={spicesRaw} onChange={(e) => setSpicesRaw(e.target.value)} placeholder="Ceylon Cinnamon Quills, Green Cardamom Pods" />
+            <span style={{ fontSize: 11.5, color: "var(--ad-faint)", marginTop: 4 }}>Must match real product names — this drives the &ldquo;add all to basket&rdquo; button.</span>
+          </div>
+
+          <div className="ad-field"><label className="ad-label">Ingredients (one per line)</label>
+            <textarea className="ad-textarea" style={{ minHeight: 110 }} value={ingredientsRaw} onChange={(e) => setIngredientsRaw(e.target.value)} placeholder={"# For the curry\n2 cups basmati rice\n1 tsp salt\n\n# For the spice paste\n2 cinnamon sticks"} />
+            <span style={{ fontSize: 11.5, color: "var(--ad-faint)", marginTop: 4 }}>Start a line with &ldquo;# &rdquo; to begin a new group (e.g. &ldquo;# For the curry&rdquo;).</span>
+          </div>
+
+          <div className="ad-field"><label className="ad-label">Method (one step per line)</label>
+            <textarea className="ad-textarea" style={{ minHeight: 110 }} value={methodRaw} onChange={(e) => setMethodRaw(e.target.value)} placeholder={"Toast the whole spices until fragrant.\nGrind to a fine powder.\n…"} />
+          </div>
+
+          <div className="ad-field"><label className="ad-label">Cook&rsquo;s notes / tips (one per line)</label>
+            <textarea className="ad-textarea" style={{ minHeight: 70 }} value={tipsRaw} onChange={(e) => setTipsRaw(e.target.value)} placeholder="Toast spices whole and grind just before cooking for the brightest flavour." />
+          </div>
 
           <hr className="ad-hr" />
 
@@ -285,6 +351,8 @@ export function AdminRecipes() {
           prepMins: body.prepMins ?? 0, cookMins: body.cookMins ?? 0,
           serves: body.serves ?? 0, createdAt: new Date().toISOString(),
           dek: body.dek ?? body.title, intro: body.intro ?? "",
+          spices: body.spices ?? [], ingredients: body.ingredients ?? [],
+          method: body.method ?? [], tips: body.tips ?? [],
         };
         setRows((prev) => id ? prev.map((r) => r.id === id ? newRow : r) : [newRow, ...prev]);
       } else {

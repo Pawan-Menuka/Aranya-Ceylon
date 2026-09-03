@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { jsonLdHtml } from "@/lib/json-ld";
 import { notFound } from "next/navigation";
 import { resolveMarket } from "@/lib/market";
-import { getBlogPost } from "@/lib/api/blog";
+import { getBlogPost, listBlog } from "@/lib/api/blog";
 import { JOURNAL, getPost, toPost, fallbackBody } from "@/lib/journal-data";
 import { SiteChrome } from "@/components/SiteChrome";
 import { ArticleClient } from "@/components/journal/ArticleClient";
@@ -20,7 +20,25 @@ async function resolvePost(slug: string): Promise<{ post: Post; blocks: PostBloc
   if (!post) post = getPost(slug);
   if (!post) return null;
   const blocks = post.body && post.body.length ? post.body : fallbackBody(post);
-  const related = JOURNAL.filter((p) => p.slug !== post!.slug).slice(0, 3);
+
+  // Prefer real related posts (same category first) from the live catalog
+  // over the fixed demo set, which previously showed on every article
+  // regardless of source (remaining-surfaces audit #8).
+  let related: Post[];
+  try {
+    const { items } = await listBlog({ limit: 12 });
+    const livePosts = items.map(toPost).filter((p) => p.slug !== post!.slug);
+    if (livePosts.length) {
+      const sameCategory = livePosts.filter((p) => p.category === post!.category);
+      const rest = livePosts.filter((p) => p.category !== post!.category);
+      related = [...sameCategory, ...rest].slice(0, 3);
+    } else {
+      related = JOURNAL.filter((p) => p.slug !== post!.slug).slice(0, 3);
+    }
+  } catch {
+    related = JOURNAL.filter((p) => p.slug !== post!.slug).slice(0, 3);
+  }
+
   return { post, blocks, related };
 }
 
