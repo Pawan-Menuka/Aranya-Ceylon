@@ -31,7 +31,7 @@ const store = vi.hoisted(() => {
         category: {
             upsert: async ({ where, create }: any) => {
                 let c = s.categories.find((x) => x.slug === where.slug);
-                if (!c) { c = { id: nextId('cat'), ...create }; s.categories.push(c); }
+                if (!c) { c = { id: nextId('cat'), ...create } as CategoryRow; s.categories.push(c); }
                 return c;
             },
         },
@@ -91,7 +91,17 @@ const store = vi.hoisted(() => {
 vi.mock('../../index.js', () => ({
     prisma: {
         giftSet: {
-            findUnique: async ({ where }: any) => store.s.giftSets.find((g) => g.id === where.id) ?? null,
+            // Returns a COPY, not the live array-element reference — real
+            // Prisma always hands back a fresh object per query, so a value
+            // captured before the transaction (e.g. updateGift's `existing`)
+            // must stay a pre-update snapshot even after tx.giftSet.update()
+            // mutates the row. Without this, the "existing" reference here
+            // would silently follow the update, and slug-rename handling in
+            // syncBackingProduct would look up the WRONG (already-new) slug.
+            findUnique: async ({ where }: any) => {
+                const g = store.s.giftSets.find((x) => x.id === where.id);
+                return g ? { ...g } : null;
+            },
             findMany: async () => store.s.giftSets,
             delete: async ({ where }: any) => { store.s.giftSets = store.s.giftSets.filter((g) => g.id !== where.id); },
         },
