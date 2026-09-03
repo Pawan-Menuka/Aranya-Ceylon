@@ -2,12 +2,34 @@ import type { Metadata } from "next";
 import { jsonLdHtml } from "@/lib/json-ld";
 import { notFound } from "next/navigation";
 import { resolveMarket } from "@/lib/market";
-import { RECIPES, getRecipe, recipeTotal } from "@/lib/recipes-data";
+import { RECIPES, getRecipe, recipeTotal, recipeSpices, type Recipe } from "@/lib/recipes-data";
 import { fetchRecipeBySlug, fetchRecipes } from "@/lib/api/recipes";
+import { listProducts } from "@/lib/api/products";
+import { toCatalogSpice } from "@/lib/catalog-data";
+import type { CatalogSpice } from "@/lib/types";
 import { SiteChrome } from "@/components/SiteChrome";
 import { RecipeDetailClient } from "@/components/recipes/RecipeDetailClient";
 
 export const revalidate = 3600;
+
+// "Shop the spices" previously resolved names against the hardcoded demo
+// catalog unconditionally, even with the live backend reachable — every
+// add-to-cart from a recipe page became a phantom, checkout-invisible cart
+// line (remaining-surfaces audit #4). Resolve against the live catalog
+// first; fall back to the demo set only if the live fetch fails or a name
+// doesn't resolve to anything live.
+async function resolveShopSpices(recipe: Recipe): Promise<CatalogSpice[]> {
+  if (!recipe.spices?.length) return [];
+  try {
+    const res = await listProducts({ limit: 100 });
+    const byName = new Map(res.items.map((p) => [p.name, toCatalogSpice(p)]));
+    const resolved = recipe.spices.map((name) => byName.get(name)).filter((p): p is CatalogSpice => !!p);
+    if (resolved.length) return resolved;
+  } catch {
+    /* fall through to demo */
+  }
+  return recipeSpices(recipe);
+}
 
 // generateStaticParams — try backend first, fall back to static list so
 // the build never fails even when the DB is not reachable at build time.
@@ -35,6 +57,7 @@ export default async function RecipeDetailPage({ params }: { params: { slug: str
 
   const allRecipes = (await fetchRecipes()) ?? RECIPES;
   const related = allRecipes.filter((r) => r.slug !== recipe.slug).slice(0, 3);
+  const shopSpices = await resolveShopSpices(recipe);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -54,7 +77,7 @@ export default async function RecipeDetailPage({ params }: { params: { slug: str
   return (
     <SiteChrome initialMarket={market} hero>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />
-      <RecipeDetailClient recipe={recipe} related={related} />
+      <RecipeDetailClient recipe={recipe} related={related} shopSpices={shopSpices} />
     </SiteChrome>
   );
 }
