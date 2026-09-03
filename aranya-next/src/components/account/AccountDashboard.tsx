@@ -42,30 +42,15 @@ function NavIcon({ name, stroke }: { name: string; stroke: string }) {
 }
 
 function Sidebar({ view, setView, onSignOut, userName }: { view: View; setView: (v: View) => void; onSignOut: () => void; userName: string }) {
-  const u = ACCOUNT.user;
-  const pct = Math.min(100, (u.points / u.pointsTo) * 100);
-  const initials = userName.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase() || u.initials;
+  const initials = userName.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase() || ACCOUNT.user.initials;
   return (
     <aside style={{ flex: "0 0 256px", position: "sticky", top: 96, alignSelf: "start" }}>
       <div style={{ background: "var(--brand)", color: "#FDFAF5", borderRadius: 14, padding: "22px 22px 20px", marginBottom: 18, position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", inset: 0, background: "radial-gradient(120% 100% at 100% 0%, rgba(29,158,117,.5), transparent 55%)" }} />
-        <div style={{ position: "relative" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 13 }}>
-            <span style={{ width: 48, height: 48, borderRadius: 999, background: "rgba(253,250,245,.14)", border: "1px solid rgba(230,184,96,.5)", display: "grid", placeItems: "center", flex: "0 0 auto", fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600, color: "#E6B860" }}>{initials}</span>
-            <div style={{ minWidth: 0 }}>
-              <div className="disp" style={{ fontSize: 21, lineHeight: 1.1, fontWeight: 600 }}>{userName}</div>
-              <div style={{ fontFamily: "var(--font-ui)", fontSize: 11.5, color: "rgba(253,250,245,.72)", marginTop: 2 }}>Member since {u.since}</div>
-            </div>
-          </div>
-          <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(253,250,245,.16)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-              <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", color: "#E6B860", fontWeight: 700 }}>{u.tier}</span>
-              <span style={{ fontFamily: "var(--font-ui)", fontSize: 11.5, color: "rgba(253,250,245,.78)", fontWeight: 600 }}>{u.points} / {u.pointsTo}</span>
-            </div>
-            <div style={{ height: 5, borderRadius: 999, background: "rgba(253,250,245,.16)", overflow: "hidden" }}>
-              <div style={{ height: "100%", width: pct + "%", background: "#E6B860", borderRadius: 999 }} />
-            </div>
-            <div style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "rgba(253,250,245,.62)", marginTop: 8 }}>{u.pointsTo - u.points} pts to a free gift box</div>
+        <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 13 }}>
+          <span style={{ width: 48, height: 48, borderRadius: 999, background: "rgba(253,250,245,.14)", border: "1px solid rgba(230,184,96,.5)", display: "grid", placeItems: "center", flex: "0 0 auto", fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 600, color: "#E6B860" }}>{initials}</span>
+          <div style={{ minWidth: 0 }}>
+            <div className="disp" style={{ fontSize: 21, lineHeight: 1.1, fontWeight: 600 }}>{userName}</div>
           </div>
         </div>
       </div>
@@ -137,8 +122,7 @@ function OrderRow({ order, market, onOpen, onReorder }: { order: AccountOrder; m
   );
 }
 
-function OverviewView({ market, activeOrder, orders, onOpen, onReorder, setView, firstName }: { market: Market; activeOrder?: AccountOrder; orders: AccountOrder[]; onOpen: (o: AccountOrder) => void; onReorder: (o: AccountOrder) => void; setView: (v: View) => void; firstName: string }) {
-  const u = ACCOUNT.user;
+function OverviewView({ market, activeOrder, orders, wishlistCount, onOpen, onReorder, setView, firstName }: { market: Market; activeOrder?: AccountOrder; orders: AccountOrder[]; wishlistCount: number; onOpen: (o: AccountOrder) => void; onReorder: (o: AccountOrder) => void; setView: (v: View) => void; firstName: string }) {
   const delivered = orders.filter((o) => o.status === "delivered").length;
   return (
     <div>
@@ -147,8 +131,7 @@ function OverviewView({ market, activeOrder, orders, onOpen, onReorder, setView,
       {activeOrder && <div style={{ marginBottom: 24 }}><TrackingSummary order={activeOrder} market={market} onView={() => onOpen(activeOrder)} /></div>}
       <div style={{ display: "flex", gap: 14, marginBottom: 30, flexWrap: "wrap" }}>
         <StatTile value={orders.length} label="Total orders" sub={delivered + " delivered"} onClick={() => setView("orders")} />
-        <StatTile value={ACCOUNT.wishlistKeys.length} label="Saved spices" sub="In your wishlist" onClick={() => setView("wishlist")} />
-        <StatTile value={u.points} label="Harvest points" sub={u.tier.replace("Harvest Club · ", "")} />
+        <StatTile value={wishlistCount} label="Saved spices" sub="In your wishlist" onClick={() => setView("wishlist")} />
       </div>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14 }}>
         <h2 className="disp" style={{ fontSize: 26, color: "var(--ink)", margin: 0, whiteSpace: "nowrap" }}>Recent orders</h2>
@@ -185,18 +168,25 @@ function OrdersView({ market, orders, onOpen, onReorder }: { market: Market; ord
 function AddressesView() {
   const [addresses, setAddresses] = React.useState<SavedAddress[]>([]);
   const [loading, setLoading] = React.useState(true);
+  // A failed fetch used to silently fall back to a fabricated demo address
+  // list with fake ids ("0","1","2") that looked editable but didn't reflect
+  // real backend state (remaining-surfaces audit #16). Show an explicit
+  // error + retry instead.
+  const [loadError, setLoadError] = React.useState(false);
   const [showForm, setShowForm] = React.useState(false);
   const [newAddr, setNewAddr] = React.useState({ label: "", line1: "", line2: "", city: "", country: "LK", postalCode: "" });
   const [saving, setSaving] = React.useState(false);
 
-  React.useEffect(() => {
+  const load = React.useCallback(() => {
+    setLoading(true);
+    setLoadError(false);
     getAddresses()
       .then(({ addresses: a }) => setAddresses(a))
-      .catch(() => setAddresses(ACCOUNT.addresses.map((a, i) => ({
-        id: String(i), label: a.label, line1: a.lines[0] || "", city: a.cityzip?.split(",")[0]?.trim() || "", country: a.country, postalCode: "", isDefault: a.isDefault,
-      }))))
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
   }, []);
+
+  React.useEffect(() => { load(); }, [load]);
 
   const addAddress = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -252,6 +242,11 @@ function AddressesView() {
 
       {loading ? (
         <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--muted)", padding: "24px 0" }}>Loading addresses…</div>
+      ) : loadError ? (
+        <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--muted)", padding: "24px 0" }}>
+          Couldn&rsquo;t load your saved addresses.{" "}
+          <button type="button" onClick={load} style={{ background: "none", border: 0, cursor: "pointer", fontFamily: "var(--font-ui)", fontSize: 14, fontWeight: 700, color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: 3, padding: 0 }}>Try again</button>
+        </div>
       ) : addresses.length === 0 ? (
         <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--muted)", padding: "24px 0" }}>No saved addresses yet. Add one above.</div>
       ) : (
@@ -279,32 +274,48 @@ function AddressesView() {
   );
 }
 
-function ProfileField({ label, value, type = "text" }: { label: string; value: string; type?: string }) {
+function ProfileField({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (v: string) => void; type?: string }) {
   return (
     <label style={{ display: "block" }}>
       <span style={{ fontFamily: "var(--font-ui)", fontSize: 11.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)", display: "block", marginBottom: 6 }}>{label}</span>
-      <input type={type} defaultValue={value} style={{ width: "100%", boxSizing: "border-box", fontFamily: "var(--font-ui)", fontSize: 14.5, color: "var(--ink)", border: "1px solid var(--line)", borderRadius: 8, padding: "12px 14px", background: "#fff", outline: "none" }}
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} style={{ width: "100%", boxSizing: "border-box", fontFamily: "var(--font-ui)", fontSize: 14.5, color: "var(--ink)", border: "1px solid var(--line)", borderRadius: 8, padding: "12px 14px", background: "#fff", outline: "none" }}
         onFocus={(e) => (e.target.style.borderColor = "var(--brand)")} onBlur={(e) => (e.target.style.borderColor = "var(--line)")} />
     </label>
   );
 }
 
-function ProfileView({ market, userName, userEmail }: { market: Market; userName: string; userEmail: string }) {
+function ProfileView({ market, userName, userEmail, userPhone, userNewsletterOptIn }: { market: Market; userName: string; userEmail: string; userPhone: string; userNewsletterOptIn: boolean }) {
   const parts = userName.split(" ");
   const [firstName, setFirstName] = React.useState(parts[0] || "");
   const [lastName, setLastName] = React.useState(parts.slice(1).join(" "));
+  const [phone, setPhone] = React.useState(userPhone);
   const [saved, setSaved] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [newsletterOptIn, setNewsletterOptIn] = React.useState(userNewsletterOptIn);
+  const [newsletterSaving, setNewsletterSaving] = React.useState(false);
 
   const saveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
-      await patchMe({ name: [firstName, lastName].filter(Boolean).join(" ") });
+      await patchMe({ name: [firstName, lastName].filter(Boolean).join(" "), phone });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch { /* ignore — demo / offline */ } finally {
       setSaving(false);
+    }
+  };
+
+  const toggleNewsletter = async () => {
+    const next = !newsletterOptIn;
+    setNewsletterOptIn(next); // optimistic
+    setNewsletterSaving(true);
+    try {
+      await patchMe({ newsletterOptIn: next });
+    } catch {
+      setNewsletterOptIn(!next); // revert on failure
+    } finally {
+      setNewsletterSaving(false);
     }
   };
 
@@ -321,7 +332,7 @@ function ProfileView({ market, userName, userEmail }: { market: Market; userName
           <label><span style={labelStyle}>First name</span><input style={fieldStyle} value={firstName} onChange={(e) => setFirstName(e.target.value)} onFocus={(e) => (e.target.style.borderColor = "var(--brand)")} onBlur={(e) => (e.target.style.borderColor = "var(--line)")} /></label>
           <label><span style={labelStyle}>Last name</span><input style={fieldStyle} value={lastName} onChange={(e) => setLastName(e.target.value)} onFocus={(e) => (e.target.style.borderColor = "var(--brand)")} onBlur={(e) => (e.target.style.borderColor = "var(--line)")} /></label>
           <div style={{ gridColumn: "1 / -1" }}><label><span style={labelStyle}>Email</span><input style={{ ...fieldStyle, background: "var(--surface)" }} value={userEmail} readOnly type="email" /></label></div>
-          <div style={{ gridColumn: "1 / -1" }}><ProfileField label="Phone" value="+1 (917) 555 0142" type="tel" /></div>
+          <div style={{ gridColumn: "1 / -1" }}><ProfileField label="Phone" value={phone} onChange={setPhone} type="tel" /></div>
         </div>
         <button type="submit" className={market === "local" ? "btn btn-local" : "btn btn-intl"} style={{ width: "auto", padding: "12px 24px", marginTop: 20, opacity: saving ? 0.6 : 1 }} disabled={saving}>
           {saved ? "Saved ✓" : saving ? "Saving…" : "Save changes"}
@@ -335,31 +346,21 @@ function ProfileView({ market, userName, userEmail }: { market: Market; userName
       <div style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 14, padding: "22px 28px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>
           <h3 className="disp" style={{ fontSize: 21, color: "var(--ink)", margin: "0 0 4px" }}>The Harvest List</h3>
-          <p style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--muted)", margin: 0 }}>Notes on new lots &amp; recipes. You&rsquo;re subscribed.</p>
+          <p style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--muted)", margin: 0 }}>Notes on new lots &amp; recipes. {newsletterOptIn ? "You’re subscribed." : "You’re unsubscribed."}</p>
         </div>
-        <span style={{ width: 44, height: 26, borderRadius: 999, background: "var(--brand)", position: "relative" }}>
-          <span style={{ position: "absolute", top: 3, left: 21, width: 20, height: 20, borderRadius: 999, background: "#fff" }} />
-        </span>
+        <button type="button" onClick={toggleNewsletter} disabled={newsletterSaving} aria-pressed={newsletterOptIn} aria-label="Toggle Harvest List subscription" style={{ width: 44, height: 26, borderRadius: 999, background: newsletterOptIn ? "var(--brand)" : "var(--line)", position: "relative", border: 0, padding: 0, cursor: newsletterSaving ? "default" : "pointer", opacity: newsletterSaving ? 0.7 : 1, flex: "0 0 auto" }}>
+          <span style={{ position: "absolute", top: 3, left: newsletterOptIn ? 21 : 3, width: 20, height: 20, borderRadius: 999, background: "#fff", transition: "left .15s" }} />
+        </button>
       </div>
     </div>
   );
 }
 
-function WishlistView({ market }: { market: Market }) {
-  const [items, setItems] = React.useState<WishlistItem[] | null>(null);
-  const [loading, setLoading] = React.useState(true);
-
-  React.useEffect(() => {
-    getWishlist()
-      .then(({ items: wi }) => setItems(wi))
-      .catch(() => setItems(null))
-      .finally(() => setLoading(false));
-  }, []);
-
+function WishlistView({ market, items, loading, onRemove }: { market: Market; items: WishlistItem[] | null; loading: boolean; onRemove: (productId: string) => void }) {
   const remove = async (productId: string) => {
     try {
       await removeFromWishlist(productId);
-      setItems((prev) => prev ? prev.filter((i) => i.productId !== productId) : prev);
+      onRemove(productId);
     } catch { /* ignore */ }
   };
 
@@ -417,6 +418,22 @@ export function AccountDashboard() {
       .finally(() => setOrdersLoading(false));
   }, [demo]);
 
+  // Lifted here (not just inside WishlistView) so the overview's "Saved
+  // spices" stat tile shows the SAME real count instead of the fabricated
+  // demo number it used to read (remaining-surfaces audit #13).
+  const [wishlist, setWishlist] = React.useState<WishlistItem[] | null>(null);
+  const [wishlistLoading, setWishlistLoading] = React.useState(!demo);
+
+  React.useEffect(() => {
+    if (demo) { setWishlistLoading(false); return; }
+    getWishlist()
+      .then(({ items }) => setWishlist(items))
+      .catch(() => setWishlist(null))
+      .finally(() => setWishlistLoading(false));
+  }, [demo]);
+
+  const wishlistCount = demo ? ACCOUNT.wishlistKeys.length : (wishlist?.length ?? 0);
+
   const baseActive = orders.find((o) => o.status !== "delivered") || orders[0];
   const activeOrder = orders.find((o) => o.id === (baseActive?.id ?? ""));
 
@@ -459,7 +476,7 @@ export function AccountDashboard() {
             {view === "overview" && (
               ordersLoading
                 ? <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--muted)", padding: "40px 0" }}>Loading your orders…</div>
-                : <OverviewView market={market} activeOrder={activeOrder} orders={orders} onOpen={open} onReorder={reorder} setView={setView} firstName={firstName} />
+                : <OverviewView market={market} activeOrder={activeOrder} orders={orders} wishlistCount={wishlistCount} onOpen={open} onReorder={reorder} setView={setView} firstName={firstName} />
             )}
             {view === "orders" && (
               ordersLoading
@@ -468,8 +485,8 @@ export function AccountDashboard() {
             )}
             {view === "detail" && detailOrder && <OrderDetailView order={detailOrder} market={market} address={addr} onBack={() => { setView("orders"); setOpenOrder(null); }} onReorder={reorder} />}
             {view === "addresses" && <AddressesView />}
-            {view === "wishlist" && <WishlistView market={market} />}
-            {view === "profile" && <ProfileView market={market} userName={userName} userEmail={user?.email || ACCOUNT.user.email} />}
+            {view === "wishlist" && <WishlistView market={market} items={wishlist} loading={wishlistLoading} onRemove={(productId) => setWishlist((prev) => prev ? prev.filter((i) => i.productId !== productId) : prev)} />}
+            {view === "profile" && <ProfileView market={market} userName={userName} userEmail={user?.email || ACCOUNT.user.email} userPhone={user?.phone ?? ""} userNewsletterOptIn={user?.newsletterOptIn ?? true} />}
           </main>
         </div>
       </div>

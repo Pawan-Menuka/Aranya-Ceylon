@@ -7,7 +7,7 @@ import {
   computeTotals, fmt as fmtMoney, lineFromSpice, lineFromServerItem,
   linePrice as linePriceOf, unitPrice as unitPriceOf,
 } from "@/lib/cart";
-import { getCart, addCartItem, updateCartItem, removeCartItem, clearServerCart, applyCoupon as apiApplyCoupon } from "@/lib/api/cart";
+import { getCart, addCartItem, updateCartItem, removeCartItem, clearServerCart, applyCoupon as apiApplyCoupon, removeCoupon as apiRemoveCoupon } from "@/lib/api/cart";
 import type { CartItem } from "@/lib/types";
 import { useMarket } from "./MarketContext";
 
@@ -295,7 +295,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           return false;
         }
       },
-      clearPromo: () => setState((s) => ({ ...s, promo: "" })),
+      // Previously local-only, so a customer who "removed" a promo still had
+      // it silently reapplied at checkout (server cart.couponId was never
+      // cleared — Storefront audit #2). Best-effort backend sync, same
+      // fire-and-forget pattern as clear()/remove() above.
+      clearPromo: () => {
+        const hadPromo = !!state.promo;
+        setState((s) => ({ ...s, promo: "" }));
+        if (hadPromo) apiRemoveCoupon().catch(() => { /* best-effort */ });
+      },
       marketCleared,
       dismissMarketCleared: () => setMarketCleared(false),
       open,

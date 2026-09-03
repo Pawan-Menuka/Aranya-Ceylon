@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { register, login, refresh, logout, logoutAll, getMe, patchMe, verifyEmail, resendVerification, listAddresses, createAddress, updateAddress, deleteAddress } from '../controllers/auth.controller.js';
+import { register, login, refresh, logout, logoutAll, getMe, patchMe, verifyEmail, resendVerification, forgotPassword, resetPassword, listAddresses, createAddress, updateAddress, deleteAddress } from '../controllers/auth.controller.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { validate } from '../middleware/validate.js';
 import { authLimiter, loginLimiter } from '../middleware/rateLimit.js';
-import { registerSchema, loginSchema, patchMeSchema, createAddressSchema, updateAddressSchema } from '@aranya/shared';
+import { registerSchema, loginSchema, patchMeSchema, createAddressSchema, updateAddressSchema, forgotPasswordSchema, resetPasswordSchema } from '@aranya/shared';
 
 const router = Router();
 
@@ -15,6 +15,9 @@ router.get('/verify', authLimiter, asyncHandler(verifyEmail));
 // Resend the verification link (neutral, anti-enumeration). authLimiter caps abuse.
 router.post('/resend-verification', authLimiter, asyncHandler(resendVerification));
 router.post('/login', loginLimiter, validate(loginSchema), asyncHandler(login));
+// Neutral (anti-enumeration), same reasoning as resend-verification.
+router.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), asyncHandler(forgotPassword));
+router.post('/reset-password', authLimiter, validate(resetPasswordSchema), asyncHandler(resetPassword));
 router.post('/refresh', authLimiter, asyncHandler(refresh));
 // Logout needs no access token — possession of the refresh cookie is the proof
 router.post('/logout', authLimiter, asyncHandler(logout));

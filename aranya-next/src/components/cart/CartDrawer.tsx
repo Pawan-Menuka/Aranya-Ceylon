@@ -147,10 +147,13 @@ export function CartDrawer() {
                   <button onClick={async () => { const ok = await cart.applyPromo(promoInput); if (!ok) setPromoErr(true); }} style={{ fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 700, color: "var(--ink)", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 7, padding: "0 16px", cursor: "pointer" }}>Apply</button>
                 </div>
                 {cart.promo && (
-                  <div style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--brand)", fontWeight: 600 }}>
-                    {t.discountRate > 0
-                      ? `Code ${cart.promo} applied — ${Math.round(t.discountRate * 100)}% off`
-                      : `Code ${cart.promo} applied — discount shown at checkout`}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                    <div style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--brand)", fontWeight: 600 }}>
+                      {t.discountRate > 0
+                        ? `Code ${cart.promo} applied — ${Math.round(t.discountRate * 100)}% off`
+                        : `Code ${cart.promo} applied — discount shown at checkout`}
+                    </div>
+                    <button onClick={() => cart.clearPromo()} style={{ flex: "0 0 auto", background: "none", border: 0, cursor: "pointer", fontFamily: "var(--font-ui)", fontSize: 12.5, fontWeight: 700, color: "var(--muted)", textDecoration: "underline", textUnderlineOffset: 3 }}>Remove</button>
                   </div>
                 )}
                 {promoErr && <div style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "#C0531F", fontWeight: 600, marginTop: -6 }}>That code isn&rsquo;t valid. Try CEYLON10.</div>}

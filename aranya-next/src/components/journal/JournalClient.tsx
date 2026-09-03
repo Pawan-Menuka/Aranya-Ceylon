@@ -3,7 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import type { Post } from "@/lib/journal-data";
-import { JOURNAL_CATEGORIES } from "@/lib/journal-data";
+import { JOURNAL_CATEGORIES, toPost } from "@/lib/journal-data";
+import { listBlog } from "@/lib/api/blog";
 import { Reveal } from "../primitives/Reveal";
 import { Liyawel, Eyebrow } from "../primitives/Motif";
 import { Icon } from "../primitives/Icon";
@@ -97,13 +98,32 @@ function JournalChips({ value, onChange }: { value: string; onChange: (c: string
   );
 }
 
-export function JournalClient({ posts }: { posts: Post[] }) {
+export function JournalClient({ posts: initialPosts, initialCursor }: { posts: Post[]; initialCursor: string | null }) {
   const [cat, setCat] = React.useState("All");
+  const [posts, setPosts] = React.useState(initialPosts);
+  const [cursor, setCursor] = React.useState(initialCursor);
+  const [loadingMore, setLoadingMore] = React.useState(false);
   const featured = posts.find((p) => p.featured) || posts[0];
   const grid = React.useMemo(() => {
     if (cat === "All") return posts.filter((p) => p.slug !== featured.slug);
     return posts.filter((p) => p.category === cat);
   }, [cat, posts, featured]);
+
+  // Posts beyond the first page were previously unreachable from /journal —
+  // nextCursor was fetched but discarded (remaining-surfaces audit #19).
+  const loadMore = async () => {
+    if (!cursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await listBlog({ limit: 30, cursor });
+      setPosts((prev) => [...prev, ...res.items.map(toPost)]);
+      setCursor(res.nextCursor);
+    } catch {
+      /* leave cursor as-is; the button just stays available to retry */
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   return (
     <div data-screen-label="Journal">
@@ -128,6 +148,15 @@ export function JournalClient({ posts }: { posts: Post[] }) {
           ) : (
             <div className="jg-grid">
               {grid.map((p) => <PostCard key={p.slug} post={p} />)}
+            </div>
+          )}
+          {cursor && (
+            <div style={{ textAlign: "center", marginTop: 48 }}>
+              <button onClick={loadMore} disabled={loadingMore} className="btn btn-intl" style={{ width: "auto", padding: "14px 34px", background: "transparent", color: "var(--brand)", border: "1.5px solid var(--brand)", opacity: loadingMore ? 0.6 : 1 }}
+                onMouseEnter={(e) => { if (!loadingMore) { e.currentTarget.style.background = "var(--brand)"; e.currentTarget.style.color = "#fff"; } }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--brand)"; }}>
+                {loadingMore ? "Loading…" : "Load more stories"}
+              </button>
             </div>
           )}
         </div>

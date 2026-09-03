@@ -11,6 +11,8 @@ export interface AuthUser {
   email: string;
   role: "CUSTOMER" | "ADMIN" | "SUPERADMIN";
   verified?: boolean;
+  phone?: string | null;
+  newsletterOptIn?: boolean;
 }
 
 interface AuthResponse {
@@ -42,6 +44,20 @@ export async function resendVerification(email: string): Promise<{ message: stri
   return apiFetch("/auth/resend-verification", { method: "POST", body: { email } });
 }
 
+// Request a password-reset link. Neutral by design (anti-enumeration) — the
+// backend always returns the same message regardless of whether the email
+// is registered.
+export async function forgotPassword(email: string): Promise<{ message: string }> {
+  return apiFetch("/auth/forgot-password", { method: "POST", body: { email } });
+}
+
+// Consume a reset token and set a new password. Ends every other session
+// server-side, so the caller should route back to sign-in afterward rather
+// than assume the user is still authenticated anywhere.
+export async function resetPassword(token: string, password: string): Promise<{ message: string }> {
+  return apiFetch("/auth/reset-password", { method: "POST", body: { token, password } });
+}
+
 export async function refresh(): Promise<boolean> {
   try {
     const data = await apiFetch<{ accessToken: string }>("/auth/refresh", { method: "POST" });
@@ -64,11 +80,7 @@ export async function me(): Promise<AuthUser | null> {
   }
 }
 
-// name-only: the backend patchMe + patchMeSchema accept only `name`. A `phone`
-// field here was silently dropped (no User.phone column, not in the schema) —
-// removed to keep the client contract honest (GAP-01). Add it back alongside a
-// User.phone migration + schema field if profile phone is ever needed.
-export async function patchMe(input: { name?: string }): Promise<AuthUser> {
+export async function patchMe(input: { name?: string; phone?: string; newsletterOptIn?: boolean }): Promise<AuthUser> {
   const data = await apiFetch<{ user: AuthUser }>("/auth/me", { method: "PATCH", body: input, auth: true });
   return data.user;
 }

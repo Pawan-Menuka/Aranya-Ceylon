@@ -17,6 +17,7 @@ router.delete('/items/:itemId', asyncHandler(cartController.removeItem));
 // Empty the whole cart (store switch / explicit clear).
 router.delete('/', asyncHandler(cartController.clearCart));
 router.post('/coupon', asyncHandler(cartController.applyCoupon));
+router.delete('/coupon', asyncHandler(cartController.removeCoupon));
 // Merge the guest cart into the user's cart on login (auth required).
 router.post('/merge', asyncHandler(requireAuth), asyncHandler(cartController.mergeCart));
 

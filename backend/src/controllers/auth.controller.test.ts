@@ -8,7 +8,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Prisma } from '@prisma/client';
 
-const store = vi.hoisted(() => ({ createImpl: async (_args: unknown): Promise<void> => {} }));
+const store = vi.hoisted(() => ({
+    createImpl: async (_args: unknown): Promise<void> => {},
+    findUniqueImpl: async (_args: unknown): Promise<{ id: string; email: string } | null> => null,
+    resetPasswordImpl: async (_token: string, _hash: string): Promise<void> => {},
+}));
 
 // bcrypt hash is slow (12 rounds) and irrelevant to these assertions — stub it.
 vi.mock('@node-rs/bcrypt', () => ({
@@ -17,10 +21,27 @@ vi.mock('@node-rs/bcrypt', () => ({
 }));
 
 vi.mock('../index.js', () => ({
-    prisma: { user: { create: (args: unknown) => store.createImpl(args) } },
+    prisma: {
+        user: {
+            create: (args: unknown) => store.createImpl(args),
+            findUnique: (args: unknown) => store.findUniqueImpl(args),
+        },
+    },
 }));
 
-import { register } from './auth.controller.js';
+// Isolate the two controller tests below from token.service's real DB calls —
+// it has its own dedicated unit tests (token.service.test.ts).
+vi.mock('../services/token.service.js', () => ({
+    issueEmailVerificationToken: vi.fn(async () => 'stub-verify-token'),
+    issuePasswordResetToken: vi.fn(async () => 'stub-reset-token'),
+    resetPasswordWithToken: (token: string, hash: string) => store.resetPasswordImpl(token, hash),
+}));
+vi.mock('../services/email.service.js', () => ({
+    sendVerificationEmail: vi.fn(async () => {}),
+    sendPasswordResetEmail: vi.fn(async () => {}),
+}));
+
+import { register, forgotPassword, resetPassword } from './auth.controller.js';
 
 // Minimal Express res double that captures status + json body.
 function mockRes() {
@@ -39,6 +60,8 @@ const req = (email: string) =>
 
 beforeEach(() => {
     store.createImpl = async () => {}; // default: success (new email)
+    store.findUniqueImpl = async () => null; // default: no matching user
+    store.resetPasswordImpl = async () => {}; // default: token accepted
 });
 
 describe('register — #9 anti-enumeration', () => {
@@ -80,5 +103,54 @@ describe('register — #9 anti-enumeration', () => {
     it('re-throws non-P2002 errors instead of masking them', async () => {
         store.createImpl = async () => { throw new Error('DB exploded'); };
         await expect(register(req('boom@example.com'), mockRes())).rejects.toThrow('DB exploded');
+    });
+});
+
+const forgotReq = (email: string) => ({ body: { email } }) as any;
+const resetReq = (token: string, password: string) => ({ body: { token, password } }) as any;
+
+describe('forgotPassword — anti-enumeration', () => {
+    it('returns the same neutral message for an existing account', async () => {
+        store.findUniqueImpl = async () => ({ id: 'u1', email: 'real@example.com' });
+
+        const res = mockRes();
+        await forgotPassword(forgotReq('real@example.com'), res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toEqual({ message: 'If that email is registered, a password reset link has been sent.' });
+    });
+
+    it('returns the BYTE-IDENTICAL message for an email that does not exist', async () => {
+        store.findUniqueImpl = async () => null;
+
+        const res = mockRes();
+        await forgotPassword(forgotReq('nobody@example.com'), res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toEqual({ message: 'If that email is registered, a password reset link has been sent.' });
+    });
+});
+
+describe('resetPassword', () => {
+    it('hashes the new password and delegates to token.service on a valid token', async () => {
+        let captured: [string, string] | null = null;
+        store.resetPasswordImpl = async (token, hash) => { captured = [token, hash]; };
+
+        const res = mockRes();
+        await resetPassword(resetReq('a-valid-token', 'NewPassw0rd!'), res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toEqual({ message: 'Your password has been reset. Please sign in.' });
+        expect(captured).toEqual(['a-valid-token', '$2b$12$stubbedhashvalue']);
+    });
+
+    it('collapses any token.service failure to one generic 400 — never reveals why', async () => {
+        store.resetPasswordImpl = async () => { throw new Error('RESET_TOKEN_EXPIRED'); };
+
+        const res = mockRes();
+        await resetPassword(resetReq('an-expired-token', 'NewPassw0rd!'), res);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body).toEqual({ error: 'That reset link is invalid or has expired. Please request a new one.' });
     });
 });
