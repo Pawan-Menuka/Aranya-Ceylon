@@ -463,7 +463,9 @@ export function AccountDashboard() {
   };
 
   const detailOrder = orders.find((o) => o.id === openOrder);
-  const addr = detailOrder ? ACCOUNT.addresses.find((a) => a.id === detailOrder.shipTo) || null : null;
+  // Real orders carry the shipping snapshot directly (remaining-surfaces audit
+  // #5); only demo orders fall back to the demo address book by id.
+  const addr = detailOrder ? (detailOrder.shippingAddress ?? ACCOUNT.addresses.find((a) => a.id === detailOrder.shipTo) ?? null) : null;
   const userName = user?.name || ACCOUNT.user.name;
   const firstName = userName.split(" ")[0];
 

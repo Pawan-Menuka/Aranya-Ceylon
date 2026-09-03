@@ -8,6 +8,7 @@ import { listAdminProducts, createAdminProduct, updateAdminProduct, archiveAdmin
 import { exportCsv } from "@/lib/csv";
 import { DEMO_MODE } from "@/lib/demo";
 import { LOW_STOCK_THRESHOLD } from "@/lib/inventory";
+import { CATALOG_FACETS } from "@/lib/catalog-data";
 import type { Product, Variant } from "@/lib/types";
 import { paletteFor } from "@/lib/spice-data";
 
@@ -41,6 +42,7 @@ function backendProductToAdmin(p: Product): ProductRow {
   return {
     name: p.name,
     latin: p.latin ?? "",
+    flavour: p.flavour ?? [],
     slug: p.slug,
     sku: p.variants?.[0]?.sku ?? p.id,
     category: p.category?.name ?? "Whole Spices",
@@ -173,7 +175,7 @@ function ProductEditor({
 }) {
   const isNew = !product.sku;
   const [p, setP] = React.useState<AdminProduct>(() => ({
-    name: "", latin: "", slug: "", sku: "", category: "Whole Spices", usd: "$0.00", lkr: "Rs 0",
+    name: "", latin: "", flavour: [], slug: "", sku: "", category: "Whole Spices", usd: "$0.00", lkr: "Rs 0",
     stock: 0, weights: ["50g", "100g", "250g"], status: "Active", visible: true, featured: false,
     badge: "In Stock", base: "#B57441", deep: "#7A451F", surface: "#F0E2D2", color: "#B57441",
     sold30: 0, rating: 0, reviews: 0,
@@ -313,6 +315,25 @@ function ProductEditor({
               </select>
             </div>
             <div className="ad-field"><label className="ad-label">Description</label><textarea className="ad-textarea" placeholder="Long-form description shown on the product page…" value={description} onChange={(e) => setDescription(e.target.value)} /></div>
+            <div className="ad-field">
+              <label className="ad-label">Flavour tags</label>
+              <div className="ad-hint" style={{ marginBottom: 8 }}>Powers the catalog&rsquo;s &ldquo;Browse by flavour&rdquo; filter.</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {CATALOG_FACETS.flavour.map((f) => {
+                  const on = p.flavour.includes(f);
+                  return (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => set("flavour", on ? p.flavour.filter((x) => x !== f) : [...p.flavour, f])}
+                      className={on ? "ad-btn ad-btn-green ad-btn-sm" : "ad-btn ad-btn-ghost ad-btn-sm"}
+                    >
+                      {f}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           <hr className="ad-hr" />
@@ -411,6 +432,7 @@ export function AdminProducts() {
           categoryId: catId,
           featured: p.featured,
           latin: p.latin || null,
+          flavour: p.flavour,
           status: p.visible ? "ACTIVE" : "ARCHIVED",
           variants,
         });
@@ -418,7 +440,7 @@ export function AdminProducts() {
       } else if (DEMO_MODE && !catId) {
         setRows((prev) => [{ ...p, slug, stock: variants.reduce((sum, v) => sum + (v.stock ?? 0), 0) }, ...prev]);
       } else {
-        const { product } = await createAdminProduct({ name: p.name, slug, description: desc, categoryId: catId, featured: p.featured, status: p.visible ? "ACTIVE" : "DRAFT", latin: p.latin || null, variants });
+        const { product } = await createAdminProduct({ name: p.name, slug, description: desc, categoryId: catId, featured: p.featured, status: p.visible ? "ACTIVE" : "DRAFT", latin: p.latin || null, flavour: p.flavour, variants });
         setRows((prev) => [backendProductToAdmin(product), ...prev.filter((row) => productIdentity(row) !== `local:${slug}`)]);
       }
       setEdit(null);

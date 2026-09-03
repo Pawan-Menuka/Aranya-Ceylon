@@ -101,16 +101,19 @@ export function CatalogClient({
       if (filters.flavour.length && !filters.flavour.some((f) => (p.flavour || []).includes(f))) return false;
       return true;
     });
+    // Sort by the price the shopper is actually seeing, not always USD
+    // (remaining-surfaces audit #9).
+    const priceOf = (p: CatalogSpice) => parsePrice(market === "local" ? p.lkr : p.usd);
     const by: Record<string, (a: CatalogSpice, b: CatalogSpice) => number> = {
       featured: (a, b) => Number(b.featured) - Number(a.featured) || b.popularity - a.popularity,
       best: (a, b) => b.popularity - a.popularity,
-      "price-asc": (a, b) => parsePrice(a.usd) - parsePrice(b.usd),
-      "price-desc": (a, b) => parsePrice(b.usd) - parsePrice(a.usd),
+      "price-asc": (a, b) => priceOf(a) - priceOf(b),
+      "price-desc": (a, b) => priceOf(b) - priceOf(a),
       rating: (a, b) => b.rating - a.rating || b.reviews - a.reviews,
       new: (a, b) => b.added.localeCompare(a.added),
     };
     return [...list].sort(by[sort] || by.featured);
-  }, [products, category, filters, sort]);
+  }, [products, category, filters, sort, market]);
 
   const shown = filtered.slice(0, visible);
   const activePills: [keyof Filters, string][] = [

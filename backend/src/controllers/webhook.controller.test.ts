@@ -18,9 +18,11 @@ const store = vi.hoisted(() => {
         couponId?: string | null; cartId?: string | null;
         market?: string; userEmail?: string | null; guestEmail?: string | null;
     }
-    interface ItemRow { orderId: string; variantId: string; quantity: number; }
-    interface VariantRow { id: string; stock: number; }
+    interface ItemRow { orderId: string; variantId: string; productId: string; quantity: number; }
+    interface VariantRow { id: string; stock: number; productId?: string; weight?: number; market?: string; }
     interface EventRow { orderId: string; status: string; note: string; }
+    interface ProductRow { id: string; slug: string; name: string; }
+    interface GiftSetRow { slug: string; jar: string; contents: string[]; }
 
     const s = {
         orders: [] as OrderRow[],
@@ -29,6 +31,8 @@ const store = vi.hoisted(() => {
         events: [] as EventRow[],
         carts: [] as { id: string; userId: string | null }[],
         coupons: [] as { id: string; usageCount: number }[],
+        products: [] as ProductRow[],
+        giftSets: [] as GiftSetRow[],
         cartItemsDeleted: 0,
     };
 
@@ -62,6 +66,23 @@ const store = vi.hoisted(() => {
                 v.stock -= data.stock.decrement;
                 return { count: 1 };
             },
+            findFirst: async ({ where }: any) => {
+                const marketOk = (v: VariantRow) =>
+                    where.market === undefined ||
+                    (where.market.in ? where.market.in.includes(v.market) : v.market === where.market);
+                return s.variants.find((v) =>
+                    (where.productId === undefined || v.productId === where.productId) &&
+                    (where.weight === undefined || v.weight === where.weight) &&
+                    marketOk(v),
+                ) ?? null;
+            },
+        },
+        product: {
+            findUnique: async ({ where }: any) => s.products.find((p) => p.id === where.id) ?? null,
+            findFirst: async ({ where }: any) => s.products.find((p) => p.name === where.name) ?? null,
+        },
+        giftSet: {
+            findUnique: async ({ where }: any) => s.giftSets.find((g) => g.slug === where.slug) ?? null,
         },
         orderEvent: {
             create: async ({ data }: any) => { s.events.push(data); return data; },
@@ -123,13 +144,17 @@ beforeEach(() => {
         market: 'LOCAL', userEmail: 'buyer@example.com',
     }];
     s.items = [
-        { orderId: 'order_1', variantId: 'var_a', quantity: 2 },
-        { orderId: 'order_1', variantId: 'var_b', quantity: 1 },
+        { orderId: 'order_1', variantId: 'var_a', productId: 'prod_a', quantity: 2 },
+        { orderId: 'order_1', variantId: 'var_b', productId: 'prod_b', quantity: 1 },
     ];
     s.variants = [{ id: 'var_a', stock: 10 }, { id: 'var_b', stock: 5 }];
     s.events = [];
     s.carts = [{ id: 'cart_1', userId: 'user_1' }];
     s.coupons = [];
+    // Neither product resolves to a 'gift-' slug by default — non-gift
+    // orders exercise no gift-set lookups at all (regression coverage for #11).
+    s.products = [{ id: 'prod_a', slug: 'ceylon-cinnamon', name: 'Ceylon Cinnamon Quills' }, { id: 'prod_b', slug: 'black-pepper', name: 'Black Peppercorns' }];
+    s.giftSets = [];
     s.cartItemsDeleted = 0;
     process.env.PAYHERE_MERCHANT_ID = 'MERCHANT_OK';
     vi.mocked(verifyPayHereNotification).mockReturnValue(true);
@@ -166,6 +191,58 @@ describe('confirmOrderPaid — #4 oversell handling', () => {
         expect(s.orders[0]!.status).toBe('PAID');
         expect(s.variants.find((v) => v.id === 'var_a')!.stock).toBe(1);
         expect(s.events.some((e) => e.note.includes('OVERSOLD'))).toBe(true);
+    });
+});
+
+describe('confirmOrderPaid — #11 gift-set component stock', () => {
+    it('decrements each listed component by the box quantity, matched by name + jar weight + market', async () => {
+        // Replace item 'a' with a gift-box line: 2 boxes of "The Ceylon Classic"
+        // (jar 50g), whose one listed component is "Ceylon Cinnamon Quills".
+        s.items[0]!.productId = 'prod_giftbox';
+        s.items[0]!.quantity = 2;
+        s.products.push({ id: 'prod_giftbox', slug: 'gift-classic', name: 'The Ceylon Classic' });
+        s.giftSets = [{ slug: 'classic', jar: '50g', contents: ['Ceylon Cinnamon Quills'] }];
+        // The component's own sellable 50g/LOCAL variant, separate from the
+        // gift box's own synthetic variant ('var_a').
+        s.variants.push({ id: 'var_cinnamon_50_local', productId: 'prod_a', weight: 50, market: 'LOCAL', stock: 20 });
+
+        await confirmOrderPaid('order_1', 'ref', 'Stripe');
+
+        expect(s.orders[0]!.status).toBe('PAID');
+        expect(s.variants.find((v) => v.id === 'var_cinnamon_50_local')!.stock).toBe(18); // 20 - 2
+        expect(s.events.some((e) => e.note.includes('Gift-set component'))).toBe(false);
+    });
+
+    it('logs a manual-review event and still marks PAID when a component has no matching product', async () => {
+        s.items[0]!.productId = 'prod_giftbox';
+        s.products.push({ id: 'prod_giftbox', slug: 'gift-classic', name: 'The Ceylon Classic' });
+        s.giftSets = [{ slug: 'classic', jar: '50g', contents: ['Some Discontinued Spice'] }];
+
+        await confirmOrderPaid('order_1', 'ref', 'Stripe');
+
+        expect(s.orders[0]!.status).toBe('PAID');
+        expect(s.events.some((e) => e.note.includes('Gift-set component') && e.note.includes('no matching product'))).toBe(true);
+    });
+
+    it('logs a manual-review event when the component variant lacks stock, without failing the order', async () => {
+        s.items[0]!.productId = 'prod_giftbox';
+        s.items[0]!.quantity = 5;
+        s.products.push({ id: 'prod_giftbox', slug: 'gift-classic', name: 'The Ceylon Classic' });
+        s.giftSets = [{ slug: 'classic', jar: '50g', contents: ['Ceylon Cinnamon Quills'] }];
+        s.variants.push({ id: 'var_cinnamon_50_local', productId: 'prod_a', weight: 50, market: 'LOCAL', stock: 1 }); // < 5 needed
+
+        await confirmOrderPaid('order_1', 'ref', 'Stripe');
+
+        expect(s.orders[0]!.status).toBe('PAID');
+        expect(s.variants.find((v) => v.id === 'var_cinnamon_50_local')!.stock).toBe(1); // untouched
+        expect(s.events.some((e) => e.note.includes('Gift-set component') && e.note.includes('insufficient stock'))).toBe(true);
+    });
+
+    it('does not look up any gift set for a normal (non-gift) order', async () => {
+        // Default beforeEach data has no 'gift-' slugs — this just documents
+        // that a normal order never touches giftSet/product lookups at all.
+        await confirmOrderPaid('order_1', 'ref', 'Stripe');
+        expect(s.events.some((e) => e.note.includes('Gift-set component'))).toBe(false);
     });
 });
 

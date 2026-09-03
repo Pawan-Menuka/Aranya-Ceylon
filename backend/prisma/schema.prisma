@@ -147,6 +147,10 @@ model Product {
   latin          String?
   originLabel    String?
   color          String?
+  // Catalog "browse by flavour" filter tags (e.g. "Sweet", "Warm", "Citrus").
+  // Previously the filter existed on the frontend with nothing backing it —
+  // every real product silently failed to match any flavour filter.
+  flavour        String[]       @default([])
   @@index([market, status])
   // searchVector is a PostgreSQL tsvector column for full-text search.
   // Prisma doesn't natively manage tsvector — we add it via a raw

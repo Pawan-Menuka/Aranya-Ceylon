@@ -25,9 +25,6 @@ export interface Post {
   body?: PostBlock[];
 }
 
-// "Recipes" lives entirely in /recipes (rich detail pages). The Journal is
-// sourcing stories, spice notes and heritage — no recipe stubs here.
-export const JOURNAL_CATEGORIES = ["All", "Sourcing", "Spice Notes", "Heritage"];
 
 export const JOURNAL: Post[] = [
   {

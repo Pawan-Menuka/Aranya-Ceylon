@@ -77,6 +77,10 @@ export interface AccountOrder {
   etaLabel?: string;
   deliveredLabel?: string;
   shipTo: string;
+  // Real (backend) orders carry the shipping-address snapshot directly —
+  // `shipTo` above is a demo-address-book id and has no matching entry for a
+  // live order. Present only for live orders (remaining-surfaces audit #5).
+  shippingAddress?: AccountAddress;
   items: OrderLineItem[];
   events: OrderEvent[];
   // Real charged total + its currency, present for live (backend) orders.
@@ -244,6 +248,29 @@ const TIMELINE_STEP_MAP: Record<string, string> = {
   DELIVERED: "delivered",
 };
 
+// The backend Order.shippingAddress is a loose JSON snapshot (checkoutSchema's
+// shippingAddress fields) — no phone is stored at order time, and there's no
+// address-book id (it's a point-in-time snapshot, not a saved address).
+function toAccountAddress(raw: Order["shippingAddress"], market: Order["market"]): AccountAddress {
+  const str = (v: unknown): string => (typeof v === "string" ? v : "");
+  const line1 = str(raw.line1);
+  const line2 = str(raw.line2);
+  const city = str(raw.city);
+  const region = str(raw.region);
+  const postalCode = str(raw.postalCode);
+  return {
+    id: "order-shipping",
+    label: "Delivery address",
+    market: market === "LOCAL" ? "local" : "intl",
+    name: [str(raw.firstName), str(raw.lastName)].filter(Boolean).join(" "),
+    lines: [line1, line2].filter(Boolean),
+    cityzip: [city, region, postalCode].filter(Boolean).join(", "),
+    country: str(raw.country),
+    phone: "",
+    isDefault: false,
+  };
+}
+
 // Convert a backend Order → AccountOrder so the existing dashboard components
 // can render it unchanged. Colors are derived by hashing the product slug.
 export function toAccountOrder(order: Order): AccountOrder {
@@ -301,6 +328,7 @@ export function toAccountOrder(order: Order): AccountOrder {
     etaLabel: undefined,
     deliveredLabel,
     shipTo: "",
+    shippingAddress: toAccountAddress(order.shippingAddress, order.market),
     items,
     events: timeline,
     total: totalNum,

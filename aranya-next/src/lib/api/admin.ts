@@ -75,6 +75,7 @@ export interface AdminProductInput {
   featured?: boolean;
   status?: string;
   latin?: string | null;
+  flavour?: string[];
   variants?: Array<{
     id?: string;
     sku: string;

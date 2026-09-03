@@ -359,6 +359,7 @@ export async function updateProduct(id: string, data: UpdateProductInput) {
                 ...(fields.latin !== undefined && { latin: fields.latin }),
                 ...(fields.originLabel !== undefined && { originLabel: fields.originLabel }),
                 ...(fields.color !== undefined && { color: fields.color }),
+                ...(fields.flavour !== undefined && { flavour: fields.flavour }),
             },
         });
 
