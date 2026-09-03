@@ -47,6 +47,33 @@ export async function sendOrderConfirmation(params: {
     });
 }
 
+// --- Abandoned cart recovery ---
+// Sent by the hourly cron job (scheduler.ts) to a signed-in user whose cart
+// has sat untouched for a few hours. Guest carts are never a target here —
+// no email is captured before checkout, so there's nowhere to send this.
+export async function sendAbandonedCartEmail(params: {
+    to: string;
+    items: { name: string; quantity: number }[];
+}) {
+    const { to, items } = params;
+    const frontend = (process.env.FRONTEND_URL ?? 'http://localhost:3000').split(',')[0]!.trim();
+    const cartUrl = `${frontend}/products?cart=1`;
+
+    await resend.emails.send({
+        from: FROM,
+        to,
+        subject: 'You left something in your cart',
+        html: `
+            <h2>Still thinking it over?</h2>
+            <p>Your cart is waiting with:</p>
+            <ul>
+                ${items.map((i) => `<li>${escapeHtml(i.name)} × ${i.quantity}</li>`).join('')}
+            </ul>
+            <p><a href="${cartUrl}">Finish your order</a></p>
+        `,
+    });
+}
+
 // --- Email verification ---
 // Link points at the API's GET /auth/verify, which marks the account verified
 // and then redirects the browser back to the storefront.

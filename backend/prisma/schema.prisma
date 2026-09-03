@@ -301,6 +301,11 @@ model Cart {
   couponId    String?
   expiresAt   DateTime?  // Guest carts expire after 30 days
   updatedAt   DateTime   @updatedAt
+  // Set once an abandoned-cart recovery email has gone out, so the cron job
+  // (scheduler.ts) doesn't resend for the same period of inactivity. Cleared
+  // on any cart touch (getOrCreateCart), so a renewed-then-abandoned-again
+  // cart is eligible for a fresh reminder.
+  abandonedEmailSentAt DateTime?
 
   items       CartItem[]
 }
