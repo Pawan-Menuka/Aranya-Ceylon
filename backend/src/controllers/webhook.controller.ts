@@ -1,8 +1,34 @@
 import type { Request, Response } from 'express';
 import { constructWebhookEvent } from '../services/stripe.service.js';
 import { verifyPayHereNotification } from '../services/payhere.service.js';
-import { sendOrderConfirmation } from '../services/email.service.js';
+import { sendOrderConfirmation, sendNewOrderAdminNotification } from '../services/email.service.js';
 import { prisma } from '../index.js';
+
+// ── Webhook event log (roadmap: replay/dispute debugging) ───────────
+// Best-effort and outside any order transaction: a logging failure must never
+// block a gateway's ack (Stripe/PayHere retry indefinitely without one) or
+// roll back a payment that already succeeded.
+async function logWebhookEvent(params: {
+    gateway: string;
+    eventType: string;
+    eventId?: string | null;
+    orderId?: string | null;
+    payload: unknown;
+}) {
+    try {
+        await prisma.webhookEvent.create({
+            data: {
+                gateway: params.gateway,
+                eventType: params.eventType,
+                eventId: params.eventId ?? null,
+                orderId: params.orderId ?? null,
+                payload: params.payload as object,
+            },
+        });
+    } catch (err) {
+        console.error('⚠ Failed to log webhook event (processing continues):', err);
+    }
+}
 
 // ── Shared ACID transaction ────────────────────────────────────────
 // Called by both Stripe and PayHere handlers after payment is confirmed.
@@ -115,6 +141,7 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
             total: Number(order.total),
             currency: order.currency as string,
             market: order.market as string,
+            itemCount: order.items.length,
         };
     });
 
@@ -123,6 +150,19 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
     // claimed "marked PAID" on every duplicate webhook delivery (BUG-25).
     if (confirmation) {
         console.log(`✅ Order ${orderId} marked PAID via ${gateway}`);
+
+        // Merchant-facing "you made a sale" alert — sent once (first PAID flip
+        // only), regardless of whether the customer's own confirmation email
+        // below has an address to go to.
+        sendNewOrderAdminNotification({
+            orderId,
+            total: confirmation.total,
+            currency: confirmation.currency,
+            market: confirmation.market,
+            itemCount: confirmation.itemCount,
+        }).catch((err) =>
+            console.error(`✉ Admin new-order notification failed for ${orderId}:`, err),
+        );
     }
 
     // Order confirmation — sent once (first PAID flip only) and after commit,
@@ -187,6 +227,20 @@ export async function stripeWebhook(req: Request, res: Response) {
     } catch {
         return res.status(400).json({ error: 'Webhook signature verification failed' });
     }
+
+    // Log the verified delivery verbatim before acting on it, so a "the
+    // payment disappeared" dispute can be replayed from what Stripe actually
+    // sent rather than reconstructed from OrderEvent's summary notes.
+    const stripeOrderId = event.type.startsWith('payment_intent.')
+        ? (event.data.object as { metadata?: { orderId?: string } }).metadata?.orderId ?? null
+        : null;
+    await logWebhookEvent({
+        gateway: 'Stripe',
+        eventType: event.type,
+        eventId: event.id,
+        orderId: stripeOrderId,
+        payload: event,
+    });
 
     switch (event.type) {
         case 'payment_intent.succeeded': {
@@ -273,6 +327,16 @@ export async function payHereWebhook(req: Request, res: Response) {
         console.error('❌ PayHere webhook: merchant_id mismatch', { order_id });
         return res.status(400).send('Merchant mismatch');
     }
+
+    // Log the verified notification verbatim — same replay/dispute purpose as
+    // the Stripe log above. PayHere has no native delivery id.
+    await logWebhookEvent({
+        gateway: 'PayHere',
+        eventType: status_code,
+        eventId: payment_id ?? null,
+        orderId: order_id ?? null,
+        payload: req.body,
+    });
 
     // PayHere status codes:
     // 2  = successful payment

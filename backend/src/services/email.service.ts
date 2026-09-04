@@ -116,6 +116,34 @@ export async function sendPasswordResetEmail(params: { to: string; token: string
     });
 }
 
+// --- Admin new-order notification ---
+// Sent once per order (first PENDING→PAID flip only, from confirmOrderPaid) so
+// the merchant hears about every sale that actually needs fulfilling, not
+// every abandoned checkout attempt (roadmap: admin notification on new orders).
+export async function sendNewOrderAdminNotification(params: {
+    orderId: string;
+    total: number;
+    currency: string;
+    market: string;
+    itemCount: number;
+}) {
+    const { orderId, total, currency, market, itemCount } = params;
+    const currencySymbol = currency === 'LKR' ? 'LKR ' : '$';
+    const frontend = (process.env.FRONTEND_URL ?? 'http://localhost:3000').split(',')[0]!.trim();
+
+    await resend.emails.send({
+        from: FROM,
+        to: process.env.ADMIN_EMAIL ?? FROM,
+        subject: `New order #${orderId.slice(-8).toUpperCase()} — ${currencySymbol}${total.toFixed(2)}`,
+        html: `
+            <h2>New paid order</h2>
+            <p>Order <strong>#${orderId.slice(-8).toUpperCase()}</strong> (${market}) just came through.</p>
+            <p>Total: <strong>${currencySymbol}${total.toFixed(2)}</strong> — ${itemCount} item${itemCount === 1 ? '' : 's'}</p>
+            <p><a href="${frontend}/admin/orders">View in admin</a></p>
+        `,
+    });
+}
+
 // --- Shipping notification ---
 export async function sendShippingNotification(params: {
     to: string;
