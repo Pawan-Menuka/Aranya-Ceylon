@@ -101,19 +101,12 @@ export async function addToCart(
 
     if (!variant) throw new Error('VARIANT_NOT_FOUND_FOR_MARKET');
 
-    // P1-2: validate against existing cart qty so repeated adds can't exceed stock.
-    // NOTE (GAP-05): this read→check→upsert is not atomic, so two concurrent adds
-    // can both pass and push cart qty above stock. That is intentional and safe:
-    // the cart is not the inventory ledger. The AUTHORITATIVE guard is the
-    // payment-time decrement (webhook.controller: updateMany `where stock >= qty`),
-    // which is atomic and can't oversell; checkout also re-validates stock first.
-    // The worst case here is a hopeful over-quantity that surfaces as a 409 at
-    // checkout, never an actual oversell.
-    const existing = await prisma.cartItem.findUnique({
-        where: { cartId_variantId: { cartId, variantId: data.variantId } },
-        select: { quantity: true },
-    });
-    if (variant.stock < (existing?.quantity ?? 0) + data.quantity) throw new Error('INSUFFICIENT_STOCK');
+    // Not checked against live stock: the cart is not a reservation, so a
+    // quantity here is only ever "hopeful." The AUTHORITATIVE, atomic guard is
+    // the stock reservation at checkout (checkout.controller createIntent),
+    // which decrements under a `where stock >= qty` and can't oversell — this
+    // is the only place that needs to be race-safe. Blocking here would just
+    // mean a shopper can't add an item back in stock by the time they check out.
 
     // Upsert: if same variant already in cart, increment quantity
     return prisma.cartItem.upsert({
@@ -150,24 +143,30 @@ export async function updateCartItem(
         }
     }
 
-    // P1-3: validate stock before updating quantity
-    const item = await prisma.cartItem.findUnique({
-        where: { id: itemId, cartId },
-        include: { variant: { select: { stock: true } } },
-    });
-    // P1-4: missing/foreign item → caller gets null and the controller sends 404
-    if (!item) return null;
-    if (item.variant.stock < data.quantity) throw new Error('INSUFFICIENT_STOCK');
-
-    return prisma.cartItem.update({
-        where: { id: itemId, cartId },
-        data: { quantity: data.quantity },
-    });
+    // Not checked against live stock — same reasoning as addToCart above;
+    // checkout is the sole atomic, authoritative enforcement point.
+    try {
+        return await prisma.cartItem.update({
+            where: { id: itemId, cartId },
+            data: { quantity: data.quantity },
+        });
+    } catch (err) {
+        // P1-4: missing/foreign item → caller gets null and the controller sends 404
+        if ((err as { code?: string }).code === 'P2025') return null;
+        throw err;
+    }
 }
 
 // --- Clear cart ---
 export async function clearCart(cartId: string) {
-    return prisma.cartItem.deleteMany({ where: { cartId } });
+    // Also clears abandonedEmailSentAt (roadmap: abandoned-cart recovery) —
+    // this bypasses getOrCreateCart, which is the usual place that reset
+    // happens, so it needs doing explicitly here too.
+    const [deleted] = await prisma.$transaction([
+        prisma.cartItem.deleteMany({ where: { cartId } }),
+        prisma.cart.update({ where: { id: cartId }, data: { abandonedEmailSentAt: null } }),
+    ]);
+    return deleted;
 }
 
 // --- Merge guest cart into user cart on login ---
@@ -179,9 +178,11 @@ export async function mergeGuestCart(guestToken: string, userId: string) {
 
     if (!guestCart || guestCart.items.length === 0) return;
 
+    // update: clear abandonedEmailSentAt too — this upsert bypasses
+    // getOrCreateCart (the usual reset point) on the login-merge path.
     const userCart = await prisma.cart.upsert({
         where: { userId },
-        update: {},
+        update: { abandonedEmailSentAt: null },
         create: { userId },
     });
 

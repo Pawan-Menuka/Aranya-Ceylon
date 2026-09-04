@@ -12,23 +12,83 @@ const store = vi.hoisted(() => {
     const s = {
         cart: null as any,
         carts: [] as any[],
+        cartItems: [] as any[],
+        variants: new Map<string, any>(),
         couponsById: new Map<string, any>(),
         couponsByCode: new Map<string, any>(),
     };
     return { s };
 });
 
+function notFound(): never {
+    const e = new Error('NOT_FOUND') as Error & { code: string };
+    e.code = 'P2025';
+    throw e;
+}
+
 vi.mock('../index.js', () => ({
     prisma: {
         cart: {
-            findUnique: async () => store.s.cart,
+            // Existing single-cart tests below key off store.s.cart directly
+            // (via a plain {id} where) — guestToken/userId lookups added on
+            // top for addToCart/mergeGuestCart coverage.
+            findUnique: async ({ where }: any) => {
+                if (where.guestToken) return store.s.carts.find((c) => c.guestToken === where.guestToken) ?? null;
+                if (where.userId) return store.s.carts.find((c) => c.userId === where.userId) ?? null;
+                return store.s.cart;
+            },
             upsert: async ({ where, update, create }: any) => {
-                let c = store.s.carts.find((x) => x.userId === where.userId);
+                let c = where.userId
+                    ? store.s.carts.find((x) => x.userId === where.userId)
+                    : store.s.carts.find((x) => x.guestToken === where.guestToken);
                 if (c) Object.assign(c, update);
                 else { c = { id: `cart_${store.s.carts.length + 1}`, abandonedEmailSentAt: null, ...create }; store.s.carts.push(c); }
                 return c;
             },
+            update: async ({ where, data }: any) => {
+                const c = store.s.carts.find((x) => x.id === where.id) ?? (store.s.cart?.id === where.id ? store.s.cart : undefined);
+                if (!c) notFound();
+                Object.assign(c, data);
+                return c;
+            },
+            delete: async ({ where }: any) => {
+                store.s.carts = store.s.carts.filter((c) => c.id !== where.id);
+            },
         },
+        cartItem: {
+            upsert: async ({ where, update, create }: any) => {
+                const key = where.cartId_variantId;
+                let item = store.s.cartItems.find((i) => i.cartId === key.cartId && i.variantId === key.variantId);
+                if (item) {
+                    if (update.quantity && typeof update.quantity === 'object') item.quantity += update.quantity.increment;
+                    else Object.assign(item, update);
+                } else {
+                    item = { id: `item_${store.s.cartItems.length + 1}`, ...create };
+                    store.s.cartItems.push(item);
+                }
+                return item;
+            },
+            update: async ({ where, data }: any) => {
+                const item = store.s.cartItems.find((i) => i.id === where.id && i.cartId === where.cartId);
+                if (!item) notFound();
+                Object.assign(item, data);
+                return item;
+            },
+            delete: async ({ where }: any) => {
+                const idx = store.s.cartItems.findIndex((i) => i.id === where.id && i.cartId === where.cartId);
+                if (idx === -1) notFound();
+                return store.s.cartItems.splice(idx, 1)[0];
+            },
+            deleteMany: async ({ where }: any) => {
+                const before = store.s.cartItems.length;
+                store.s.cartItems = store.s.cartItems.filter((i) => i.cartId !== where.cartId);
+                return { count: before - store.s.cartItems.length };
+            },
+        },
+        variant: {
+            findFirst: async ({ where }: any) => store.s.variants.get(where.id) ?? null,
+        },
+        $transaction: async (ops: Promise<unknown>[]) => Promise.all(ops),
         coupon: {
             findUnique: async ({ where }: any) =>
                 (where.id ? store.s.couponsById.get(where.id) : store.s.couponsByCode.get(where.code)) ?? null,
@@ -36,7 +96,7 @@ vi.mock('../index.js', () => ({
     },
 }));
 
-import { calculateCartTotal, validateCoupon, getOrCreateCart } from './cart.service.js';
+import { calculateCartTotal, validateCoupon, getOrCreateCart, addToCart, updateCartItem, clearCart, mergeGuestCart } from './cart.service.js';
 
 const { s } = store;
 
@@ -54,6 +114,8 @@ function setCart(prices: (number | string)[], couponId: string | null = null) {
 beforeEach(() => {
     s.cart = null;
     s.carts = [];
+    s.cartItems = [];
+    s.variants.clear();
     s.couponsById.clear();
     s.couponsByCode.clear();
 });
@@ -161,5 +223,58 @@ describe('getOrCreateCart — clears abandonedEmailSentAt on every touch (roadma
     it('leaves a freshly-created cart with no flag set (nothing to clear yet)', async () => {
         const cart = await getOrCreateCart('user_2', undefined);
         expect(cart.abandonedEmailSentAt).toBeNull();
+    });
+});
+
+describe('addToCart — #14 the cart is not a reservation', () => {
+    it('allows a quantity greater than current live stock (checkout enforces, not the cart)', async () => {
+        s.variants.set('v1', { id: 'v1', market: 'BOTH', stock: 2 });
+        const item = await addToCart('cart_1', { productId: 'p1', variantId: 'v1', quantity: 5 }, 'INTERNATIONAL');
+        expect(item.quantity).toBe(5);
+    });
+
+    it('still rejects a variant that does not exist for the shopper\'s market', async () => {
+        await expect(
+            addToCart('cart_1', { productId: 'p1', variantId: 'missing', quantity: 1 }, 'INTERNATIONAL'),
+        ).rejects.toThrow('VARIANT_NOT_FOUND_FOR_MARKET');
+    });
+});
+
+describe('updateCartItem — #14 the cart is not a reservation', () => {
+    it('allows raising quantity above current live stock', async () => {
+        s.cartItems.push({ id: 'item_1', cartId: 'cart_1', variantId: 'v1', productId: 'p1', quantity: 1 });
+        const item = await updateCartItem('cart_1', 'item_1', { quantity: 50 });
+        expect(item?.quantity).toBe(50);
+    });
+
+    it('still returns null for a foreign/missing item id (unrelated to stock)', async () => {
+        const item = await updateCartItem('cart_1', 'not-a-real-item', { quantity: 3 });
+        expect(item).toBeNull();
+    });
+});
+
+describe('clearCart — #20 also clears abandonedEmailSentAt', () => {
+    it('resets the flag on the cart it just emptied', async () => {
+        s.carts = [{ id: 'cart_1', userId: 'user_1', abandonedEmailSentAt: new Date() }];
+        s.cartItems = [{ id: 'item_1', cartId: 'cart_1', variantId: 'v1', productId: 'p1', quantity: 2 }];
+
+        await clearCart('cart_1');
+
+        expect(s.cartItems).toHaveLength(0);
+        expect(s.carts[0]!.abandonedEmailSentAt).toBeNull();
+    });
+});
+
+describe('mergeGuestCart — #20 also clears abandonedEmailSentAt on the target user cart', () => {
+    it('resets the flag on an existing user cart when a guest cart merges into it', async () => {
+        s.carts = [
+            { id: 'guest_1', guestToken: 'g1', items: [{ productId: 'p1', variantId: 'v1', quantity: 2 }] },
+            { id: 'cart_1', userId: 'user_1', abandonedEmailSentAt: new Date() },
+        ];
+
+        await mergeGuestCart('g1', 'user_1');
+
+        const userCart = s.carts.find((c) => c.userId === 'user_1');
+        expect(userCart?.abandonedEmailSentAt).toBeNull();
     });
 });

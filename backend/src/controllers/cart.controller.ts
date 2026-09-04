@@ -45,9 +45,6 @@ export async function addItem(req: Request, res: Response) {
                 error: 'This product is not available in your region.',
             });
         }
-        if (message === 'INSUFFICIENT_STOCK') {
-            return res.status(400).json({ error: 'Not enough stock available.' });
-        }
         throw err; // Let asyncHandler catch unexpected errors
     }
 }
