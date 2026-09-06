@@ -59,6 +59,8 @@ export async function getGuestOrder(req: Request, res: Response) {
         return res.status(403).json({ error: 'Sign in to view this order.' });
     }
 
-    const { userId: _userId, ...publicOrder } = order;
-    return res.json({ order: publicOrder });
+    // Named explicitly (not spread-minus-userId) so the response shape can
+    // never accidentally grow to include a field this route shouldn't expose.
+    const { id, status, total, currency } = order;
+    return res.json({ order: { id, status, total, currency } });
 }
