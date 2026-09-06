@@ -13,7 +13,10 @@ const store = vi.hoisted(() => ({
 vi.mock('../index.js', () => ({
     prisma: {
         order: {
-            findMany: async ({ where }: any) => { store.lastFindManyWhere = where; return store.orders; },
+            findMany: async ({ where }: any) => {
+                store.lastFindManyWhere = where;
+                return store.orders.filter((o) => o.userId === where.userId);
+            },
             findUnique: async ({ where, select }: any) => {
                 store.lastFindUniqueWhere = where;
                 const order = store.orders.find((o) => o.id === where.id) ?? null;
