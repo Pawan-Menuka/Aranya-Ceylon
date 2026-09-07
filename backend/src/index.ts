@@ -32,6 +32,7 @@ import contactRoutes from './routes/contact.routes.js';
 import wholesaleRoutes from './routes/wholesale.routes.js';
 import devSeedRoutes from './routes/dev-seed.routes.js';
 import { startAllJobs } from './jobs/scheduler.js';
+import { isOriginAllowed } from './config/cors.js';
 
 
 const app = express();
@@ -77,9 +78,7 @@ const isDev = process.env.NODE_ENV === 'development';
 const _allowedOrigins = (process.env.FRONTEND_URL ?? 'http://localhost:3000').split(',').map(s => s.trim());
 app.use(cors({
     origin: (origin, cb) => {
-        if (origin && _allowedOrigins.includes(origin)) return cb(null, true);
-        // Development only: allow any origin, incl. file:// pages (null origin)
-        if (isDev) return cb(null, true);
+        if (isOriginAllowed(origin, _allowedOrigins, isDev)) return cb(null, true);
         // Tag the error so the global handler returns 403 instead of 500. `expose`
         // marks the message as safe to relay to the client (see error handler).
         const err = new Error('CORS: origin not allowed') as Error & { status?: number; expose?: boolean };
