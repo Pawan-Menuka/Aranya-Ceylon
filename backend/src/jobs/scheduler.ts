@@ -66,27 +66,36 @@ export function startCartExpiryJob() {
 // --- Job 3: Low stock alert ---
 // Runs once a day at 8am. Emails admin if any variant
 // is below the LOW_STOCK_THRESHOLD.
+
+// Extracted from the cron callback so the targeting/sending logic is
+// directly unit-testable without faking node-cron (same reasoning as
+// runAbandonedCartRecovery below).
+export async function runLowStockAlert(): Promise<number> {
+    const threshold = Number(process.env.LOW_STOCK_THRESHOLD ?? 10);
+
+    const lowStock = await prisma.variant.findMany({
+        where: { stock: { lte: threshold, gt: 0 } },
+        include: { product: { select: { name: true } } },
+    });
+
+    if (lowStock.length === 0) return 0;
+
+    await sendLowStockAlert(
+        lowStock.map((v) => ({
+            name: v.product.name,
+            sku: v.sku,
+            stock: v.stock,
+        })),
+    );
+
+    return lowStock.length;
+}
+
 export function startLowStockAlertJob() {
     cron.schedule('0 8 * * *', async () => {
         try {
-            const threshold = Number(process.env.LOW_STOCK_THRESHOLD ?? 10);
-
-            const lowStock = await prisma.variant.findMany({
-                where: { stock: { lte: threshold, gt: 0 } },
-                include: { product: { select: { name: true } } },
-            });
-
-            if (lowStock.length === 0) return;
-
-            await sendLowStockAlert(
-                lowStock.map((v) => ({
-                    name: v.product.name,
-                    sku: v.sku,
-                    stock: v.stock,
-                })),
-            );
-
-            console.log(`📦 Low stock alert sent for ${lowStock.length} variant(s)`);
+            const count = await runLowStockAlert();
+            if (count > 0) console.log(`📦 Low stock alert sent for ${count} variant(s)`);
         } catch (err) {
             console.error('[CRON] Low stock alert job failed:', err);
         }

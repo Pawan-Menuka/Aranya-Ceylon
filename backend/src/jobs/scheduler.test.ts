@@ -14,9 +14,17 @@ interface CartRow {
     items: { product: { name: string }; quantity: number }[];
 }
 
+interface VariantRow {
+    id: string;
+    sku: string;
+    stock: number;
+    product: { name: string };
+}
+
 const store = vi.hoisted(() => ({
     carts: [] as CartRow[],
     updatedCarts: [] as { id: string; data: any }[],
+    variants: [] as VariantRow[],
 }));
 
 vi.mock('../index.js', () => ({
@@ -41,6 +49,13 @@ vi.mock('../index.js', () => ({
                 return c;
             },
         },
+        variant: {
+            // Only the fields runLowStockAlert's where-clause needs: stock
+            // between 0 (exclusive) and the threshold (inclusive).
+            findMany: async ({ where }: any) => {
+                return store.variants.filter((v) => v.stock <= where.stock.lte && v.stock > where.stock.gt);
+            },
+        },
     },
 }));
 
@@ -51,8 +66,8 @@ vi.mock('../services/email.service.js', () => ({
 vi.mock('../lib/revalidate.js', () => ({ revalidateFrontend: vi.fn(async () => {}) }));
 vi.mock('../controllers/webhook.controller.js', () => ({ cancelOrderAndReleaseStock: vi.fn(async () => {}) }));
 
-import { runAbandonedCartRecovery } from './scheduler.js';
-import { sendAbandonedCartEmail } from '../services/email.service.js';
+import { runAbandonedCartRecovery, runLowStockAlert } from './scheduler.js';
+import { sendAbandonedCartEmail, sendLowStockAlert } from '../services/email.service.js';
 
 const hoursAgo = (h: number) => new Date(Date.now() - h * 60 * 60 * 1000);
 
@@ -72,6 +87,8 @@ beforeEach(() => {
     vi.clearAllMocks();
     store.carts = [];
     store.updatedCarts = [];
+    store.variants = [];
+    delete process.env.LOW_STOCK_THRESHOLD;
 });
 
 describe('runAbandonedCartRecovery', () => {
@@ -124,5 +141,57 @@ describe('runAbandonedCartRecovery', () => {
 
         expect(sent).toBe(0);
         expect(sendAbandonedCartEmail).not.toHaveBeenCalled();
+    });
+});
+
+describe('runLowStockAlert — #62', () => {
+    it('emails the admin with every at-or-below-threshold variant', async () => {
+        store.variants = [
+            { id: 'v1', sku: 'CCQ-50-LK', stock: 3, product: { name: 'Ceylon Cinnamon Quills' } },
+            { id: 'v2', sku: 'GCP-50-LK', stock: 10, product: { name: 'Green Cardamom Pods' } },
+        ];
+
+        const count = await runLowStockAlert();
+
+        expect(count).toBe(2);
+        expect(sendLowStockAlert).toHaveBeenCalledWith([
+            { name: 'Ceylon Cinnamon Quills', sku: 'CCQ-50-LK', stock: 3 },
+            { name: 'Green Cardamom Pods', sku: 'GCP-50-LK', stock: 10 },
+        ]);
+    });
+
+    it('excludes a variant that is already fully out of stock (0, not just low)', async () => {
+        store.variants = [{ id: 'v1', sku: 'CCQ-50-LK', stock: 0, product: { name: 'Ceylon Cinnamon Quills' } }];
+
+        const count = await runLowStockAlert();
+
+        expect(count).toBe(0);
+        expect(sendLowStockAlert).not.toHaveBeenCalled();
+    });
+
+    it('excludes a variant above the threshold', async () => {
+        store.variants = [{ id: 'v1', sku: 'CCQ-50-LK', stock: 11, product: { name: 'Ceylon Cinnamon Quills' } }];
+
+        const count = await runLowStockAlert();
+
+        expect(count).toBe(0);
+        expect(sendLowStockAlert).not.toHaveBeenCalled();
+    });
+
+    it('respects a custom LOW_STOCK_THRESHOLD', async () => {
+        process.env.LOW_STOCK_THRESHOLD = '2';
+        store.variants = [{ id: 'v1', sku: 'CCQ-50-LK', stock: 5, product: { name: 'Ceylon Cinnamon Quills' } }];
+
+        const count = await runLowStockAlert();
+
+        expect(count).toBe(0);
+        expect(sendLowStockAlert).not.toHaveBeenCalled();
+    });
+
+    it('sends nothing when nothing is low', async () => {
+        const count = await runLowStockAlert();
+
+        expect(count).toBe(0);
+        expect(sendLowStockAlert).not.toHaveBeenCalled();
     });
 });
