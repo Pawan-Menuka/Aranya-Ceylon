@@ -7,6 +7,7 @@ import { toSpice, SPICES } from "@/lib/spice-data";
 import { CATALOG } from "@/lib/catalog-data";
 import { pdContent, pdPrice } from "@/lib/pd-content";
 import { currencyForMarket } from "@/lib/money";
+import { sanitizeHtml } from "@/lib/sanitize";
 import { SiteChrome } from "@/components/SiteChrome";
 import { ProductDetail } from "@/components/product/ProductDetail";
 import type { Spice, Market, Product } from "@/lib/types";
@@ -69,6 +70,15 @@ export default async function ProductPage({ params }: { params: { slug: string }
   if (!resolved) notFound();
   const { spice, related, product } = resolved;
 
+  // Sanitised server-side, not inside ProductDetail's "use client" tree — a
+  // Next 14.2.35 bug corrupts the client-reference-manifest entry for a
+  // "use client" component that calls isomorphic-dompurify's sanitizeHtml
+  // directly (crashes with "Element type is invalid" purely from the call's
+  // *presence* in the client module, confirmed with sanitizeHtml working
+  // fine called from here, a Server Component, before the crash was found).
+  // See DEPLOY_READINESS_PLAN.md #0.1.
+  const sanitizedStory = pdContent(spice).story.map(sanitizeHtml);
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -90,7 +100,7 @@ export default async function ProductPage({ params }: { params: { slug: string }
   return (
     <SiteChrome initialMarket={market}>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />
-      <ProductDetail spice={spice} related={related} product={product} />
+      <ProductDetail spice={spice} related={related} product={product} sanitizedStory={sanitizedStory} />
     </SiteChrome>
   );
 }
