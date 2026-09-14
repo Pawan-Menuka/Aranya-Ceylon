@@ -9,7 +9,7 @@ import { ForestStory, FlavourProfile, Pairings, ReviewsBlock, Related } from "./
 // Composes the full product page below the (shared) navbar — ported from the
 // assembly in Product Detail.html. Market comes from context so currency + CTA
 // colour react to the switcher.
-export function ProductDetail({ spice, related, product }: { spice: Spice; related: Spice[]; product?: Product }) {
+export function ProductDetail({ spice, related, product, sanitizedStory }: { spice: Spice; related: Spice[]; product?: Product; sanitizedStory: string[] }) {
   const { market } = useMarket();
   return (
     <div data-screen-label="Product detail">
@@ -22,7 +22,7 @@ export function ProductDetail({ spice, related, product }: { spice: Spice; relat
           </div>
         </div>
       </div>
-      <ForestStory spice={spice} />
+      <ForestStory spice={spice} sanitizedStory={sanitizedStory} />
       <FlavourProfile spice={spice} />
       <Pairings spice={spice} />
       <ReviewsBlock spice={spice} />

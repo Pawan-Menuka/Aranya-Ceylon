@@ -6,7 +6,6 @@ import type { Post, PostBlock } from "@/lib/journal-data";
 import { Reveal } from "../primitives/Reveal";
 import { Liyawel, Eyebrow } from "../primitives/Motif";
 import { ImageSlot } from "../primitives/ImageSlot";
-import { sanitizeHtml } from "@/lib/sanitize";
 
 // Article / single post (ported from article.jsx). Dark editorial hero +
 // prose body + author + related. Body blocks come from the post's `body`
@@ -32,7 +31,10 @@ function ArticleBody({ post, blocks }: { post: Post; blocks: PostBlock[] }) {
             {b.cap && <figcaption style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--muted)", marginTop: 12, textAlign: "center", fontStyle: "italic" }}>{b.cap}</figcaption>}
           </Reveal>
         );
-        return <Reveal key={i} as="p" className="prose" style={{ fontSize: 18.5, color: "var(--ink)", margin: "0 0 22px" }} dangerouslySetInnerHTML={{ __html: sanitizeHtml(b.text || "") }} />;
+        // b.text is sanitised server-side in journal/[slug]/page.tsx before
+        // this ever reaches the client tree — see ForestStory's comment in
+        // components/product/Sections.tsx for why.
+        return <Reveal key={i} as="p" className="prose" style={{ fontSize: 18.5, color: "var(--ink)", margin: "0 0 22px" }} dangerouslySetInnerHTML={{ __html: b.text || "" }} />;
       })}
     </div>
   );
