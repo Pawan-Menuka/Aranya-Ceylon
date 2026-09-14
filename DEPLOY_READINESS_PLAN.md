@@ -18,7 +18,7 @@ These are real, reproduced today. Fix before anything else.
 |---|---|---|---|
 | 0.1 | ✅ | C | **Product & journal detail pages hard-500 when the API is unreachable** — fixed in [PR #142](https://github.com/Pawan-Menuka/Aranya-Ceylon/pull/142), merged |
 | 0.2 | ✅ | C | **No `error.tsx` / `global-error.tsx`** — users see Next's raw crash screen — fixed in [PR #142](https://github.com/Pawan-Menuka/Aranya-Ceylon/pull/142), merged |
-| 0.3 | ⬜ | U | **No geo-detection: every first-time visitor defaults to USD / International** |
+| 0.3 | ✅ | C | **No geo-detection: every first-time visitor defaults to USD / International** |
 
 ### 0.1 — Detail pages 500 on API outage
 
@@ -82,6 +82,17 @@ local rail. This is a silent conversion killer.
 `CF-IPCountry`) → `LK` ⇒ LOCAL, else INTERNATIONAL; or (b) deliberately keep USD default and make
 the market switch far more prominent on first visit. Not a code bug — a product decision only you
 can make.
+
+**Resolved — went with (a).** Cloudflare is already the documented front-door (`SECURITY.md`) and
+`TRUST_CLOUDFLARE` already existed for `CF-Connecting-IP` (client IP), so `CF-IPCountry` is the
+same trust boundary, not a new one. Both `backend/src/middleware/market.ts` (gated by
+`TRUST_CLOUDFLARE`, same as the IP case — unspoofable only once the origin is Cloudflare-locked)
+and `aranya-next/src/lib/market.ts` (unconditional — cosmetic first-paint only, checkout
+re-resolves authoritatively on the backend either way) now check for `LK` before falling back to
+INTERNATIONAL. Verified live: `curl` against the dev server with `CF-IPCountry: LK` flips the
+topbar from "International"/USD to "Sri Lanka"/LKR; no header (or a non-LK country) stays on
+International/USD. **Requires `TRUST_CLOUDFLARE=true` in production** for the backend half to
+activate — see the Cloudflare section of `DEPLOYMENT_CHECKLIST.md`.
 
 ---
 
@@ -251,7 +262,8 @@ Failures that produce **no error anywhere** and are only noticed via angry custo
 2. **Wrong `RESEND_API_KEY`** → every email silently vanishes (§2)
 3. **`NEXT_PUBLIC_API_URL` unset** → storefront serves demo data forever, looks fine (§7.4)
 4. **`NEXT_PUBLIC_ENABLE_DEMO=true`** → public admin access (§7.1)
-5. **No geo-detection** → local customers priced in USD and pushed to a card they may not have (§0.3)
+5. ~~**No geo-detection**~~ → fixed (§0.3) — still silently reverts to USD-for-everyone if
+   `TRUST_CLOUDFLARE=true` isn't set in production, so verify it once live
 6. **API blip** → every product page 500s (§0.1)
 
 Each of these looks *completely healthy* from the outside. Test them deliberately.
