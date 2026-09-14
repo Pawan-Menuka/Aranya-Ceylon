@@ -8,13 +8,12 @@ import { Stars } from "../primitives/Stars";
 import { Icon } from "../primitives/Icon";
 import { CardCFinal } from "../cards/Cards";
 import { pdContent, PD_REVIEWS } from "@/lib/pd-content";
-import { sanitizeHtml } from "@/lib/sanitize";
 import { DEMO_MODE } from "@/lib/demo";
 
 // Product-detail editorial sections (ported from product-detail-2.jsx):
 // ForestStory · FlavourProfile · Pairings · ReviewsBlock · Related.
 
-export function ForestStory({ spice }: { spice: Spice }) {
+export function ForestStory({ spice, sanitizedStory }: { spice: Spice; sanitizedStory: string[] }) {
   const c = pdContent(spice);
   return (
     <section style={{ background: "var(--bg)", padding: "96px 0 40px" }}>
@@ -23,8 +22,11 @@ export function ForestStory({ spice }: { spice: Spice }) {
         <Eyebrow center color="var(--accent)">From the forest</Eyebrow>
         <h2 className="disp" style={{ fontSize: 44, color: "var(--brand)", textAlign: "center", margin: "18px 0 52px", lineHeight: 1.06 }}>{c.storyTitle}</h2>
         <div className="pd-two" style={{ alignItems: "start", maxWidth: 980, margin: "0 auto" }}>
-          {c.story.map((p, i) => (
-            <p key={i} className="prose" style={{ fontSize: 17.5, color: "var(--ink)", margin: 0 }} dangerouslySetInnerHTML={{ __html: sanitizeHtml(p) }} />
+          {/* Sanitised server-side (page.tsx), not here — calling
+              isomorphic-dompurify's sanitizeHtml from inside this "use client"
+              component crashes SSR on Next 14.2.35. See DEPLOY_READINESS_PLAN.md #0.1. */}
+          {sanitizedStory.map((html, i) => (
+            <p key={i} className="prose" style={{ fontSize: 17.5, color: "var(--ink)", margin: 0 }} dangerouslySetInnerHTML={{ __html: html }} />
           ))}
         </div>
         <figure style={{ maxWidth: 760, margin: "60px auto 0", textAlign: "center" }}>

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { resolveMarket } from "@/lib/market";
 import { getBlogPost, listBlog } from "@/lib/api/blog";
 import { JOURNAL, getPost, toPost, fallbackBody } from "@/lib/journal-data";
+import { sanitizeHtml } from "@/lib/sanitize";
 import { SiteChrome } from "@/components/SiteChrome";
 import { ArticleClient } from "@/components/journal/ArticleClient";
 import type { Post, PostBlock } from "@/lib/journal-data";
@@ -66,6 +67,14 @@ export default async function ArticlePage({ params }: { params: { slug: string }
   if (!resolved) notFound();
   const { post, blocks, related } = resolved;
 
+  // Sanitised server-side, not inside ArticleClient's "use client" tree — a
+  // Next 14.2.35 bug corrupts the client-reference-manifest entry for a
+  // "use client" component that calls isomorphic-dompurify's sanitizeHtml
+  // directly. See DEPLOY_READINESS_PLAN.md #0.1.
+  const sanitizedBlocks: PostBlock[] = blocks.map((b) =>
+    b.t === "p" ? { ...b, text: sanitizeHtml(b.text || "") } : b,
+  );
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Article",
@@ -79,7 +88,7 @@ export default async function ArticlePage({ params }: { params: { slug: string }
   return (
     <SiteChrome initialMarket={market} hero>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />
-      <ArticleClient post={post} blocks={blocks} related={related} />
+      <ArticleClient post={post} blocks={sanitizedBlocks} related={related} />
     </SiteChrome>
   );
 }
