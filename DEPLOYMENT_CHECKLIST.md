@@ -54,6 +54,7 @@ Set every variable from `backend/.env.example`. The app **fails to boot** if a r
 - [ ] Bot Fight Mode on; add a rate-limiting rule on `/auth/*` and `/checkout/*` as a network-layer backstop to the in-app limiters.
 - [ ] SSL/TLS mode = "Full (strict)".
 - [ ] Lock the origin to only accept Cloudflare traffic (so `CF-Connecting-IP` can't be spoofed by hitting the origin directly), then set `TRUST_CLOUDFLARE=true` and `TRUST_PROXY=2` in the backend env (Railway hop + Cloudflare hop). Skipping the origin-lock while setting `TRUST_CLOUDFLARE=true` is worse than not setting it — it lets a direct-to-origin request spoof any client IP.
+- [ ] `TRUST_CLOUDFLARE=true` now also gates geo-detection (`backend/src/middleware/market.ts` — DEPLOY_READINESS_PLAN.md #0.3): a Sri Lankan visitor's first, cookie-less request defaults to LOCAL/LKR instead of INTERNATIONAL/USD, read from Cloudflare's `CF-IPCountry` header. Without `TRUST_CLOUDFLARE=true` (or without Cloudflare proxying the API hostname), this silently falls back to the old INTERNATIONAL-always default — same origin-lock requirement as above. The frontend (`aranya-next/src/lib/market.ts`) does the same detection independently for first-paint currency/CTA colour and needs no flag (Cloudflare adds the header to any proxied request; that side is cosmetic-only, so it's unconditional).
 
 ### 5. CI/CD
 - [x] `deploy.yml` env var name fixed (bug #1 above) — verify a real deploy actually applies migrations via the direct connection, not just that CI goes green.
