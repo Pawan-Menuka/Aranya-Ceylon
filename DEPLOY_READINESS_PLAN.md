@@ -16,8 +16,8 @@ These are real, reproduced today. Fix before anything else.
 
 | # | Status | Owner | Issue |
 |---|---|---|---|
-| 0.1 | ⬜ | C | **Product & journal detail pages hard-500 when the API is unreachable** |
-| 0.2 | ⬜ | C | **No `error.tsx` / `global-error.tsx`** — users see Next's raw crash screen |
+| 0.1 | ✅ | C | **Product & journal detail pages hard-500 when the API is unreachable** — fixed in [PR #142](https://github.com/Pawan-Menuka/Aranya-Ceylon/pull/142), merged |
+| 0.2 | ✅ | C | **No `error.tsx` / `global-error.tsx`** — users see Next's raw crash screen — fixed in [PR #142](https://github.com/Pawan-Menuka/Aranya-Ceylon/pull/142), merged |
 | 0.3 | ⬜ | U | **No geo-detection: every first-time visitor defaults to USD / International** |
 
 ### 0.1 — Detail pages 500 on API outage
@@ -50,6 +50,15 @@ product page 500s.
 
 **Pass criteria:** with the backend fully stopped, every route in the sitemap returns 200 and
 renders demo content. No 500s anywhere.
+
+**Resolved — worse than it looked.** The actual root cause wasn't API connectivity at all: calling
+`isomorphic-dompurify`'s `sanitizeHtml()` from inside a `"use client"` component crashed Next
+14.2.35's SSR pass for that component, regardless of backend state. Confirmed via `npx next build`
+returning **exit code 1** — the production build itself failed on all 17 product/journal detail
+pages, which would have blocked deployment entirely on any CI-gated host (Vercel, Railway, etc.).
+Fixed by sanitizing server-side in the two `page.tsx` files instead of inside the client tree; a
+separate `jsdom` bundling ENOENT (unrelated symptom, same pages) was fixed alongside it. Full
+writeup in the [PR #142](https://github.com/Pawan-Menuka/Aranya-Ceylon/pull/142) description.
 
 ### 0.2 — No error boundary
 
