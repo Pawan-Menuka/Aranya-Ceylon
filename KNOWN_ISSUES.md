@@ -57,10 +57,15 @@ customer can retry the same PaymentIntent / PayHere order. A new hourly cron job
 (`startStaleOrderCancellationJob`) cancels orders left `PENDING` for more than 24h. Explicit
 cancellations (Stripe `payment_intent.canceled`, PayHere status `-1`) still cancel immediately.
 
-**Coupon usage-limit caveat (#5):** redemptions are counted at payment time (`usageCount++`). The limit
-is checked at apply/checkout, so under heavy concurrent use of a tightly-limited coupon a few extra
-redemptions could slip through before the count catches up. Acceptable for launch; a hard cap would
-need reservation logic. The math itself (#7) is exact.
+**Coupon usage-limit fix:** a coupon's usage was previously only counted at payment time
+(`usageCount++` in `confirmOrderPaid`), while the limit was checked earlier against that same
+counter — so a shopper could create several PENDING orders against a single-use coupon before
+paying any of them (none had "claimed" a use yet), then pay for all of them, redeeming a
+`usageLimit: 1` coupon repeatedly for one purchase's worth of items. Fixed by reserving the usage
+atomically at order-creation time instead, inside the same transaction that reserves stock
+(`checkout.controller.ts`) — a conditional `updateMany` (`usageCount < usageLimit`) claims the use
+immediately, and the reservation is released (decremented) if the order is later cancelled
+(`cancelOrderAndReleaseStock`) or refunded (#27), the same way stock is. The math itself (#7) is exact.
 
 **Still open:** the remaining
 frontend port phases (Phase 0 done; product detail, cart/checkout, account, admin, content), plus the
