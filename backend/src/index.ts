@@ -5,6 +5,7 @@ import { env } from './config/env.js';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { PrismaClient } from '@prisma/client';
 import { neonConfig } from '@neondatabase/serverless';
@@ -72,6 +73,10 @@ export const prisma = new PrismaClient({
 // one above this line.
 app.use('/webhooks', webhookRoutes);
 app.use(helmet());
+// gzip/brotli-negotiated compression on every response (perf audit #14).
+// Default 1kb threshold means small acks/health-checks are left uncompressed
+// rather than paying the CPU cost for no size benefit.
+app.use(compression());
 // Fail CLOSED: only NODE_ENV === 'development' relaxes CORS. An unset or
 // misspelled NODE_ENV must behave like production, never like development.
 const isDev = process.env.NODE_ENV === 'development';

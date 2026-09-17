@@ -188,7 +188,7 @@ on mobile data — which is most of your Sri Lankan traffic.
 | 4.4 | ⬜ | C | `loading="lazy"` on below-the-fold images | Verified in Network tab |
 | 4.5 | ⬜ | U | Total page weight on the homepage | < 2 MB on first load |
 | 4.6 | ⬜ | U | Throttled 3G / mid-tier Android test | Usable, not janky |
-| 4.7 | ⬜ | U | Lighthouse mobile | Perf ≥ 70, a11y ≥ 90, no CLS failures |
+| 4.7 | ⬜ | U | Lighthouse mobile (now runs automatically in CI, report-only — `.github/workflows/ci.yml` / `aranya-next/lighthouserc.json`; still needs a real pass/fail read once real images replace the placeholders below) | Perf ≥ 70, a11y ≥ 90, no CLS failures |
 | 4.8 | ⬜ | U | **Every image actually loads** (no 404s / broken icons) | Zero broken images sitewide |
 
 ---

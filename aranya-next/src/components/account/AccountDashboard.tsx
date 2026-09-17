@@ -85,6 +85,69 @@ function StatTile({ label, value, sub, onClick }: { label: string; value: React.
   );
 }
 
+// Generic pulsing bar — sized/positioned per caller, colored with the same
+// `--line` token real content already borders itself with (perf audit #7).
+function SkeletonBar({ width = "100%", height = 14 }: { width?: string | number; height?: number }) {
+  return <div className="skeleton-pulse" style={{ height, width, borderRadius: 6, background: "var(--line)" }} />;
+}
+
+// Matches OrderRow's own card shell exactly (background/border/radius/padding)
+// so only the content inside is a placeholder — used for both the overview's
+// "recent orders" preview and the full orders list while `ordersLoading`.
+function OrderRowsSkeleton({ count = 2 }: { count?: number }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} style={{ background: "#FFFDF9", border: "1px solid var(--line)", borderRadius: 12, padding: "18px 20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <div className="skeleton-pulse" style={{ width: 44, height: 44, borderRadius: 8, background: "var(--line)", flex: "0 0 auto" }} />
+            <div style={{ flex: "1 1 180px", minWidth: 0, display: "grid", gap: 8 }}>
+              <SkeletonBar width="35%" height={16} />
+              <SkeletonBar width="60%" height={12} />
+            </div>
+            <SkeletonBar width={64} height={22} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Matches the real address card's own shell (AddressesView below).
+function AddressCardsSkeleton() {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
+      {Array.from({ length: 2 }).map((_, i) => (
+        <div key={i} style={{ background: "#FFFDF9", border: "1px solid var(--line)", borderRadius: 12, padding: "20px 22px" }}>
+          <SkeletonBar width="35%" height={12} />
+          <div style={{ marginTop: 14, display: "grid", gap: 8 }}>
+            <SkeletonBar width="80%" />
+            <SkeletonBar width="55%" />
+            <SkeletonBar width="30%" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Matches the wishlist grid's own card shape (WishlistView below).
+function WishlistGridSkeleton() {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 22 }}>
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i}>
+          <div className="skeleton-pulse" style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 12, background: "var(--line)" }} />
+          <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
+            <SkeletonBar width="70%" height={13} />
+            <SkeletonBar width="40%" height={12} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function OrderRow({ order, market, onOpen, onReorder }: { order: AccountOrder; market: Market; onOpen: (o: AccountOrder) => void; onReorder: (o: AccountOrder) => void }) {
   const om = orderMarketOf(order, market); // format in the order's own currency (BUG-18)
   const total = acOrderTotal(order, om);
@@ -241,7 +304,7 @@ function AddressesView() {
       )}
 
       {loading ? (
-        <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--muted)", padding: "24px 0" }}>Loading addresses…</div>
+        <AddressCardsSkeleton />
       ) : loadError ? (
         <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--muted)", padding: "24px 0" }}>
           Couldn&rsquo;t load your saved addresses.{" "}
@@ -372,7 +435,7 @@ function WishlistView({ market, items, loading, onRemove }: { market: Market; it
       <h1 className="disp" style={{ fontSize: 36, color: "var(--brand)", margin: "0 0 6px", lineHeight: 1.05 }}>Your wishlist</h1>
       <p style={{ fontFamily: "var(--font-ui)", fontSize: 14.5, color: "var(--muted)", margin: "0 0 24px" }}>Spices you&rsquo;ve saved for later — add them to a future harvest box.</p>
       {loading ? (
-        <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--muted)" }}>Loading wishlist…</div>
+        <WishlistGridSkeleton />
       ) : items !== null ? (
         items.length === 0 ? (
           <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--muted)", padding: "24px 0" }}>Your wishlist is empty. Browse the store to save favourites.</div>
@@ -477,12 +540,12 @@ export function AccountDashboard() {
           <main style={{ flex: 1, minWidth: 0 }}>
             {view === "overview" && (
               ordersLoading
-                ? <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--muted)", padding: "40px 0" }}>Loading your orders…</div>
+                ? <OrderRowsSkeleton count={2} />
                 : <OverviewView market={market} activeOrder={activeOrder} orders={orders} wishlistCount={wishlistCount} onOpen={open} onReorder={reorder} setView={setView} firstName={firstName} />
             )}
             {view === "orders" && (
               ordersLoading
-                ? <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--muted)", padding: "40px 0" }}>Loading your orders…</div>
+                ? <OrderRowsSkeleton count={4} />
                 : <OrdersView market={market} orders={orders} onOpen={open} onReorder={reorder} />
             )}
             {view === "detail" && detailOrder && <OrderDetailView order={detailOrder} market={market} address={addr} onBack={() => { setView("orders"); setOpenOrder(null); }} onReorder={reorder} />}

@@ -7,15 +7,17 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 const store = vi.hoisted(() => ({
     orders: [] as any[],
     lastFindManyWhere: null as any,
+    lastFindManyArgs: null as any,
     lastFindUniqueWhere: null as any,
 }));
 
 vi.mock('../index.js', () => ({
     prisma: {
         order: {
-            findMany: async ({ where }: any) => {
-                store.lastFindManyWhere = where;
-                return store.orders.filter((o) => o.userId === where.userId);
+            findMany: async (args: any) => {
+                store.lastFindManyWhere = args.where;
+                store.lastFindManyArgs = args;
+                return store.orders.filter((o) => o.userId === args.where.userId);
             },
             findUnique: async ({ where, select }: any) => {
                 store.lastFindUniqueWhere = where;
@@ -58,6 +60,12 @@ describe('listMyOrders', () => {
         await listMyOrders({ user: { userId: 'user_1' } } as any, res);
         expect(store.lastFindManyWhere).toEqual({ userId: 'user_1' });
         expect(res.body.orders).toHaveLength(2);
+    });
+
+    it('bounds the query at 200 rows (perf audit #12 — was fully unbounded)', async () => {
+        const res = mockRes();
+        await listMyOrders({ user: { userId: 'user_1' } } as any, res);
+        expect(store.lastFindManyArgs?.take).toBe(200);
     });
 });
 

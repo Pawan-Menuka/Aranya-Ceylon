@@ -21,6 +21,7 @@ export async function listMyOrders(req: Request, res: Response) {
         where: { userId },
         include: orderInclude,
         orderBy: { createdAt: 'desc' },
+        take: 200, // bound an otherwise unlimited load (PERF-07, perf audit #12) until this list is paginated — the frontend renders the full array with no "load more" UI yet
     });
     return res.json({ orders });
 }
