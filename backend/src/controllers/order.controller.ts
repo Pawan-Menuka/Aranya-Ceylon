@@ -21,6 +21,7 @@ export async function listMyOrders(req: Request, res: Response) {
         where: { userId },
         include: orderInclude,
         orderBy: { createdAt: 'desc' },
+        take: 200, // bound an otherwise unlimited load (PERF-07, perf audit #12) until this list is paginated — the frontend renders the full array with no "load more" UI yet
     });
     return res.json({ orders });
 }
@@ -59,6 +60,8 @@ export async function getGuestOrder(req: Request, res: Response) {
         return res.status(403).json({ error: 'Sign in to view this order.' });
     }
 
-    const { userId: _userId, ...publicOrder } = order;
-    return res.json({ order: publicOrder });
+    // Named explicitly (not spread-minus-userId) so the response shape can
+    // never accidentally grow to include a field this route shouldn't expose.
+    const { id, status, total, currency } = order;
+    return res.json({ order: { id, status, total, currency } });
 }

@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import type { Market } from "./types";
 import { fromBackendMarket } from "./money";
 
@@ -45,6 +45,18 @@ export function resolveMarket(): Market {
   } catch {
     // cookies() throws outside a request scope (e.g. during static prerender
     // with no request) — fall through to the default.
+  }
+  // No cookie yet (first-time visitor) — geo-detect via Cloudflare's country
+  // header for a correct first paint, mirroring the backend's own fallback
+  // (middleware/market.ts) so checkout doesn't disagree with what the
+  // shopper already saw (DEPLOY_READINESS_PLAN.md #0.3). Cosmetic only, same
+  // low trust level as the unsigned cookie decode above: this only drives
+  // first-paint currency/CTA colour, never a charge — checkout re-resolves
+  // the market authoritatively on the backend regardless.
+  try {
+    if (headers().get("cf-ipcountry") === "LK") return "local";
+  } catch {
+    // headers() also throws outside a request scope — same fallback.
   }
   return "intl";
 }

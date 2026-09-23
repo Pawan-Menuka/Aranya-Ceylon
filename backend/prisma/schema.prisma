@@ -322,6 +322,12 @@ model CartItem {
 
   // Prevents the same variant appearing twice in one cart
   @@unique([cartId, variantId])
+  // FK indexes (perf audit #11/PERF-02 follow-up) — @@unique([cartId, variantId])
+  // only covers lookups led by cartId. tx.cartItem.count({ where: { variantId } })
+  // in product.service.ts (checking a variant isn't in any live cart before
+  // archiving it) was a real seq-scan-on-growth query with neither column indexed.
+  @@index([productId])
+  @@index([variantId])
 }
 
 model Coupon {

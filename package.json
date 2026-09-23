@@ -22,8 +22,5 @@
       "esbuild",
       "prisma"
     ]
-  },
-  "devDependencies": {
-    "vitest": "^4.1.1"
   }
 }

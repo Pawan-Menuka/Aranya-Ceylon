@@ -71,3 +71,14 @@ jobs:
 
       - name: Build
         run: pnpm --filter aranya-ceylon-storefront build
+
+      - name: "Lighthouse CI (perf audit 13)"
+        # Report-only for now (assertions are all "warn", plus continue-on-error
+        # as a belt-and-braces safety net) — a freshly-added check on a shared
+        # GitHub-hosted runner needs a stability track record before it should
+        # be able to block unrelated PRs. Thresholds mirror the existing manual
+        # target in DEPLOY_READINESS_PLAN.md item 4.7 (Perf >= 70, a11y >= 90,
+        # no CLS failures) rather than inventing new numbers.
+        working-directory: aranya-next
+        continue-on-error: true
+        run: pnpm dlx @lhci/cli@0.13.x autorun --config=lighthouserc.json

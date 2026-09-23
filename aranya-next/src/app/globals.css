@@ -472,6 +472,15 @@ select.sp-input, select.wh-input {
 @keyframes adFade{from{opacity:0}to{opacity:1}}
 @keyframes adSlide{from{transform:translateX(100%)}to{transform:translateX(0)}}
 
+/* Generic loading-skeleton pulse (perf audit #7) — deliberately just an
+   opacity pulse, no new colors: every caller supplies its own background via
+   inline style using tokens already in scope (--ad-line-2 in admin, --line
+   in the storefront/account), so a skeleton always reads as "the existing
+   line color, breathing" rather than a foreign new element. */
+@keyframes skeletonPulse{0%,100%{opacity:.5}50%{opacity:1}}
+.skeleton-pulse{animation:skeletonPulse 1.4s ease-in-out infinite;}
+@media (prefers-reduced-motion: reduce){.skeleton-pulse{animation:none; opacity:.75;}}
+
 /* form controls */
 .ad-field{display:flex; flex-direction:column; gap:6px;}
 .ad-label{font-size:11.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--ad-muted);}

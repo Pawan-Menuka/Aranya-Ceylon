@@ -5,6 +5,7 @@ import { env } from './config/env.js';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { PrismaClient } from '@prisma/client';
 import { neonConfig } from '@neondatabase/serverless';
@@ -32,6 +33,7 @@ import contactRoutes from './routes/contact.routes.js';
 import wholesaleRoutes from './routes/wholesale.routes.js';
 import devSeedRoutes from './routes/dev-seed.routes.js';
 import { startAllJobs } from './jobs/scheduler.js';
+import { isOriginAllowed } from './config/cors.js';
 
 
 const app = express();
@@ -71,15 +73,17 @@ export const prisma = new PrismaClient({
 // one above this line.
 app.use('/webhooks', webhookRoutes);
 app.use(helmet());
+// gzip/brotli-negotiated compression on every response (perf audit #14).
+// Default 1kb threshold means small acks/health-checks are left uncompressed
+// rather than paying the CPU cost for no size benefit.
+app.use(compression());
 // Fail CLOSED: only NODE_ENV === 'development' relaxes CORS. An unset or
 // misspelled NODE_ENV must behave like production, never like development.
 const isDev = process.env.NODE_ENV === 'development';
 const _allowedOrigins = (process.env.FRONTEND_URL ?? 'http://localhost:3000').split(',').map(s => s.trim());
 app.use(cors({
     origin: (origin, cb) => {
-        if (origin && _allowedOrigins.includes(origin)) return cb(null, true);
-        // Development only: allow any origin, incl. file:// pages (null origin)
-        if (isDev) return cb(null, true);
+        if (isOriginAllowed(origin, _allowedOrigins, isDev)) return cb(null, true);
         // Tag the error so the global handler returns 403 instead of 500. `expose`
         // marks the message as safe to relay to the client (see error handler).
         const err = new Error('CORS: origin not allowed') as Error & { status?: number; expose?: boolean };

@@ -50,6 +50,7 @@ vi.mock('../index.js', () => ({
         // "nothing committed" (tests assert stock is unchanged after a 409).
         $transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
             const snapshot = { ...store.variantStock };
+            const couponSnapshot = couponStore.coupon ? { ...couponStore.coupon } : null;
             const tx = {
                 variant: {
                     updateMany: async ({ where, data }: any) => {
@@ -57,6 +58,27 @@ vi.mock('../index.js', () => ({
                         const minStock = where.stock?.gte ?? 0;
                         if (cur < minStock) return { count: 0 };
                         store.variantStock[where.id] = cur - data.stock.decrement;
+                        return { count: 1 };
+                    },
+                },
+                // Models the atomic coupon-usage reservation claimed at
+                // order-creation time (checkout.controller.ts) — the fix for
+                // the coupon-reuse vulnerability. `updateMany`'s `where`
+                // guard (usageCount < usageLimit, when a limit is set) is
+                // what makes the claim conditional, same shape as the stock
+                // reservation above.
+                coupon: {
+                    findUnique: async ({ where }: any) =>
+                        couponStore.coupon && couponStore.coupon.id === where.id
+                            ? { usageLimit: couponStore.coupon.usageLimit }
+                            : null,
+                    updateMany: async ({ where }: any) => {
+                        const c = couponStore.coupon;
+                        if (!c || c.id !== where.id) return { count: 0 };
+                        if (where.usageCount?.lt !== undefined && c.usageCount >= where.usageCount.lt) {
+                            return { count: 0 };
+                        }
+                        c.usageCount += 1;
                         return { count: 1 };
                     },
                 },
@@ -68,6 +90,7 @@ vi.mock('../index.js', () => ({
                 return await fn(tx);
             } catch (err) {
                 store.variantStock = snapshot; // roll back partial decrements
+                couponStore.coupon = couponSnapshot; // roll back the usageCount claim
                 throw err;
             }
         },
@@ -82,9 +105,14 @@ vi.mock('../services/payhere.service.js', () => ({
     PAYHERE_CHECKOUT_URL: 'https://sandbox.payhere.lk/pay/checkout',
 }));
 vi.mock('../services/cart.service.js', () => ({
+    // Real calculateCartTotal reads the coupon persisted on the cart — mirror
+    // that here so tests can drive it via couponStore.coupon, same object the
+    // coupon-code pre-check and the tx.coupon reservation mock above share.
     calculateCartTotal: vi.fn(async () => ({
-        totalInCents: 10000, total: 100, shippingCost: 4.99, discount: 0,
-        couponId: null, currency: 'USD',
+        totalInCents: 10000, total: 100, shippingCost: 4.99,
+        discount: couponStore.coupon ? 20 : 0,
+        couponId: couponStore.coupon?.id ?? null,
+        currency: 'USD',
     })),
 }));
 vi.mock('./webhook.controller.js', () => ({ confirmOrderPaid: vi.fn() }));
@@ -144,6 +172,8 @@ beforeEach(() => {
     store.cart = cartWith({ market: 'INTERNATIONAL', currency: 'USD' });
     store.lastOrderData = null;
     store.variantStock = { v1: 10, v2: 10 };
+    couponStore.coupon = null;
+    couponStore.cartUpdated = null;
     vi.unstubAllEnvs(); // default → stub payments
     vi.clearAllMocks();
 });
@@ -285,6 +315,58 @@ describe('createIntent — stock reservation at checkout (roadmap)', () => {
         expect(res.statusCode).toBe(409);
         expect(store.variantStock.v1).toBe(10); // NOT left decremented
         expect(store.lastOrderData).toBeNull();
+    });
+});
+
+describe('createIntent — coupon-usage reservation at checkout (coupon-reuse fix)', () => {
+    it('claims (increments) usageCount atomically as part of order creation, not at payment', async () => {
+        couponStore.coupon = { id: 'c1', usageLimit: 5, usageCount: 0 };
+        const res = mockRes();
+        await createIntent(userReq(), res);
+        expect(res.statusCode).toBe(200);
+        expect(couponStore.coupon.usageCount).toBe(1);
+    });
+
+    it('fixes the coupon-reuse vulnerability: a second PENDING order cannot re-claim a single-use coupon before the first is paid', async () => {
+        // Previously usageCount was only incremented in confirmOrderPaid, so
+        // two checkouts against the same still-unpaid cart both saw
+        // usageCount unchanged and both succeeded — redeeming a
+        // usageLimit: 1 coupon twice. Reserving it here, at order-creation,
+        // closes that gap even without any payment happening at all.
+        couponStore.coupon = { id: 'c1', usageLimit: 1, usageCount: 0 };
+
+        const res1 = mockRes();
+        await createIntent(userReq(), res1);
+        expect(res1.statusCode).toBe(200);
+        expect(couponStore.coupon.usageCount).toBe(1);
+
+        const res2 = mockRes();
+        await createIntent(userReq(), res2);
+        expect(res2.statusCode).toBe(409);
+        expect(res2.body.error).toMatch(/usage limit/i);
+        expect(couponStore.coupon.usageCount).toBe(1); // still just the one claim
+    });
+
+    it('rejects with 409 when another order claims the last use first (race), rolling back stock too', async () => {
+        // Simulates a concurrent order's transaction committing the last
+        // claim between this request's (now-stale) coupon read and its own
+        // transaction — same race shape already covered for stock above.
+        couponStore.coupon = { id: 'c1', usageLimit: 1, usageCount: 1 };
+
+        const res = mockRes();
+        await createIntent(userReq(), res);
+
+        expect(res.statusCode).toBe(409);
+        expect(res.body.error).toMatch(/usage limit/i);
+        expect(store.lastOrderData).toBeNull();
+        expect(store.variantStock.v1).toBe(10); // stock reservation rolled back too
+    });
+
+    it('does not touch usageCount for a checkout with no coupon', async () => {
+        const res = mockRes();
+        await createIntent(userReq(), res);
+        expect(res.statusCode).toBe(200);
+        expect(couponStore.coupon).toBeNull();
     });
 });
 

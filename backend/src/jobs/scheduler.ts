@@ -66,27 +66,36 @@ export function startCartExpiryJob() {
 // --- Job 3: Low stock alert ---
 // Runs once a day at 8am. Emails admin if any variant
 // is below the LOW_STOCK_THRESHOLD.
+
+// Extracted from the cron callback so the targeting/sending logic is
+// directly unit-testable without faking node-cron (same reasoning as
+// runAbandonedCartRecovery below).
+export async function runLowStockAlert(): Promise<number> {
+    const threshold = Number(process.env.LOW_STOCK_THRESHOLD ?? 10);
+
+    const lowStock = await prisma.variant.findMany({
+        where: { stock: { lte: threshold, gt: 0 } },
+        include: { product: { select: { name: true } } },
+    });
+
+    if (lowStock.length === 0) return 0;
+
+    await sendLowStockAlert(
+        lowStock.map((v) => ({
+            name: v.product.name,
+            sku: v.sku,
+            stock: v.stock,
+        })),
+    );
+
+    return lowStock.length;
+}
+
 export function startLowStockAlertJob() {
     cron.schedule('0 8 * * *', async () => {
         try {
-            const threshold = Number(process.env.LOW_STOCK_THRESHOLD ?? 10);
-
-            const lowStock = await prisma.variant.findMany({
-                where: { stock: { lte: threshold, gt: 0 } },
-                include: { product: { select: { name: true } } },
-            });
-
-            if (lowStock.length === 0) return;
-
-            await sendLowStockAlert(
-                lowStock.map((v) => ({
-                    name: v.product.name,
-                    sku: v.sku,
-                    stock: v.stock,
-                })),
-            );
-
-            console.log(`📦 Low stock alert sent for ${lowStock.length} variant(s)`);
+            const count = await runLowStockAlert();
+            if (count > 0) console.log(`📦 Low stock alert sent for ${count} variant(s)`);
         } catch (err) {
             console.error('[CRON] Low stock alert job failed:', err);
         }
@@ -106,6 +115,13 @@ export function startLowStockAlertJob() {
 // per-order `status: 'PENDING'` guard inside it is still race-safe against a
 // payment that completes in the gap between this query and the cancel call.
 const STALE_ORDER_HOURS = 24;
+// Caps how many stale orders one hourly run will process (perf audit #7):
+// each is its own transaction on its own pooled connection, so an unbounded
+// backlog (e.g. after an outage) could otherwise open hundreds of
+// connections in one tick. Left at 200/hour a backlog just drains over a
+// couple of runs instead — a stale PENDING order sitting an extra hour
+// before its stock/coupon reservation is released is harmless.
+const STALE_ORDER_BATCH_LIMIT = 200;
 
 export function startStaleOrderCancellationJob() {
     cron.schedule('0 * * * *', async () => {
@@ -114,6 +130,7 @@ export function startStaleOrderCancellationJob() {
             const stale = await prisma.order.findMany({
                 where: { status: 'PENDING', createdAt: { lt: cutoff } },
                 select: { id: true },
+                take: STALE_ORDER_BATCH_LIMIT,
             });
 
             for (const o of stale) {

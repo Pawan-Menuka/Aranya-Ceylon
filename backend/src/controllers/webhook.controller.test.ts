@@ -106,6 +106,7 @@ const store = vi.hoisted(() => {
             update: async ({ where, data }: any) => {
                 const c = s.coupons.find((x) => x.id === where.id);
                 if (c && data.usageCount?.increment) c.usageCount += data.usageCount.increment;
+                if (c && data.usageCount?.decrement) c.usageCount -= data.usageCount.decrement;
                 return c;
             },
         },
@@ -251,6 +252,31 @@ describe('cancelOrderAndReleaseStock', () => {
 
         expect(s.variants.find((v) => v.id === 'var_a')!.stock).toBe(stockAfterFirstCancel);
     });
+
+    it('releases the coupon-usage reservation claimed at checkout (coupon-reuse fix)', async () => {
+        s.orders[0]!.couponId = 'coupon_1';
+        s.coupons = [{ id: 'coupon_1', usageCount: 1 }]; // claimed when the order was created
+
+        await cancelOrderAndReleaseStock('order_1', 'test cancel');
+
+        expect(s.coupons[0]!.usageCount).toBe(0);
+    });
+
+    it('does not touch coupons for an order without one', async () => {
+        s.coupons = [{ id: 'coupon_1', usageCount: 1 }];
+        await cancelOrderAndReleaseStock('order_1', 'test cancel');
+        expect(s.coupons[0]!.usageCount).toBe(1);
+    });
+
+    it('does not double-release the coupon when called twice on an already-cancelled order', async () => {
+        s.orders[0]!.couponId = 'coupon_1';
+        s.coupons = [{ id: 'coupon_1', usageCount: 1 }];
+
+        await cancelOrderAndReleaseStock('order_1', 'first cancel');
+        await cancelOrderAndReleaseStock('order_1', 'second cancel attempt');
+
+        expect(s.coupons[0]!.usageCount).toBe(0); // released once, not twice
+    });
 });
 
 describe('confirmOrderPaid — #11 gift-set component stock', () => {
@@ -305,15 +331,20 @@ describe('confirmOrderPaid — #11 gift-set component stock', () => {
     });
 });
 
-describe('confirmOrderPaid — #5 coupon redemption', () => {
-    it('increments the coupon usage count once on payment', async () => {
+describe('confirmOrderPaid — #5 coupon redemption is claimed at checkout, not here', () => {
+    // The usage-count claim moved to order-creation time (checkout.controller.ts,
+    // reserved atomically alongside stock) to close the coupon-reuse
+    // vulnerability where several PENDING orders could each pass a stale
+    // usage-limit check before any of them paid. Payment confirmation must
+    // now leave an already-claimed count untouched, paid or not.
+    it('never touches usageCount on payment — it was already claimed when the order was created', async () => {
         s.orders[0]!.couponId = 'coupon_1';
-        s.coupons = [{ id: 'coupon_1', usageCount: 0 }];
+        s.coupons = [{ id: 'coupon_1', usageCount: 1 }]; // claimed at order-creation
 
         await confirmOrderPaid('order_1', 'ref', 'Stripe');
         expect(s.coupons[0]!.usageCount).toBe(1);
 
-        // Duplicate delivery must NOT double-count the redemption
+        // Duplicate delivery must not touch it either
         await confirmOrderPaid('order_1', 'ref', 'Stripe');
         expect(s.coupons[0]!.usageCount).toBe(1);
     });
