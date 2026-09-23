@@ -14,7 +14,8 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r --if-present test",
-    "test:unit": "pnpm --filter @aranya/backend test"
+    "test:unit": "pnpm --filter @aranya/backend test:unit",
+    "test:integration": "pnpm --filter @aranya/backend test:integration"
   },
   "pnpm": {
     "ignoredBuiltDependencies": [
