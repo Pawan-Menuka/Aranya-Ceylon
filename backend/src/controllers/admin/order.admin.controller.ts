@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { prisma } from '../../index.js';
+import { prisma } from '../../lib/prisma.js';
 import { writeAuditLog } from '../../services/audit.service.js';
 import { sendShippingNotification } from '../../services/email.service.js';
 import { stripe } from '../../services/stripe.service.js';

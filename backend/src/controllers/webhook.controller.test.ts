@@ -124,7 +124,7 @@ const store = vi.hoisted(() => {
     return { s, db };
 });
 
-vi.mock('../index.js', () => ({
+vi.mock('../lib/prisma.js', () => ({
     prisma: {
         ...store.db,
         // Returns the callback's value so confirmOrderPaid can hand back the

@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import { productFilterSchema, createProductSchema, updateProductSchema } from '@aranya/shared';
 import * as productService from '../services/product.service.js';
 import { uploadImage } from '../services/cloudinary.service.js';
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 import { writeAuditLog } from '../services/audit.service.js';
 import { withCache } from '../lib/simpleCache.js';
 

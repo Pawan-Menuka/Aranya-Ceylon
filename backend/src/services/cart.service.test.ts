@@ -26,7 +26,7 @@ function notFound(): never {
     throw e;
 }
 
-vi.mock('../index.js', () => ({
+vi.mock('../lib/prisma.js', () => ({
     prisma: {
         cart: {
             // Existing single-cart tests below key off store.s.cart directly

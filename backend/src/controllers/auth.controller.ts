@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import { hash, verify } from '@node-rs/bcrypt';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 import { issueTokenPair, rotateRefreshToken, revokeTokenFamily, revokeAllUserTokens, issueEmailVerificationToken, verifyEmailToken, issuePasswordResetToken, resetPasswordWithToken } from '../services/token.service.js';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../services/email.service.js';
 import { writeAuditLog } from '../services/audit.service.js';

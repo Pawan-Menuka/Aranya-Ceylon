@@ -1,4 +1,4 @@
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 import { createId } from '@paralleldrive/cuid2';
 import type { Market, Prisma, Coupon } from '@prisma/client';
 import type { AddToCartInput, UpdateCartItemInput } from '@aranya/shared';

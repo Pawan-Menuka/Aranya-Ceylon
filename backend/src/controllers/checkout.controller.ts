@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 import { Currency } from '@prisma/client';
 import { createPaymentIntent } from '../services/stripe.service.js';
 import { buildPayHerePayload, PAYHERE_CHECKOUT_URL } from '../services/payhere.service.js';

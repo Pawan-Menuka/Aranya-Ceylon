@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import type { Prisma } from '@prisma/client';
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 
 // Shared shape for a customer-facing order: line items (with product name/slug/
 // image + variant weight) and the status timeline.
