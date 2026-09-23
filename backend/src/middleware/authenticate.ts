@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken, type AccessTokenPayload } from '../lib/jwt.js';
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 
 // Extend Express Request type to include authenticated user
 declare global {

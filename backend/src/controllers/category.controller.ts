@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 import { withCache } from '../lib/simpleCache.js';
 
 // Category list + per-category active-product counts change only when an

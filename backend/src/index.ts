@@ -7,10 +7,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
-import { PrismaClient } from '@prisma/client';
-import { neonConfig } from '@neondatabase/serverless';
-import { PrismaNeon } from '@prisma/adapter-neon';
-import ws from 'ws';
 import { SHARED_VERSION } from '@aranya/shared';
 import { ZodError } from 'zod';
 import authRoutes from './routes/auth.routes.js';
@@ -34,6 +30,7 @@ import wholesaleRoutes from './routes/wholesale.routes.js';
 import devSeedRoutes from './routes/dev-seed.routes.js';
 import { startAllJobs } from './jobs/scheduler.js';
 import { isOriginAllowed } from './config/cors.js';
+import { prisma } from './lib/prisma.js';
 
 
 const app = express();
@@ -46,23 +43,6 @@ if (process.env.NODE_ENV === 'production') {
     // Cloudflare added = 2. Configurable so adding Cloudflare is a config change.
     app.set('trust proxy', env.TRUST_PROXY);
 }
-
-// 1. Connect via Neon's serverless driver (#28). The previous node-postgres
-// persistent Pool against Neon's pooler dropped connections ("Server has
-// closed the connection" / P1017) — fine at boot, dead by the first query.
-// The serverless driver is built for Neon + serverless hosts (Vercel) and
-// recovers connections transparently. It always encrypts to Neon, so it also
-// covers the TLS-verification concern (#11). In Node we must supply a
-// WebSocket implementation (built-in on edge runtimes).
-neonConfig.webSocketConstructor = ws;
-
-// 2. Prisma 7 Neon adapter — manages its own connection pool internally.
-const adapter = new PrismaNeon({ connectionString: env.DATABASE_URL });
-
-export const prisma = new PrismaClient({
-    adapter,
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-});
 
 // ⚠ ORDERING IS INTENTIONAL — do not move. Webhook routes are mounted BEFORE
 // express.json() because Stripe signature verification needs the raw request

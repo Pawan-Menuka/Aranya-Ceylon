@@ -3,8 +3,8 @@
  * Only active when ENABLE_DEV_ROUTES=true (fail closed).
  * POST /dev/seed-catalog
  *
- * Uses a dynamic import() for `prisma` so the main app's warm, already-
- * authenticated Neon connection is reused — no cold pool, no P1017.
+ * Uses a dynamic import() for `prisma` so the application's shared client is
+ * reused — no second connection pool is opened.
  */
 
 import { Router } from 'express';
@@ -35,9 +35,8 @@ if (process.env.ENABLE_DEV_ROUTES === 'true') {
     ] as const;
 
     router.post('/seed-catalog', async (_req, res) => {
-        // Dynamic import → always gets the fully-initialised prisma from index.ts
-        // (avoids the circular-import timing issue with static imports)
-        const { prisma } = await import('../index.js');
+        // Dynamic import keeps the seed-only dependency out of normal startup.
+        const { prisma } = await import('../lib/prisma.js');
         const log: string[] = [];
 
         try {

@@ -8,7 +8,7 @@ const state = vi.hoisted(() => ({
     auditArgs: undefined as unknown,
 }));
 
-vi.mock('../../index.js', () => ({
+vi.mock('../../lib/prisma.js', () => ({
     prisma: {
         order: {
             findMany: vi.fn(async () => state.orders),

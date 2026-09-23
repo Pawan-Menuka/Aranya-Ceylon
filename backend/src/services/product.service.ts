@@ -1,4 +1,4 @@
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 import { Prisma } from '@prisma/client';
 import type { Market } from '@prisma/client';
 import type { CreateProductInput, UpdateProductInput, ProductFilterInput } from '@aranya/shared';

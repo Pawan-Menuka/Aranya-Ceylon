@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import { constructWebhookEvent } from '../services/stripe.service.js';
 import { verifyPayHereNotification } from '../services/payhere.service.js';
 import { sendOrderConfirmation, sendNewOrderAdminNotification } from '../services/email.service.js';
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 
 // ── Webhook event log (roadmap: replay/dispute debugging) ───────────
 // Best-effort and outside any order transaction: a logging failure must never

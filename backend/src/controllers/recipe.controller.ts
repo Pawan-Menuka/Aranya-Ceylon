@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 
 export async function listRecipes(req: Request, res: Response) {
     // Coerce to a single string — a duplicated param makes req.query.course an array.

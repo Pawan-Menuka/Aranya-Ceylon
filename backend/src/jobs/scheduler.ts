@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 import { sendLowStockAlert, sendAbandonedCartEmail } from '../services/email.service.js';
 import { revalidateFrontend } from '../lib/revalidate.js';
 import { cancelOrderAndReleaseStock } from '../controllers/webhook.controller.js';

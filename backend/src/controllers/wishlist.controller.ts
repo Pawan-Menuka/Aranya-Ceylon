@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 import { Prisma } from '@prisma/client';
 
 export async function listWishlist(req: Request, res: Response) {

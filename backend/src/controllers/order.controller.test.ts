@@ -11,7 +11,7 @@ const store = vi.hoisted(() => ({
     lastFindUniqueWhere: null as any,
 }));
 
-vi.mock('../index.js', () => ({
+vi.mock('../lib/prisma.js', () => ({
     prisma: {
         order: {
             findMany: async (args: any) => {

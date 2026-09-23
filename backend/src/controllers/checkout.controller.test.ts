@@ -23,7 +23,7 @@ const couponStore = vi.hoisted(() => ({
     cartUpdated: null as any,
 }));
 
-vi.mock('../index.js', () => ({
+vi.mock('../lib/prisma.js', () => ({
     prisma: {
         cart: {
             findUnique: async () => store.cart,
