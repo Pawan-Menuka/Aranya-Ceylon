@@ -14,7 +14,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
         with:
-          version: 9
+          version: 9.15.9
       - uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -52,27 +52,25 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.9
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: aranya-next/package-lock.json
+          cache: pnpm
 
       - name: Install dependencies
-        working-directory: aranya-next
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Type check
-        working-directory: aranya-next
-        run: npm run typecheck
+        run: pnpm --filter aranya-ceylon-storefront typecheck
 
       - name: Lint
-        working-directory: aranya-next
-        run: npm run lint
+        run: pnpm --filter aranya-ceylon-storefront lint
 
       - name: Build
-        working-directory: aranya-next
-        run: npm run build
+        run: pnpm --filter aranya-ceylon-storefront build
 
       - name: "Lighthouse CI (perf audit 13)"
         # Report-only for now (assertions are all "warn", plus continue-on-error
@@ -83,4 +81,4 @@ jobs:
         # no CLS failures) rather than inventing new numbers.
         working-directory: aranya-next
         continue-on-error: true
-        run: npx --yes @lhci/cli@0.13.x autorun --config=lighthouserc.json
+        run: pnpm dlx @lhci/cli@0.13.x autorun --config=lighthouserc.json
