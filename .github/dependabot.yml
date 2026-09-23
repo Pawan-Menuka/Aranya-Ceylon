@@ -1,11 +1,8 @@
 # Dependency update automation. Complements the (report-only) `pnpm audit` step
 # in CI: audit tells you a vuln exists, Dependabot opens the PR that fixes it.
 #
-# Note the dual lockfile layout:
-#   - the pnpm workspace at the repo root (pnpm-lock.yaml) covers backend,
-#     shared, and aranya-next's package.json
-#   - aranya-next also keeps its own package-lock.json, used by the npm-based
-#     `frontend` CI job — so it gets a second entry to keep that lockfile current
+# The root pnpm workspace and its single pnpm-lock.yaml cover backend, shared,
+# and aranya-next.
 #
 # PRs target `Develop` (the integration branch), not `main`, so updates flow
 # through the normal feature -> Develop -> main path.
@@ -13,9 +10,7 @@
 # Major bumps of framework-locked packages (React, Next, ESLint, TypeScript,
 # their types) are ignored: they require a coordinated framework upgrade done as
 # a deliberate project, not an automated PR that would break the Next 14 build.
-# Patch/minor updates of those packages still come through. The ignore list is
-# duplicated per ecosystem because Dependabot config does not support YAML
-# anchors.
+# Patch/minor updates of those packages still come through.
 version: 2
 updates:
   # pnpm workspace (backend + shared + aranya-next)
@@ -27,38 +22,6 @@ updates:
     open-pull-requests-limit: 5
     groups:
       # One PR per week for routine patch/minor bumps to keep noise low.
-      minor-and-patch:
-        update-types:
-          - "minor"
-          - "patch"
-    ignore:
-      - dependency-name: "react"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "react-dom"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@types/react"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@types/react-dom"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "next"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "eslint"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "eslint-config-next"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@types/node"
-        update-types: ["version-update:semver-major"]
-
-  # aranya-next's standalone npm lockfile (frontend CI job uses `npm ci`)
-  - package-ecosystem: "npm"
-    directory: "/aranya-next"
-    target-branch: "Develop"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-    groups:
       minor-and-patch:
         update-types:
           - "minor"
