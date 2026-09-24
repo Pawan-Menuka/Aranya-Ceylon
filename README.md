@@ -11,7 +11,7 @@ via Stripe), served from one catalog and one API.
 - **Shared:** `@aranya/shared` — Zod schemas/types shared between backend and frontend.
 - **Frontend:** `aranya-next/` — production Next.js 14 (App Router) + TypeScript storefront,
   talking to the API through a same-origin BFF proxy (`src/app/api/[...path]/route.ts`).
-- **Tooling:** pnpm workspaces, Vitest, ESLint (flat config), GitHub Actions CI.
+- **Tooling:** pnpm workspaces, Vitest, Playwright, ESLint (flat config), GitHub Actions CI.
 
 ## Monorepo layout
 
@@ -19,12 +19,18 @@ via Stripe), served from one catalog and one API.
 backend/      Express API, Prisma schema + migrations, cron jobs, services
 shared/       Zod schemas and types (built to dist/, consumed by backend & frontend)
 aranya-next/  Next.js storefront + admin console (see aranya-next/README.md)
+docs/         Audits, test plans, operational notes, and design references
 ```
 
 ## Prerequisites
 
-- Node ≥ 20, pnpm ≥ 9
-- A PostgreSQL database (Neon recommended; the app uses the `@prisma/adapter-pg` pool)
+- Node ≥ 20 and pnpm ≥ 9 (pnpm is the only supported package manager)
+- A Neon PostgreSQL database for production
+- Docker, when running the PostgreSQL integration suite locally
+
+Production uses Neon's serverless driver with `@prisma/adapter-neon`. Local and
+CI integration tests deliberately use the standard `pg` driver through
+`@prisma/adapter-pg` so concurrency behavior is proven against real PostgreSQL.
 
 ## Setup
 
@@ -48,7 +54,8 @@ pnpm --filter @aranya/backend run seed:catalog
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | PostgreSQL connection string (Neon, `sslmode=require`) |
+| `DATABASE_URL` | PostgreSQL connection string (production Neon URLs use `sslmode=require`) |
+| `DATABASE_ADAPTER` | `neon` for production; `pg` for local/CI integration tests |
 | `JWT_ACCESS_SECRET` | Secret for signing short-lived access tokens (refresh tokens are opaque, not JWTs) |
 | `COOKIE_SECRET` | Secret for the signed `x-market` cookie |
 | `FRONTEND_URL` | Allowed CORS origin(s), comma-separated; also used in payment redirects |
@@ -58,7 +65,7 @@ pnpm --filter @aranya/backend run seed:catalog
 | `RESEND_API_KEY`, `EMAIL_FROM` | Transactional email |
 | `LOW_STOCK_THRESHOLD` | Low-stock alert threshold (default 10) |
 | `ENABLE_DEV_ROUTES` | `true` enables `POST /dev/seed-catalog`. **Never set in production.** |
-| `NODE_ENV` | `development` relaxes CORS and auto-verifies new accounts; anything else is treated as production |
+| `NODE_ENV` | Runtime mode: `development`, `test`, or `production` |
 
 ## Scripts (run from the repo root)
 
@@ -68,7 +75,54 @@ pnpm --filter @aranya/backend run seed:catalog
 | `pnpm build:backend` | Compile the backend to `dist/` |
 | `pnpm typecheck` | Typecheck all workspaces |
 | `pnpm lint` | Lint all workspaces |
-| `pnpm test` | Run the Vitest suites |
+| `pnpm test:unit` | Run backend unit tests with mocked dependencies |
+| `pnpm test:integration` | Run backend integration tests against PostgreSQL |
+| `pnpm test:e2e` | Run the Playwright checkout suite in Chromium |
+| `pnpm build` | Build every workspace |
+
+## Testing
+
+The repository has three intentionally separate test layers:
+
+1. **Unit tests** use Vitest and mocked dependencies. They are fast, but do not
+   claim to prove database locking or transaction behavior.
+2. **Integration tests** use Prisma with `@prisma/adapter-pg` against a dedicated
+   PostgreSQL database. They prove checkout stock concurrency and webhook
+   idempotency using real database transactions.
+3. **Browser tests** use Playwright with Chromium. They exercise checkout
+   validation, the stub-payment success path, cart clearing, and insufficient
+   stock while deterministically intercepting the storefront BFF.
+
+Run the unit suite:
+
+```bash
+pnpm test:unit
+```
+
+Run the PostgreSQL integration suite:
+
+```bash
+docker compose -f compose.integration.yml up -d --wait
+export DATABASE_URL=postgresql://aranya:aranya_test@localhost:55432/aranya_integration
+export DIRECT_URL="$DATABASE_URL"
+export DATABASE_ADAPTER=pg
+pnpm --filter @aranya/backend exec prisma migrate deploy
+pnpm test:integration
+docker compose -f compose.integration.yml down
+```
+
+The explicit migration environment above and the integration test configuration
+both target a database whose name contains `integration`; the cleanup helper
+refuses to truncate any other database. See
+[`backend/src/test/integration/README.md`](backend/src/test/integration/README.md)
+for explicit environment-variable setup.
+
+Run the browser suite:
+
+```bash
+pnpm --filter aranya-ceylon-storefront exec playwright install chromium
+pnpm test:e2e
+```
 
 ## Database migrations
 
@@ -89,4 +143,6 @@ index cleanup). Review `migration.sql` before deploying to production.
   tokens are JWTs.
 - **Cron jobs** currently run in every instance — gate them behind leader election
   before scaling horizontally (see `src/index.ts`).
-- See `KNOWN_ISSUES.md` for the audit log of fixed issues and what remains.
+- See [`docs/README.md`](docs/README.md) for the documentation index and
+  [`docs/operations/known-issues.md`](docs/operations/known-issues.md) for the
+  historical audit log.

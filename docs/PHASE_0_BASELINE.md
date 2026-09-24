@@ -25,18 +25,20 @@ The following application files were already marked as modified before Phase 0:
 
 `backend/src/index.ts` has no normal content diff and is marked modified because of working-tree/index metadata or line-ending normalization. Git reports that LF would be replaced by CRLF if the file is touched.
 
-The following root documents were already untracked:
+The following documents were already untracked at the repository root and were
+later preserved under the Phase 6 documentation structure:
 
-- `BACKEND_AUTONOMOUS_EXECUTION_PLAN.md`
-- `BACKEND_TEST_EXECUTION_RESULTS.md`
-- `IMAGE_GENERATION_PROMPTS.md`
+- `docs/testing/backend-autonomous-execution-plan.md`
+- `docs/testing/backend-test-execution-results.md`
+- `docs/design/image-generation-prompts.md`
 
 The phased plan and this baseline report are new Phase 0 documentation:
 
 - `docs/PHASED_IMPLEMENTATION_PLAN.md`
 - `docs/PHASE_0_BASELINE.md`
 
-All pre-existing source changes and untracked documents remain in place.
+All pre-existing source changes were left untouched, and every untracked
+document listed above was preserved.
 
 ## Validation results
 

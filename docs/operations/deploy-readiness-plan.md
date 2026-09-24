@@ -53,7 +53,7 @@ renders demo content. No 500s anywhere.
 
 **Resolved — worse than it looked.** The actual root cause wasn't API connectivity at all: calling
 `isomorphic-dompurify`'s `sanitizeHtml()` from inside a `"use client"` component crashed Next
-14.2.35's SSR pass for that component, regardless of backend state. Confirmed via `npx next build`
+14.2.35's SSR pass for that component, regardless of backend state. Confirmed via `pnpm --filter aranya-ceylon-storefront build`
 returning **exit code 1** — the production build itself failed on all 17 product/journal detail
 pages, which would have blocked deployment entirely on any CI-gated host (Vercel, Railway, etc.).
 Fixed by sanitizing server-side in the two `page.tsx` files instead of inside the client tree; a
@@ -92,7 +92,7 @@ re-resolves authoritatively on the backend either way) now check for `LK` before
 INTERNATIONAL. Verified live: `curl` against the dev server with `CF-IPCountry: LK` flips the
 topbar from "International"/USD to "Sri Lanka"/LKR; no header (or a non-LK country) stays on
 International/USD. **Requires `TRUST_CLOUDFLARE=true` in production** for the backend half to
-activate — see the Cloudflare section of `DEPLOYMENT_CHECKLIST.md`.
+activate — see the Cloudflare section of the [deployment checklist](deployment-checklist.md).
 
 ---
 
@@ -125,7 +125,7 @@ If the webhook never reaches production, the failure is **silent and severe**:
 Net result: you took their money and the system cancelled their order. Nobody is notified.
 
 **Do not launch until you have seen a real webhook land in production.** Verify a `WebhookEvent`
-row exists (`npx prisma studio` → `WebhookEvent`) after a real payment.
+row exists (`pnpm --filter @aranya/backend exec prisma studio` → `WebhookEvent`) after a real payment.
 
 ---
 
@@ -146,7 +146,7 @@ hear nothing.
 | 2.7 | ⬜ | U | Password reset link | Points at prod frontend, single-use, expires |
 | 2.8 | ⬜ | U | Shipping notification | Tracking number correct |
 | 2.9 | ⬜ | U | Contact + wholesale notifications | Correct inbox, fields escaped, Reply-To set |
-| 2.10 | ⬜ | U | Low-stock + abandoned-cart jobs | See `BACKEND_MANUAL_TEST_PLAN.md` for triggers |
+| 2.10 | ⬜ | U | Low-stock + abandoned-cart jobs | See the [backend manual test plan](../testing/backend-manual-test-plan.md) for triggers |
 | 2.11 | ⬜ | C | **Make email failures visible** (don't just `console.error`) | Failures surface somewhere you'll actually look |
 
 ---
