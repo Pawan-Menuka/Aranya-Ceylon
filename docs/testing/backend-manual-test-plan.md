@@ -1,7 +1,7 @@
 # Backend manual test plan
 
 Base URL: `http://localhost:4000` (no `/api` prefix — routes are mounted directly, e.g. `/auth/login`).
-Run `backend`'s dev server (`npm run dev` / `pnpm dev` from `backend/`) with `PAYMENTS_MODE=stub` so
+Run the backend with `pnpm dev:backend` from the repository root and set `PAYMENTS_MODE=stub` so
 checkout doesn't need real Stripe/PayHere keys. Use `curl`, Postman, or Insomnia — examples below use curl.
 
 Where a test needs an access token, first `POST /auth/login` and reuse the `accessToken` from the
@@ -48,7 +48,7 @@ to carry it. Authenticated carts use the Bearer token.
 
 🆕 **Abandoned-cart flag reset** — touching a logged-in user's cart (any `POST/PATCH/DELETE` above)
 must clear `abandonedEmailSentAt`. No direct endpoint exposes this field; verify via Prisma Studio
-(`npx prisma studio` → `Cart` table) before/after a cart touch.
+(`pnpm --filter @aranya/backend exec prisma studio` → `Cart` table) before/after a cart touch.
 
 ---
 
@@ -99,7 +99,7 @@ confirm it's correctly rejected and logs nothing, then use the Stripe CLI trigge
 just trust the 8 new vitest cases in `webhook.controller.test.ts` for the signature-gating behavior and
 use Prisma Studio to eyeball rows after a real Stripe CLI trigger.
 
-Check via `npx prisma studio` → `WebhookEvent` table (no admin UI exists for this yet).
+Check via `pnpm --filter @aranya/backend exec prisma studio` → `WebhookEvent` table (no admin UI exists for this yet).
 
 ---
 

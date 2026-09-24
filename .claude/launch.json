@@ -3,9 +3,9 @@
   "configurations": [
     {
       "name": "frontend",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "cwd": "aranya-next",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "aranya-ceylon-storefront", "dev"],
+      "cwd": ".",
       "port": 3000
     }
   ]

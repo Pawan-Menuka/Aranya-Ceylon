@@ -79,8 +79,8 @@ first results paint instantly and still work with the API down.
 ## Quick start
 
 ```bash
-# 1. install from the repository root
-pnpm install
+# 1. install from the repository root (pnpm is the only supported package manager)
+pnpm install --frozen-lockfile
 
 # 2. configure env
 cp .env.example .env.local
@@ -99,8 +99,23 @@ pnpm --filter aranya-ceylon-storefront build
 pnpm --filter aranya-ceylon-storefront start
 ```
 
-Requires Node 20+ and pnpm 9. Fonts are managed via `next/font` — no
+The repository root `package.json` defines the supported Node and pnpm versions.
+Fonts are managed via `next/font` — no
 external font CDN needed at runtime.
+
+### Browser tests
+
+The checkout Playwright suite seeds the browser cart and intercepts the BFF, so
+it is deterministic and does not call PostgreSQL, Stripe, or PayHere.
+
+```bash
+pnpm --filter aranya-ceylon-storefront exec playwright install chromium
+pnpm --filter aranya-ceylon-storefront test:e2e
+```
+
+It covers the empty-cart state, client validation, successful stub checkout,
+and the insufficient-stock retry path. Backend transaction guarantees are
+covered separately by the real-PostgreSQL integration suite.
 
 ---
 
