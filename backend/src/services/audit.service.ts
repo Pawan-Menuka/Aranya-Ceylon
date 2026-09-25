@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import type { Request } from 'express';
+import type { Prisma } from '@prisma/client';
 import { getClientIp } from '../lib/clientIp.js';
 
 type AuditEvent =
@@ -39,7 +40,7 @@ export async function writeAuditLog(params: {
     targetId: string;
     // Audit payloads may be full before/after snapshots or compact field-level
     // changes, depending on the sensitivity and size of the target record.
-    diff?: Record<string, any>;
+    diff?: Record<string, unknown>;
 }) {
     const { req, actorId, event, targetType, targetId, diff } = params;
 
@@ -49,7 +50,9 @@ export async function writeAuditLog(params: {
             event,
             targetType,
             targetId,
-            diff: diff ?? undefined,
+            // Snapshot fields may contain Dates or Prisma Decimals, which the
+            // client serializes when writing the JSON column.
+            diff: diff as Prisma.InputJsonObject | undefined,
             ip: getClientIp(req),
             userAgent: req.headers['user-agent'] ?? 'unknown',
         },
