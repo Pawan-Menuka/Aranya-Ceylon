@@ -33,6 +33,9 @@ const envSchema = z
 
         // Always required (with a dev/test fallback applied below).
         DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+        // Neon is the production/default path. Standard PostgreSQL is used by
+        // local and CI integration tests.
+        DATABASE_ADAPTER: z.enum(['neon', 'pg']).default('neon'),
         JWT_ACCESS_SECRET: z
             .string()
             .min(isProduction ? 32 : 1, 'JWT_ACCESS_SECRET must be at least 32 characters in production'),

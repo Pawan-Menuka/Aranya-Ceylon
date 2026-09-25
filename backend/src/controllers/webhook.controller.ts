@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import { constructWebhookEvent } from '../services/stripe.service.js';
 import { verifyPayHereNotification } from '../services/payhere.service.js';
 import { sendOrderConfirmation, sendNewOrderAdminNotification } from '../services/email.service.js';
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 
 // ── Webhook event log (roadmap: replay/dispute debugging) ───────────
 // Best-effort and outside any order transaction: a logging failure must never
@@ -84,13 +84,18 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
         // packs exactly one jar-sized portion of each component per box) and
         // the order's market. An unresolvable component is logged for manual
         // review, never blocks the order.
+        // Resolved per order item concurrently (N+1 fix, perf audit #7) —
+        // each item's gift-box resolution is independent of the others, so
+        // running them one after another was pure serial latency for no
+        // correctness benefit; `giftIssues.push` from concurrent iterations
+        // is safe since Node's event loop never interleaves it mid-call.
         const giftIssues: string[] = [];
-        for (const item of order.items) {
+        await Promise.all(order.items.map(async (item) => {
             const product = await tx.product.findUnique({ where: { id: item.productId }, select: { slug: true } });
-            if (!product || !product.slug.startsWith('gift-')) continue;
+            if (!product || !product.slug.startsWith('gift-')) return;
 
             const giftSet = await tx.giftSet.findUnique({ where: { slug: product.slug.slice('gift-'.length) } });
-            if (!giftSet) continue;
+            if (!giftSet) return;
 
             const jarGrams = parseInt(giftSet.jar, 10) || 50;
             for (const name of giftSet.contents) {
@@ -108,7 +113,7 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
                 });
                 if (dec.count === 0) giftIssues.push(`${name}: insufficient stock`);
             }
-        }
+        }));
         if (giftIssues.length > 0) {
             await tx.orderEvent.create({
                 data: {
@@ -120,13 +125,11 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
             console.error(`⚠ Order ${orderId} gift-component stock issues: ${giftIssues.join('; ')}`);
         }
 
-        // 4. Count the coupon redemption now that payment succeeded (#5).
-        if (order.couponId) {
-            await tx.coupon.update({
-                where: { id: order.couponId },
-                data: { usageCount: { increment: 1 } },
-            });
-        }
+        // 4. Coupon usage (#5) is no longer counted here — it's reserved
+        // atomically at checkout-intent creation instead (checkout.controller.ts),
+        // the same way stock is, so a "single-use" coupon can't be redeemed
+        // via several PENDING orders created before any of them is paid.
+        // Payment confirmation just leaves that already-claimed count alone.
 
         // 5. Clear the source cart so the customer starts fresh. Keyed by the
         //    order's cartId so it works for guest carts too, not just users.
@@ -200,10 +203,26 @@ export async function cancelOrderAndReleaseStock(orderId: string, note: string) 
         const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
         if (!order) return;
 
-        for (const item of order.items) {
-            await tx.variant.update({
-                where: { id: item.variantId },
-                data: { stock: { increment: item.quantity } },
+        // Release every line concurrently (N+1 fix, perf audit #7) — same
+        // independent-per-item shape as the refund flow's stock restore
+        // (order.admin.controller.ts), which already uses this pattern.
+        await Promise.all(
+            order.items.map((item) =>
+                tx.variant.update({
+                    where: { id: item.variantId },
+                    data: { stock: { increment: item.quantity } },
+                }),
+            ),
+        );
+
+        // Release the coupon-usage reservation claimed at checkout-intent
+        // creation, the same way stock is released above — otherwise a
+        // cancelled/never-paid order would permanently burn one use of a
+        // limited coupon (mirrors the refund decrement, order.admin.controller.ts #27).
+        if (order.couponId) {
+            await tx.coupon.update({
+                where: { id: order.couponId },
+                data: { usageCount: { decrement: 1 } },
             });
         }
 

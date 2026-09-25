@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 import { sendLowStockAlert, sendAbandonedCartEmail } from '../services/email.service.js';
 import { revalidateFrontend } from '../lib/revalidate.js';
 import { cancelOrderAndReleaseStock } from '../controllers/webhook.controller.js';
@@ -115,6 +115,13 @@ export function startLowStockAlertJob() {
 // per-order `status: 'PENDING'` guard inside it is still race-safe against a
 // payment that completes in the gap between this query and the cancel call.
 const STALE_ORDER_HOURS = 24;
+// Caps how many stale orders one hourly run will process (perf audit #7):
+// each is its own transaction on its own pooled connection, so an unbounded
+// backlog (e.g. after an outage) could otherwise open hundreds of
+// connections in one tick. Left at 200/hour a backlog just drains over a
+// couple of runs instead — a stale PENDING order sitting an extra hour
+// before its stock/coupon reservation is released is harmless.
+const STALE_ORDER_BATCH_LIMIT = 200;
 
 export function startStaleOrderCancellationJob() {
     cron.schedule('0 * * * *', async () => {
@@ -123,6 +130,7 @@ export function startStaleOrderCancellationJob() {
             const stale = await prisma.order.findMany({
                 where: { status: 'PENDING', createdAt: { lt: cutoff } },
                 select: { id: true },
+                take: STALE_ORDER_BATCH_LIMIT,
             });
 
             for (const o of stale) {

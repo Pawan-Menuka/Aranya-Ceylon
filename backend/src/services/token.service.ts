@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { createId } from '@paralleldrive/cuid2';
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 import { signAccessToken } from '../lib/jwt.js';
 import type { User } from '@prisma/client';
 

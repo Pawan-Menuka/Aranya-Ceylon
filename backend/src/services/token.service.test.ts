@@ -35,7 +35,7 @@ const testUser = {
 
 const userUpdateCalls: Array<{ where: { id: string }; data: Record<string, unknown> }> = [];
 
-vi.mock('../index.js', () => ({
+vi.mock('../lib/prisma.js', () => ({
     prisma: {
         user: {
             update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {

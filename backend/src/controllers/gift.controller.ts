@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import type { GiftSet } from '@prisma/client';
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 import { BlogStatus } from '@prisma/client';
 
 // Gift sets are backed by a DRAFT product whose slug is `gift-<giftSlug>` (see

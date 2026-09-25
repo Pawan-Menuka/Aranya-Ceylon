@@ -23,7 +23,7 @@ const tx = {
     coupon: { update: vi.fn(async () => ({})) },
 };
 
-vi.mock('../../index.js', () => ({
+vi.mock('../../lib/prisma.js', () => ({
     prisma: {
         order: {
             findUnique: vi.fn(async () => state.order),

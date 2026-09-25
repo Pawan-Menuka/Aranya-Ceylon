@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { prisma } from '../../index.js';
+import { prisma } from '../../lib/prisma.js';
 import { writeAuditLog } from '../../services/audit.service.js';
 import { sendShippingNotification } from '../../services/email.service.js';
 import { stripe } from '../../services/stripe.service.js';
@@ -234,8 +234,8 @@ export async function refundOrder(req: Request, res: Response) {
                 ),
             );
 
-            // The coupon's usageCount was incremented when the order was paid
-            // (webhook.controller.ts) and never restored on refund — a
+            // The coupon's usageCount was reserved when the order was created
+            // (checkout.controller.ts) and never restored on refund — a
             // limited-use coupon was permanently "spent" by an order that got
             // reversed (Wave 3 #27, confirmed a bug, not intended policy).
             if (order.couponId) {

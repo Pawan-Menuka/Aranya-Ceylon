@@ -2,16 +2,21 @@
   "name": "aranya-ceylon",
   "private": true,
   "version": "0.0.1",
+  "packageManager": "pnpm@9.15.9",
   "engines": {
     "node": ">=20.0.0",
     "pnpm": ">=9.0.0"
   },
   "scripts": {
     "dev:backend": "pnpm --filter @aranya/backend dev",
+    "build": "pnpm -r --if-present build",
     "build:backend": "pnpm --filter @aranya/backend build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r --if-present test"
+    "test": "pnpm -r --if-present test",
+    "test:unit": "pnpm --filter @aranya/backend test:unit",
+    "test:integration": "pnpm --filter @aranya/backend test:integration",
+    "test:e2e": "pnpm --filter aranya-ceylon-storefront test:e2e"
   },
   "pnpm": {
     "ignoredBuiltDependencies": [
@@ -19,8 +24,5 @@
       "esbuild",
       "prisma"
     ]
-  },
-  "devDependencies": {
-    "vitest": "^4.1.1"
   }
 }

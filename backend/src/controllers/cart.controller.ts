@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 import * as cartService from '../services/cart.service.js';
 import { addToCartSchema, updateCartItemSchema, applyCouponSchema } from '@aranya/shared';
 

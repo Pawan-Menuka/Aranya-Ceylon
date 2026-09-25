@@ -1,7 +1,17 @@
 import type { Request, Response } from 'express';
-import { prisma } from '../../index.js';
+import { prisma } from '../../lib/prisma.js';
+import { withCache } from '../../lib/simpleCache.js';
 
 const REVENUE_STATUSES = new Set(['PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED']);
+
+// The dashboard re-runs a 90-day order scan + aggregation from scratch on
+// every load (perf audit #6/#3) — a short TTL means a burst of admin
+// pageviews/refreshes shares one computation instead of each re-scanning.
+// Not keyed by anything: the response has no per-admin personalization, so a
+// single cached value serves every viewer. TTL-only expiry (no active
+// invalidation on writes) mirrors how the storefront's own ISR pages already
+// tolerate a staleness window — acceptable for an internal analytics view.
+const DASHBOARD_CACHE_TTL_MS = 60_000;
 
 type MarketValues = { all: number; local: number; international: number };
 
@@ -19,6 +29,11 @@ function changes(current: MarketValues, previous: MarketValues): Record<keyof Ma
 }
 
 export async function getDashboard(_req: Request, res: Response) {
+    const payload = await withCache('admin:dashboard', DASHBOARD_CACHE_TTL_MS, () => computeDashboard());
+    return res.json(payload);
+}
+
+async function computeDashboard() {
     const now = new Date();
     const todayStart = new Date(now);
     todayStart.setUTCHours(0, 0, 0, 0);
@@ -193,7 +208,7 @@ export async function getDashboard(_req: Request, res: Response) {
         revenue: Math.round(agg.revenueUsd * 100) / 100,
     }));
 
-    return res.json({
+    return {
         // Return the exact conversion rate used for server-side aggregates so
         // the dashboard never has to mirror a separate public environment var.
         fxRate: LKR_USD_RATE,
@@ -237,7 +252,7 @@ export async function getDashboard(_req: Request, res: Response) {
         topProducts: topProductsWithNames,
         lowStockVariants,
         recentAuditLogs,
-    });
+    };
 }
 
 export async function getAuditLogs(req: Request, res: Response) {

@@ -7,14 +7,16 @@ on:
     branches: [main, Develop]
 
 jobs:
-  ci:
+  quality:
+    name: Quality and unit tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
         with:
-          version: 9
+          version: 9.15.9
       - uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -35,41 +37,109 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      - name: Test
-        run: pnpm test
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: Production builds
+        run: pnpm build
 
       - name: Validate Prisma schema
         run: pnpm --filter @aranya/backend exec prisma validate
 
       - name: Security audit
-        # Report-only: surfaces advisories without failing CI. Many remaining
-        # high/critical findings are transitive deps inside Prisma's own tooling
-        # (@prisma/dev, @prisma/config) that we can't patch directly.
+        # Report-only: remaining high/critical findings include transitive
+        # dependencies in Prisma tooling that cannot be patched directly.
         run: pnpm audit --audit-level=high --prod || true
 
-  frontend:
+      - name: Lighthouse CI (report only)
+        working-directory: aranya-next
+        continue-on-error: true
+        run: pnpm dlx @lhci/cli@0.13.x autorun --config=lighthouserc.json
+
+  backend-integration:
+    name: PostgreSQL integration tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://aranya:aranya_test@localhost:5432/aranya_integration
+      DIRECT_URL: postgresql://aranya:aranya_test@localhost:5432/aranya_integration
+      DATABASE_ADAPTER: pg
+      PAYMENTS_MODE: stub
+      JWT_ACCESS_SECRET: ci-only-insecure-jwt-secret
+      COOKIE_SECRET: ci-only-insecure-cookie-secret
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: aranya_integration
+          POSTGRES_USER: aranya
+          POSTGRES_PASSWORD: aranya_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aranya -d aranya_integration"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
 
     steps:
       - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.9
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: aranya-next/package-lock.json
+          cache: pnpm
 
       - name: Install dependencies
-        working-directory: aranya-next
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
-      - name: Type check
-        working-directory: aranya-next
-        run: npm run typecheck
+      - name: Build shared package
+        run: pnpm --filter @aranya/shared build
 
-      - name: Lint
-        working-directory: aranya-next
-        run: npm run lint
+      - name: Generate Prisma client
+        run: pnpm --filter @aranya/backend exec prisma generate
 
-      - name: Build
-        working-directory: aranya-next
-        run: npm run build
+      - name: Apply database migrations
+        run: pnpm --filter @aranya/backend exec prisma migrate deploy
+
+      - name: Run PostgreSQL integration tests
+        run: pnpm test:integration
+
+  frontend-e2e:
+    name: Playwright checkout tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm --filter aranya-ceylon-storefront exec playwright install --with-deps chromium
+
+      - name: Run checkout browser tests
+        run: pnpm test:e2e
+
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure-artifacts
+          path: |
+            aranya-next/playwright-report/
+            aranya-next/test-results/
+          if-no-files-found: ignore
+          retention-days: 7

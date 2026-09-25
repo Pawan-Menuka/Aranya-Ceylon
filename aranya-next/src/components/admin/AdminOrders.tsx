@@ -94,7 +94,25 @@ function OrdersToolbar({ tab, setTab, market, setMarket, q, setQ, counts }: {
   );
 }
 
-function OrdersTable({ orders, onOpen }: { orders: AdminOrder[]; onOpen: (o: AdminOrder) => void }) {
+// A handful of pulsing bars in place of real rows, shown only on a true first
+// load (no cached rows yet) rather than a flash of "No orders match these
+// filters." — perf audit #7.
+function OrderRowsSkeleton() {
+  return (
+    <>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <tr key={`skel-${i}`}>
+          <td colSpan={10} style={{ padding: "16px" }}>
+            <div className="skeleton-pulse" style={{ height: 14, borderRadius: 6, background: "var(--ad-line-2)", width: `${62 - i * 5}%` }} />
+          </td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
+function OrdersTable({ orders, onOpen, loading }: { orders: AdminOrder[]; onOpen: (o: AdminOrder) => void; loading?: boolean }) {
+  const showSkeleton = loading && orders.length === 0;
   return (
     <div className="ad-card" style={{ overflow: "hidden" }}>
       <table className="ad-table">
@@ -105,6 +123,7 @@ function OrdersTable({ orders, onOpen }: { orders: AdminOrder[]; onOpen: (o: Adm
           </tr>
         </thead>
         <tbody>
+          {showSkeleton && <OrderRowsSkeleton />}
           {orders.map((o) => (
             <tr key={o.id} onClick={() => onOpen(o)}>
               <td style={{ fontWeight: 700 }}>{formatOrderNumber(o.id)}</td>
@@ -129,7 +148,7 @@ function OrdersTable({ orders, onOpen }: { orders: AdminOrder[]; onOpen: (o: Adm
           ))}
         </tbody>
       </table>
-      {orders.length === 0 && <div style={{ padding: "60px 20px", textAlign: "center", color: "var(--ad-faint)", fontSize: 14 }}>No orders match these filters.</div>}
+      {!showSkeleton && orders.length === 0 && <div style={{ padding: "60px 20px", textAlign: "center", color: "var(--ad-faint)", fontSize: 14 }}>No orders match these filters.</div>}
     </div>
   );
 }
@@ -445,7 +464,7 @@ export function AdminOrders() {
         </div>
       )}
       <OrdersToolbar tab={tab} setTab={(value) => { setTab(value); resetPage(); }} market={market} setMarket={(value) => { setMarket(value); resetPage(); }} q={q} setQ={(value) => { setQ(value); resetPage(); }} counts={counts} />
-      <OrdersTable orders={filtered} onOpen={(order) => { void openOrder(order); }} />
+      <OrdersTable orders={filtered} onOpen={(order) => { void openOrder(order); }} loading={loading} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, fontSize: 12.5, color: "var(--ad-faint)" }}>
         <span>{loading ? "Loading orders…" : `Showing ${total === 0 ? 0 : cursorHistory.length * 20 + 1}–${cursorHistory.length * 20 + filtered.length} of ${total} orders`}</span>
         <div style={{ display: "flex", gap: 6 }}>

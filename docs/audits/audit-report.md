@@ -16,10 +16,10 @@ adopted the merged ones instead. This report re-verifies every original finding
 against that merged, current codebase rather than trusting either implementation
 on faith — statuses below reflect what's actually on disk now.
 
-**Verification state:** `aranya-next` typecheck passes clean (`npx tsc --noEmit`,
+**Verification state:** `aranya-next` typecheck passes clean (`pnpm --filter aranya-ceylon-storefront typecheck`,
 exit 0). `backend`/`shared` have no `node_modules` in this worktree, so backend
 changes were reviewed by hand, not compiled — run `pnpm --filter @aranya/shared
-build && pnpm typecheck && npx vitest run` from the main repo before shipping.
+build && pnpm typecheck && pnpm test:unit` from the main repo before shipping.
 
 **Headline:** every Wave 1 (critical) and Wave 2 (high) finding from the original
 scan is now fixed and verified against the current code. Several were implemented

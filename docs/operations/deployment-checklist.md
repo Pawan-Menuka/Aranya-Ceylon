@@ -54,17 +54,17 @@ Set every variable from `backend/.env.example`. The app **fails to boot** if a r
 - [ ] Bot Fight Mode on; add a rate-limiting rule on `/auth/*` and `/checkout/*` as a network-layer backstop to the in-app limiters.
 - [ ] SSL/TLS mode = "Full (strict)".
 - [ ] Lock the origin to only accept Cloudflare traffic (so `CF-Connecting-IP` can't be spoofed by hitting the origin directly), then set `TRUST_CLOUDFLARE=true` and `TRUST_PROXY=2` in the backend env (Railway hop + Cloudflare hop). Skipping the origin-lock while setting `TRUST_CLOUDFLARE=true` is worse than not setting it — it lets a direct-to-origin request spoof any client IP.
-- [ ] `TRUST_CLOUDFLARE=true` now also gates geo-detection (`backend/src/middleware/market.ts` — DEPLOY_READINESS_PLAN.md #0.3): a Sri Lankan visitor's first, cookie-less request defaults to LOCAL/LKR instead of INTERNATIONAL/USD, read from Cloudflare's `CF-IPCountry` header. Without `TRUST_CLOUDFLARE=true` (or without Cloudflare proxying the API hostname), this silently falls back to the old INTERNATIONAL-always default — same origin-lock requirement as above. The frontend (`aranya-next/src/lib/market.ts`) does the same detection independently for first-paint currency/CTA colour and needs no flag (Cloudflare adds the header to any proxied request; that side is cosmetic-only, so it's unconditional).
+- [ ] `TRUST_CLOUDFLARE=true` now also gates geo-detection (`backend/src/middleware/market.ts` — [deployment readiness plan](deploy-readiness-plan.md), #0.3): a Sri Lankan visitor's first, cookie-less request defaults to LOCAL/LKR instead of INTERNATIONAL/USD, read from Cloudflare's `CF-IPCountry` header. Without `TRUST_CLOUDFLARE=true` (or without Cloudflare proxying the API hostname), this silently falls back to the old INTERNATIONAL-always default — same origin-lock requirement as above. The frontend (`aranya-next/src/lib/market.ts`) does the same detection independently for first-paint currency/CTA colour and needs no flag (Cloudflare adds the header to any proxied request; that side is cosmetic-only, so it's unconditional).
 
 ### 5. CI/CD
 - [x] `deploy.yml` env var name fixed (bug #1 above) — verify a real deploy actually applies migrations via the direct connection, not just that CI goes green.
-- [ ] Confirm which branch triggers `deploy.yml` (`main`) is actually the one you intend to ship from — `Develop` is the active-work branch per this repo's `CLAUDE.md`; the current flow appears to be periodic `Develop → main` merge PRs to trigger deploys (confirmed: `origin/main` currently sits at a merge of `Develop`). If that's intentional, no action needed — just confirming it's a deliberate release gate, not an accident.
+- [ ] Confirm which branch triggers `deploy.yml` (`main`) is actually the one you intend to ship from — `Develop` is the active-work branch per [`.claude/CLAUDE.md`](../../.claude/CLAUDE.md); the current flow appears to be periodic `Develop → main` merge PRs to trigger deploys. If that's intentional, no action needed — just confirming it's a deliberate release gate, not an accident.
 - [ ] `pnpm audit --audit-level=high` is report-only in CI (`|| true`) — this is documented as intentional (transitive Prisma tooling deps), but worth a manual skim before launch in case a new high/critical advisory landed outside that known set.
 
 ### 6. Monitoring
 - [ ] Wire `/health` into an uptime monitor (Better Stack, UptimeRobot, etc.).
 - [ ] Ship stdout logs to a log drain with alerting on error-rate spikes — currently `console.error`-only, no retention.
-- [ ] Consider Sentry or similar before launch if budget allows — not currently wired anywhere (noted as a gap in `KNOWN_ISSUES.md`'s roadmap, still true).
+- [ ] Consider Sentry or similar before launch if budget allows — not currently wired anywhere (noted in [known issues](known-issues.md), still true).
 
 ## What's already handled in code (verified, not re-litigated here)
 

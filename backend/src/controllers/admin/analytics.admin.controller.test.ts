@@ -8,7 +8,7 @@ const state = vi.hoisted(() => ({
     auditArgs: undefined as unknown,
 }));
 
-vi.mock('../../index.js', () => ({
+vi.mock('../../lib/prisma.js', () => ({
     prisma: {
         order: {
             findMany: vi.fn(async () => state.orders),
@@ -25,6 +25,7 @@ vi.mock('../../index.js', () => ({
 }));
 
 import { getAuditLogs, getDashboard } from './analytics.admin.controller.js';
+import { _clearSimpleCache } from '../../lib/simpleCache.js';
 
 function responseDouble() {
     const res: any = {};
@@ -40,6 +41,7 @@ beforeEach(() => {
     state.pendingArgs = undefined;
     state.auditArgs = undefined;
     vi.stubEnv('LKR_USD_RATE', '300');
+    _clearSimpleCache(); // getDashboard is now cached (perf audit #6) — start each test cold
 });
 
 describe('admin dashboard analytics', () => {

@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 import { Currency } from '@prisma/client';
 import { createPaymentIntent } from '../services/stripe.service.js';
 import { buildPayHerePayload, PAYHERE_CHECKOUT_URL } from '../services/payhere.service.js';
@@ -15,6 +15,15 @@ const GUEST_TOKEN_COOKIE = 'guestCartToken';
 class StockReservationError extends Error {
     constructor(public variantIds: string[]) {
         super('INSUFFICIENT_STOCK');
+    }
+}
+
+// Thrown (and caught) inside createIntent's transaction when a coupon's
+// usage limit was reached by the time the order actually commits — see the
+// coupon reservation block below.
+class CouponLimitError extends Error {
+    constructor() {
+        super('COUPON_USAGE_LIMIT_REACHED');
     }
 }
 
@@ -95,6 +104,10 @@ export async function createIntent(req: Request, res: Response) {
 
     // If the client submitted a coupon code at checkout, persist it to the cart
     // so calculateCartTotal picks it up. Overrides any previously applied coupon.
+    // This is only a fast pre-check for a friendly error message — it reads a
+    // possibly-stale usageCount, same as calculateCartTotal below. The
+    // authoritative check-and-claim happens atomically inside the order-creation
+    // transaction further down (see the coupon reservation block there).
     if (couponCode) {
         const coupon = await prisma.coupon.findUnique({ where: { code: couponCode } });
         if (!coupon) {
@@ -125,18 +138,57 @@ export async function createIntent(req: Request, res: Response) {
     let order;
     try {
         order = await prisma.$transaction(async (tx) => {
-            const insufficient: string[] = [];
-            for (const item of cart.items) {
-                const dec = await tx.variant.updateMany({
-                    where: { id: item.variantId, stock: { gte: item.quantity } },
-                    data: { stock: { decrement: item.quantity } },
-                });
-                if (dec.count === 0) insufficient.push(item.variantId);
-            }
+            // Reserve every line concurrently (N+1 fix, perf audit #7) instead
+            // of one round-trip per item — each line's conditional decrement is
+            // already independent (own variantId, own gte guard), so nothing
+            // about correctness depends on doing them one at a time: every line
+            // was already attempted before `insufficient` was checked, so this
+            // changes only how many round-trips run at once, not the outcome.
+            const reservations = await Promise.all(
+                cart.items.map((item) =>
+                    tx.variant.updateMany({
+                        where: { id: item.variantId, stock: { gte: item.quantity } },
+                        data: { stock: { decrement: item.quantity } },
+                    }).then((dec) => ({ variantId: item.variantId, ok: dec.count > 0 })),
+                ),
+            );
+            const insufficient = reservations.filter((r) => !r.ok).map((r) => r.variantId);
             if (insufficient.length > 0) {
                 // Throwing rolls back every decrement already applied in this
                 // loop, so a failure on line 2 of 3 never leaves line 1 reserved.
                 throw new StockReservationError(insufficient);
+            }
+
+            // Reserve the coupon's usage the same way stock is reserved above:
+            // atomically, HERE at order-creation time, not at payment
+            // confirmation. Previously usageCount was only incremented in
+            // confirmOrderPaid, while the limit was checked earlier against
+            // that same (stale) counter — so a shopper could create several
+            // PENDING orders against a single-use coupon before paying any of
+            // them, since none of them had "claimed" a use yet, and then pay
+            // for all of them (coupon-reuse vulnerability). Re-checking the
+            // limit against a fresh read and claiming it in the same
+            // transaction that reserves stock closes that gap. The
+            // reservation is released (usageCount decremented) if the order
+            // is ever cancelled — see cancelOrderAndReleaseStock — and on
+            // refund (order.admin.controller.ts, #27).
+            if (couponId) {
+                const liveCoupon = await tx.coupon.findUnique({
+                    where: { id: couponId },
+                    select: { usageLimit: true },
+                });
+                if (liveCoupon) {
+                    const reserved = liveCoupon.usageLimit === null
+                        ? await tx.coupon.updateMany({
+                            where: { id: couponId },
+                            data: { usageCount: { increment: 1 } },
+                        })
+                        : await tx.coupon.updateMany({
+                            where: { id: couponId, usageCount: { lt: liveCoupon.usageLimit } },
+                            data: { usageCount: { increment: 1 } },
+                        });
+                    if (reserved.count === 0) throw new CouponLimitError();
+                }
             }
 
             // Create the order in PENDING state — permanently stamps market + currency
@@ -188,6 +240,15 @@ export async function createIntent(req: Request, res: Response) {
                         requested: item.quantity,
                         available: stockById.get(item.variantId) ?? 0,
                     })),
+            });
+        }
+        if (err instanceof CouponLimitError) {
+            // Reservation rolled back — stock decrements above were undone
+            // too. Someone else claimed the last use between our read and
+            // this commit; ask the shopper to retry (a retry recalculates
+            // the total fresh, without the now-exhausted coupon).
+            return res.status(409).json({
+                error: 'That coupon just reached its usage limit. Please retry checkout — it will proceed without the coupon.',
             });
         }
         throw err;

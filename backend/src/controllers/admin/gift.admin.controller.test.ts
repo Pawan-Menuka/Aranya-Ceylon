@@ -88,7 +88,7 @@ const store = vi.hoisted(() => {
     return { s, tx };
 });
 
-vi.mock('../../index.js', () => ({
+vi.mock('../../lib/prisma.js', () => ({
     prisma: {
         giftSet: {
             // Returns a COPY, not the live array-element reference — real

@@ -1,19 +1,29 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import { AuthProvider, useAuth } from "../AuthContext";
 import { AdminShell } from "./AdminShell";
 import { AdminGate } from "./AdminGate";
-import { AdminDashboard } from "./AdminDashboard";
-import { AdminOrders } from "./AdminOrders";
-import { AdminProducts } from "./AdminProducts";
-import { AdminBlog } from "./AdminBlog";
-import { AdminRecipes } from "./AdminRecipes";
-import { AdminGifts } from "./AdminGifts";
-import { AdminAudit } from "./AdminAudit";
 import { ADMIN } from "@/lib/admin-data";
 import { DEMO_MODE } from "@/lib/demo";
 import { getDashboard, type DashboardData } from "@/lib/api/admin";
+
+// Only one of these seven sections is ever visible at a time (the hash
+// router below renders exactly one per `route`), but they were all imported
+// statically, so every admin page load shipped and parsed all seven's JS up
+// front regardless of which one was actually shown (perf audit #9). Splitting
+// them means each one's code loads only the first time its route is visited.
+// No `loading` fallback is set (renders nothing while the chunk fetches)
+// rather than introducing new placeholder UI — this app's admin visuals are
+// hand-designed and not to be added to as a side effect of a perf fix.
+const AdminDashboard = dynamic(() => import("./AdminDashboard").then((m) => m.AdminDashboard));
+const AdminOrders = dynamic(() => import("./AdminOrders").then((m) => m.AdminOrders));
+const AdminProducts = dynamic(() => import("./AdminProducts").then((m) => m.AdminProducts));
+const AdminBlog = dynamic(() => import("./AdminBlog").then((m) => m.AdminBlog));
+const AdminRecipes = dynamic(() => import("./AdminRecipes").then((m) => m.AdminRecipes));
+const AdminGifts = dynamic(() => import("./AdminGifts").then((m) => m.AdminGifts));
+const AdminAudit = dynamic(() => import("./AdminAudit").then((m) => m.AdminAudit));
 
 // Aranya Ceylon — ADMIN app: role gate + hash router (ported from Admin.html).
 // Standalone full-screen shell (no storefront navbar/footer). Wrapped in its own

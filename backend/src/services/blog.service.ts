@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 
 export async function listPublishedBlogs(limit = 10, cursor?: string) {
     try {

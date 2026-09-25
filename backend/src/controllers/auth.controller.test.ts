@@ -20,7 +20,7 @@ vi.mock('@node-rs/bcrypt', () => ({
     verify: vi.fn(async () => true),
 }));
 
-vi.mock('../index.js', () => ({
+vi.mock('../lib/prisma.js', () => ({
     prisma: {
         user: {
             create: (args: unknown) => store.createImpl(args),

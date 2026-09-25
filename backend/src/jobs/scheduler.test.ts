@@ -27,7 +27,7 @@ const store = vi.hoisted(() => ({
     variants: [] as VariantRow[],
 }));
 
-vi.mock('../index.js', () => ({
+vi.mock('../lib/prisma.js', () => ({
     prisma: {
         cart: {
             // Only the fields runAbandonedCartRecovery's where-clause actually

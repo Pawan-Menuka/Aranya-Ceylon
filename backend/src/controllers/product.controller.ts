@@ -2,8 +2,15 @@ import type { Request, Response } from 'express';
 import { productFilterSchema, createProductSchema, updateProductSchema } from '@aranya/shared';
 import * as productService from '../services/product.service.js';
 import { uploadImage } from '../services/cloudinary.service.js';
-import { prisma } from '../index.js';
+import { prisma } from '../lib/prisma.js';
 import { writeAuditLog } from '../services/audit.service.js';
+import { withCache } from '../lib/simpleCache.js';
+
+// Featured/bestseller lists barely move minute to minute and are read on
+// nearly every storefront page load — worth a short cache (perf audit #6).
+// Keyed by market (the only thing that varies these results) so LOCAL and
+// INTERNATIONAL visitors never share a cached response.
+const CATALOG_HIGHLIGHT_CACHE_TTL_MS = 5 * 60_000;
 
 // ----------------------------------------------------------------
 // PUBLIC CONTROLLERS
@@ -45,13 +52,21 @@ export async function searchProducts(req: Request, res: Response) {
 
 // --- Featured products (public) ---
 export async function getFeatured(req: Request, res: Response) {
-    const products = await productService.getFeaturedProducts(req.market!);
+    const products = await withCache(
+        `products:featured:${req.market}`,
+        CATALOG_HIGHLIGHT_CACHE_TTL_MS,
+        () => productService.getFeaturedProducts(req.market!),
+    );
     return res.json({ products, market: req.market });
 }
 
 // --- Bestsellers (public) ---
 export async function getBestsellers(req: Request, res: Response) {
-    const products = await productService.getBestsellers(req.market!);
+    const products = await withCache(
+        `products:bestsellers:${req.market}`,
+        CATALOG_HIGHLIGHT_CACHE_TTL_MS,
+        () => productService.getBestsellers(req.market!),
+    );
     return res.json({ products, market: req.market });
 }
 

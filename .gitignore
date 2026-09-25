@@ -6,6 +6,8 @@ node_modules/
 dist/
 .next/
 .vercel/
+playwright-report/
+test-results/
 
 # Environment secrets — NEVER commit
 .env

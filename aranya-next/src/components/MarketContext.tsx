@@ -54,7 +54,16 @@ export function MarketProvider({
     [router]
   );
 
-  return <Ctx.Provider value={{ market, setMarket, pending }}>{children}</Ctx.Provider>;
+  // Memoized so consumers (widely used — catalog, cards, checkout) don't
+  // re-render on every parent render just because this Provider re-rendered;
+  // only a real change to market/setMarket/pending should propagate
+  // (perf audit #15). Mirrors CartContext's existing value-memoization pattern.
+  const value = React.useMemo<MarketCtx>(
+    () => ({ market, setMarket, pending }),
+    [market, setMarket, pending]
+  );
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useMarket() {
