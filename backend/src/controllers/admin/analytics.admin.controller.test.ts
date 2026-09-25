@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { requestDouble, responseDouble } from '../../test/httpDoubles.js';
 
 const state = vi.hoisted(() => ({
     orders: [] as Array<{ market: 'LOCAL' | 'INTERNATIONAL'; currency: 'LKR' | 'USD'; status: string; total: number; createdAt: Date }>,
@@ -27,12 +28,19 @@ vi.mock('../../lib/prisma.js', () => ({
 import { getAuditLogs, getDashboard } from './analytics.admin.controller.js';
 import { _clearSimpleCache } from '../../lib/simpleCache.js';
 
-function responseDouble() {
-    const res: any = {};
-    res.body = undefined;
-    res.json = (body: unknown) => { res.body = body; return res; };
-    return res;
-}
+type Totals = { all: number; local: number; international: number };
+type DashboardBody = {
+    metrics: {
+        today: { revenueUsd: Totals; orders: Totals };
+        current30: { revenueUsd: Totals };
+        changes: { revenuePct: Totals; ordersPct: Totals };
+        newCustomers7d: number;
+        conversionRate: number | null;
+    };
+    series: Array<{ all: number; orders: Totals }>;
+    orders: { pendingFulfilment: number };
+};
+const dashboardResponse = () => responseDouble<DashboardBody>();
 
 beforeEach(() => {
     state.orders = [];
@@ -59,8 +67,8 @@ describe('admin dashboard analytics', () => {
         state.pending = 4;
         state.newCustomers = 3;
 
-        const res = responseDouble();
-        await getDashboard({} as any, res);
+        const res = dashboardResponse();
+        await getDashboard(requestDouble({}), res);
 
         expect(res.body.metrics.today).toEqual({
             revenueUsd: { all: 10, local: 10, international: 0 },
@@ -72,14 +80,14 @@ describe('admin dashboard analytics', () => {
         expect(res.body.metrics.newCustomers7d).toBe(3);
         expect(res.body.metrics.conversionRate).toBeNull();
         expect(res.body.series).toHaveLength(90);
-        expect(res.body.series.at(-1).orders.all).toBe(2);
+        expect(res.body.series.at(-1)!.orders.all).toBe(2);
         expect(res.body.orders.pendingFulfilment).toBe(4);
         expect(state.pendingArgs).toMatchObject({ where: { status: { in: ['PAID', 'PROCESSING'] } } });
     });
 
     it('returns zero-safe daily and percentage values for an empty database', async () => {
-        const res = responseDouble();
-        await getDashboard({} as any, res);
+        const res = dashboardResponse();
+        await getDashboard(requestDouble({}), res);
 
         expect(res.body.metrics.today.revenueUsd.all).toBe(0);
         expect(res.body.metrics.changes.revenuePct.all).toBe(0);
@@ -94,7 +102,7 @@ describe('admin audit log limit', () => {
         ['500.8', 201],
     ])('clamps %s to a safe Prisma take', async (limit, expectedTake) => {
         const res = responseDouble();
-        await getAuditLogs({ query: { limit } } as any, res);
+        await getAuditLogs(requestDouble({ query: { limit } }), res);
         expect(state.auditArgs).toMatchObject({ take: expectedTake });
     });
 });
