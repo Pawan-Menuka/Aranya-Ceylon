@@ -17,6 +17,7 @@ and design references live here so the application code remains easy to find.
 - [Backend manual test plan](testing/backend-manual-test-plan.md) — manual API acceptance checklist.
 - [Backend autonomous execution plan](testing/backend-autonomous-execution-plan.md) — safe automated execution scope.
 - [Backend test execution results](testing/backend-test-execution-results.md) — recorded results from the backend test run.
+- [Final verification report](testing/final-verification-report.md) — clean-install results and final acceptance evidence.
 - [PostgreSQL integration setup](../backend/src/test/integration/README.md) — local database setup and safety rules.
 
 ## Operations
