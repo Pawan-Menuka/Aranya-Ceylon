@@ -21,9 +21,18 @@ interface VariantRow {
     product: { name: string };
 }
 
+type CartFilter = { where: {
+    userId?: { not: null };
+    updatedAt?: { lt: Date };
+    abandonedEmailSentAt?: null;
+    items?: { some: object };
+} };
+type CartUpdate = { where: { id: string }; data: { abandonedEmailSentAt?: Date | null } };
+type VariantFilter = { where: { stock: { lte: number; gt: number } } };
+
 const store = vi.hoisted(() => ({
     carts: [] as CartRow[],
-    updatedCarts: [] as { id: string; data: any }[],
+    updatedCarts: [] as Array<{ id: string; data: CartUpdate['data'] }>,
     variants: [] as VariantRow[],
 }));
 
@@ -33,7 +42,7 @@ vi.mock('../lib/prisma.js', () => ({
             // Only the fields runAbandonedCartRecovery's where-clause actually
             // needs are modeled: userId not-null, updatedAt cutoff,
             // abandonedEmailSentAt null, and a non-empty items relation.
-            findMany: async ({ where }: any) => {
+            findMany: async ({ where }: CartFilter) => {
                 return store.carts.filter((c) => {
                     if (where.userId?.not === null && c.userId === null) return false;
                     if (where.updatedAt?.lt && !(c.updatedAt < where.updatedAt.lt)) return false;
@@ -42,7 +51,7 @@ vi.mock('../lib/prisma.js', () => ({
                     return true;
                 });
             },
-            update: async ({ where, data }: any) => {
+            update: async ({ where, data }: CartUpdate) => {
                 store.updatedCarts.push({ id: where.id, data });
                 const c = store.carts.find((x) => x.id === where.id);
                 if (c && data.abandonedEmailSentAt !== undefined) c.abandonedEmailSentAt = data.abandonedEmailSentAt;
@@ -52,7 +61,7 @@ vi.mock('../lib/prisma.js', () => ({
         variant: {
             // Only the fields runLowStockAlert's where-clause needs: stock
             // between 0 (exclusive) and the threshold (inclusive).
-            findMany: async ({ where }: any) => {
+            findMany: async ({ where }: VariantFilter) => {
                 return store.variants.filter((v) => v.stock <= where.stock.lte && v.stock > where.stock.gt);
             },
         },

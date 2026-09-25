@@ -6,11 +6,21 @@
  * unit could both pass validation and only one would fail at payment time.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { requestDouble, responseDouble } from '../test/httpDoubles.js';
+
+interface CartItemRow {
+    productId: string; variantId: string; quantity: number;
+    variant: { id: string; stock: number; price: string; market: string; currency: string };
+    product: { id: string };
+}
+interface CartRow { id: string; couponId: string | null; items: CartItemRow[] }
+interface CouponRow { id: string; usageLimit: number | null; usageCount: number; expiresAt?: Date | null }
+interface OrderData { userId: string | null; guestEmail: string | null }
 
 const store = vi.hoisted(() => ({
-    cart: null as any,
+    cart: null as CartRow | null,
     createdOrder: { id: 'order_1' },
-    lastOrderData: null as any,
+    lastOrderData: null as OrderData | null,
     // Live stock, separate from cart.items[].variant.stock (a moments-old
     // cached read) — mutated only by the atomic tx.variant.updateMany below,
     // so tests can simulate a race: the cache says available, live stock
@@ -19,21 +29,21 @@ const store = vi.hoisted(() => ({
 }));
 
 const couponStore = vi.hoisted(() => ({
-    coupon: null as any,
-    cartUpdated: null as any,
+    coupon: null as CouponRow | null,
+    cartUpdated: null as { couponId?: string | null } | null,
 }));
 
 vi.mock('../lib/prisma.js', () => ({
     prisma: {
         cart: {
             findUnique: async () => store.cart,
-            update: async (args: any) => { couponStore.cartUpdated = args.data; return store.cart; },
+            update: async (args: { data: { couponId?: string | null } }) => { couponStore.cartUpdated = args.data; return store.cart; },
         },
         coupon: { findUnique: async () => couponStore.coupon },
         // Used only to build a helpful error response AFTER a rolled-back
         // reservation — see the StockReservationError catch block.
         variant: {
-            findMany: async ({ where }: any) => {
+            findMany: async ({ where }: { where: { id: { in: string[] } } }) => {
                 const ids: string[] = where.id.in;
                 return ids.map((id) => ({ id, stock: store.variantStock[id] ?? 0 }));
             },
@@ -53,7 +63,7 @@ vi.mock('../lib/prisma.js', () => ({
             const couponSnapshot = couponStore.coupon ? { ...couponStore.coupon } : null;
             const tx = {
                 variant: {
-                    updateMany: async ({ where, data }: any) => {
+                    updateMany: async ({ where, data }: { where: { id: string; stock?: { gte: number } }; data: { stock: { decrement: number } } }) => {
                         const cur = store.variantStock[where.id] ?? 0;
                         const minStock = where.stock?.gte ?? 0;
                         if (cur < minStock) return { count: 0 };
@@ -68,11 +78,11 @@ vi.mock('../lib/prisma.js', () => ({
                 // what makes the claim conditional, same shape as the stock
                 // reservation above.
                 coupon: {
-                    findUnique: async ({ where }: any) =>
+                    findUnique: async ({ where }: { where: { id: string } }) =>
                         couponStore.coupon && couponStore.coupon.id === where.id
                             ? { usageLimit: couponStore.coupon.usageLimit }
                             : null,
-                    updateMany: async ({ where }: any) => {
+                    updateMany: async ({ where }: { where: { id: string; usageCount?: { lt: number } } }) => {
                         const c = couponStore.coupon;
                         if (!c || c.id !== where.id) return { count: 0 };
                         if (where.usageCount?.lt !== undefined && c.usageCount >= where.usageCount.lt) {
@@ -83,7 +93,7 @@ vi.mock('../lib/prisma.js', () => ({
                     },
                 },
                 order: {
-                    create: async (args: any) => { store.lastOrderData = args.data; return store.createdOrder; },
+                    create: async (args: { data: OrderData }) => { store.lastOrderData = args.data; return store.createdOrder; },
                 },
             };
             try {
@@ -120,24 +130,17 @@ vi.mock('./webhook.controller.js', () => ({ confirmOrderPaid: vi.fn() }));
 import { createIntent, stubComplete } from './checkout.controller.js';
 import { confirmOrderPaid } from './webhook.controller.js';
 
-function mockRes() {
-    const res: any = {};
-    res.statusCode = 200;
-    res.body = undefined;
-    res.status = (n: number) => { res.statusCode = n; return res; };
-    res.json = (b: unknown) => { res.body = b; return res; };
-    return res;
-}
+const mockRes = () => responseDouble<{ items: unknown; orderId: string; error: string; provider: string; clientSecret: string }>();
 
 const intlAddress = { firstName: 'Jane', lastName: 'Doe', line1: '1 St', city: 'NYC', country: 'US', postalCode: '10001' };
-const userReq = ({ body = {}, ...rest }: any = {}) =>
-    ({
+const userReq = ({ body = {}, ...rest }: { body?: Record<string, unknown>; market?: string } = {}) =>
+    requestDouble({
         user: { userId: 'user_1' },
         market: 'INTERNATIONAL',
         cookies: {},
         ...rest,
         body: { shippingAddress: intlAddress, shippingMethod: 'STANDARD', saveAddress: false, ...body },
-    }) as any;
+    });
 
 function cartWith(variant: { market: string; currency: string }) {
     return {
@@ -204,8 +207,8 @@ describe('createIntent — #19 market re-validation', () => {
 });
 
 describe('createIntent — #17 guest checkout', () => {
-    const guestReq = (body: any = {}) =>
-        ({ user: undefined, market: 'INTERNATIONAL', cookies: { guestCartToken: 'g1' }, body: { shippingAddress: intlAddress, shippingMethod: 'STANDARD', ...body } }) as any;
+    const guestReq = (body: Record<string, unknown> = {}) =>
+        requestDouble({ user: undefined, market: 'INTERNATIONAL', cookies: { guestCartToken: 'g1' }, body: { shippingAddress: intlAddress, shippingMethod: 'STANDARD', ...body } });
 
     it('rejects a guest with no email', async () => {
         const res = mockRes();
@@ -218,15 +221,15 @@ describe('createIntent — #17 guest checkout', () => {
         const res = mockRes();
         await createIntent(guestReq({ guestEmail: 'guest@example.com' }), res);
         expect(res.statusCode).toBe(200);
-        expect(store.lastOrderData.userId).toBeNull();
-        expect(store.lastOrderData.guestEmail).toBe('guest@example.com');
+        expect(store.lastOrderData!.userId).toBeNull();
+        expect(store.lastOrderData!.guestEmail).toBe('guest@example.com');
     });
 
     it('does not store guestEmail for an authenticated user', async () => {
         const res = mockRes();
         await createIntent(userReq({ body: { guestEmail: 'ignored@example.com' } }), res);
-        expect(store.lastOrderData.userId).toBe('user_1');
-        expect(store.lastOrderData.guestEmail).toBeNull();
+        expect(store.lastOrderData!.userId).toBe('user_1');
+        expect(store.lastOrderData!.guestEmail).toBeNull();
     });
 });
 
@@ -324,7 +327,7 @@ describe('createIntent — coupon-usage reservation at checkout (coupon-reuse fi
         const res = mockRes();
         await createIntent(userReq(), res);
         expect(res.statusCode).toBe(200);
-        expect(couponStore.coupon.usageCount).toBe(1);
+        expect(couponStore.coupon!.usageCount).toBe(1);
     });
 
     it('fixes the coupon-reuse vulnerability: a second PENDING order cannot re-claim a single-use coupon before the first is paid', async () => {
@@ -338,13 +341,13 @@ describe('createIntent — coupon-usage reservation at checkout (coupon-reuse fi
         const res1 = mockRes();
         await createIntent(userReq(), res1);
         expect(res1.statusCode).toBe(200);
-        expect(couponStore.coupon.usageCount).toBe(1);
+        expect(couponStore.coupon!.usageCount).toBe(1);
 
         const res2 = mockRes();
         await createIntent(userReq(), res2);
         expect(res2.statusCode).toBe(409);
         expect(res2.body.error).toMatch(/usage limit/i);
-        expect(couponStore.coupon.usageCount).toBe(1); // still just the one claim
+        expect(couponStore.coupon!.usageCount).toBe(1); // still just the one claim
     });
 
     it('rejects with 409 when another order claims the last use first (race), rolling back stock too', async () => {
@@ -373,7 +376,7 @@ describe('createIntent — coupon-usage reservation at checkout (coupon-reuse fi
 describe('stubComplete', () => {
     it('confirms the order via confirmOrderPaid in stub mode', async () => {
         const res = mockRes();
-        await stubComplete({ body: { orderId: 'order_1' } } as any, res);
+        await stubComplete(requestDouble({ body: { orderId: 'order_1' } }), res);
         expect(res.statusCode).toBe(200);
         expect(confirmOrderPaid).toHaveBeenCalledWith('order_1', expect.stringContaining('STUB-'), 'Stub');
     });
@@ -381,7 +384,7 @@ describe('stubComplete', () => {
     it('is disabled (404) in live mode', async () => {
         vi.stubEnv('PAYMENTS_MODE', 'live');
         const res = mockRes();
-        await stubComplete({ body: { orderId: 'order_1' } } as any, res);
+        await stubComplete(requestDouble({ body: { orderId: 'order_1' } }), res);
         expect(res.statusCode).toBe(404);
         expect(confirmOrderPaid).not.toHaveBeenCalled();
     });
