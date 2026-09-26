@@ -111,8 +111,8 @@ if (process.env.ENABLE_DEV_ROUTES === 'true') {
 
             res.json({ ok: true, created, skipped, total: CATALOG.length, log });
 
-        } catch (e: any) {
-            res.status(500).json({ ok: false, error: e.message, log });
+        } catch (error: unknown) {
+            res.status(500).json({ ok: false, error: error instanceof Error ? error.message : 'Catalog seed failed', log });
         }
     });
 }

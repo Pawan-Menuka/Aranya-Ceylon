@@ -4,7 +4,7 @@ import { writeAuditLog } from '../../services/audit.service.js';
 import { sendShippingNotification } from '../../services/email.service.js';
 import { stripe } from '../../services/stripe.service.js';
 import { z } from 'zod';
-import type { Prisma } from '@prisma/client';
+import type { Market, OrderStatus, Prisma } from '@prisma/client';
 
 const updateOrderSchema = z.object({
     status: z.enum(['PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED']),
@@ -22,14 +22,18 @@ const refundOrderSchema = z.object({
 // --- List all orders with market filter ---
 // Whitelist query enum values so an invalid ?market=/?status= can't reach
 // Prisma as a bad enum and 500 (BUG-22).
-const VALID_MARKETS = new Set(['LOCAL', 'INTERNATIONAL', 'BOTH']);
-const VALID_ORDER_STATUSES = new Set(['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED']);
+const VALID_MARKETS = ['LOCAL', 'INTERNATIONAL', 'BOTH'] as const satisfies readonly Market[];
+const VALID_ORDER_STATUSES = ['PENDING', 'PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED'] as const satisfies readonly OrderStatus[];
+
+function isAllowedValue<const Values extends readonly string[]>(value: unknown, values: Values): value is Values[number] {
+    return typeof value === 'string' && values.some((allowed) => allowed === value);
+}
 
 export async function listOrders(req: Request, res: Response) {
-    const marketRaw = req.query.market as string | undefined;
-    const statusRaw = req.query.status as string | undefined;
-    const market = marketRaw && VALID_MARKETS.has(marketRaw) ? marketRaw : undefined;
-    const status = statusRaw && VALID_ORDER_STATUSES.has(statusRaw) ? statusRaw : undefined;
+    const marketRaw = req.query.market;
+    const statusRaw = req.query.status;
+    const market = isAllowedValue(marketRaw, VALID_MARKETS) ? marketRaw : undefined;
+    const status = isAllowedValue(statusRaw, VALID_ORDER_STATUSES) ? statusRaw : undefined;
     const q = (req.query.q as string | undefined)?.trim();
     const searchTerm = q?.replace(/^AC-/i, '');
     const parsedLimit = Number(req.query.limit ?? 20);
@@ -37,7 +41,7 @@ export async function listOrders(req: Request, res: Response) {
     const cursor = req.query.cursor as string | undefined;
 
     const baseWhere: Prisma.OrderWhereInput = {
-            ...(market && market !== 'ALL' && { market: market as any }),
+            ...(market && { market }),
             // Free-text search the admin order table sends via ?q= — match order
             // id or the customer (registered email/name, or guest email). Without
             // this the search box was a server-side no-op (BUG-14).
@@ -50,7 +54,7 @@ export async function listOrders(req: Request, res: Response) {
                 ],
             }),
     };
-    const where = { ...baseWhere, ...(status && { status: status as any }) };
+    const where: Prisma.OrderWhereInput = { ...baseWhere, ...(status && { status }) };
     const [orders, total, groupedCounts] = await Promise.all([
         prisma.order.findMany({
             where,

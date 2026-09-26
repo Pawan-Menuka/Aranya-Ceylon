@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { ADMIN, type AdminProduct } from "@/lib/admin-data";
 import { AIcon, Pill, StockMeter, FlagRow } from "./AdminPrimitives";
 import { ShareBar } from "./AdminCharts";
@@ -199,7 +200,7 @@ function ProductEditor({
       const match = categories.find((c) => c.name === p.category) ?? categories[0];
       setCategoryId(match.id);
     }
-  }, [categories]);
+  }, [categories, p.category]);
 
   React.useEffect(() => {
     if (!slugTouched) setP((x) => ({ ...x, slug: toSlug(x.name) }));
@@ -271,7 +272,7 @@ function ProductEditor({
               {[0, 1].map((i) => (
                 <div key={i} style={{ width: 96, height: 96, borderRadius: 12, flex: "0 0 auto", border: "1.5px solid var(--ad-line-2)", background: "var(--ad-soft)", display: "grid", placeItems: "center", overflow: "hidden" }}>
                   {uploadedImages[i]
-                    ? <img src={uploadedImages[i]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ? <Image src={uploadedImages[i]} alt="Uploaded product preview" width={96} height={96} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     : <span className="swatch" style={{ width: 30, height: 30, background: `radial-gradient(70% 70% at 50% 35%, ${p.base}88, ${p.deep}88)`, opacity: 0.5 }} />
                   }
                 </div>
