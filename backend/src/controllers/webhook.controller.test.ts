@@ -16,6 +16,7 @@
  * semantics the real fixes rely on. No DB needed.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { requestDouble, responseDouble } from '../test/httpDoubles.js';
 
 const store = vi.hoisted(() => {
     interface OrderRow {
@@ -29,6 +30,9 @@ const store = vi.hoisted(() => {
     interface EventRow { orderId: string; status: string; note: string; }
     interface ProductRow { id: string; slug: string; name: string; }
     interface GiftSetRow { slug: string; jar: string; contents: string[]; }
+    type OrderWhere = { id?: string; status?: string; paymentIntentId?: string };
+    type IdWhere = { where: { id: string } };
+    type VariantStock = { stock: { increment?: number; decrement?: number } };
 
     const s = {
         orders: [] as OrderRow[],
@@ -44,29 +48,29 @@ const store = vi.hoisted(() => {
     };
 
     // Does an order row satisfy a `where` of scalar fields?
-    const matchOrder = (o: OrderRow, where: any) =>
+    const matchOrder = (o: OrderRow, where: OrderWhere) =>
         (where.id === undefined || o.id === where.id) &&
         (where.status === undefined || o.status === where.status) &&
         (where.paymentIntentId === undefined || o.paymentIntentId === where.paymentIntentId);
 
     const db = {
         order: {
-            updateMany: async ({ where, data }: any) => {
+            updateMany: async ({ where, data }: { where: OrderWhere; data: { status: string } }) => {
                 const matched = s.orders.filter((o) => matchOrder(o, where));
                 matched.forEach((o) => { o.status = data.status; });
                 return { count: matched.length };
             },
-            findUnique: async ({ where, include }: any) => {
+            findUnique: async ({ where, include }: { where: OrderWhere; include?: { items?: boolean; user?: boolean } }) => {
                 const o = s.orders.find((x) => matchOrder(x, where));
                 if (!o) return null;
-                const row: any = { ...o };
+                const row: OrderRow & { items?: ItemRow[]; user?: { email: string | null } | null } = { ...o };
                 if (include?.items) row.items = s.items.filter((i) => i.orderId === o.id);
                 if (include?.user) row.user = o.userId ? { email: o.userEmail ?? null } : null;
                 return row;
             },
         },
         variant: {
-            updateMany: async ({ where, data }: any) => {
+            updateMany: async ({ where, data }: { where: { id: string; stock?: { gte: number } }; data: { stock: { decrement: number } } }) => {
                 const v = s.variants.find((x) => x.id === where.id);
                 const minStock = where.stock?.gte ?? 0;
                 if (!v || v.stock < minStock) return { count: 0 };
@@ -75,16 +79,18 @@ const store = vi.hoisted(() => {
             },
             // Used by cancelOrderAndReleaseStock to release stock reserved at
             // checkout-intent time (roadmap: stock reservation at checkout).
-            update: async ({ where, data }: any) => {
+            update: async ({ where, data }: IdWhere & { data: VariantStock }) => {
                 const v = s.variants.find((x) => x.id === where.id);
                 if (!v) throw new Error('NOT_FOUND');
                 if (data.stock?.increment !== undefined) v.stock += data.stock.increment;
                 return v;
             },
-            findFirst: async ({ where }: any) => {
+            findFirst: async ({ where }: { where: { productId?: string; weight?: number; market?: { in: string[] } | string } }) => {
                 const marketOk = (v: VariantRow) =>
                     where.market === undefined ||
-                    (where.market.in ? where.market.in.includes(v.market) : v.market === where.market);
+                    (typeof where.market === 'string'
+                        ? v.market === where.market
+                        : where.market.in.includes(v.market ?? ''));
                 return s.variants.find((v) =>
                     (where.productId === undefined || v.productId === where.productId) &&
                     (where.weight === undefined || v.weight === where.weight) &&
@@ -93,17 +99,17 @@ const store = vi.hoisted(() => {
             },
         },
         product: {
-            findUnique: async ({ where }: any) => s.products.find((p) => p.id === where.id) ?? null,
-            findFirst: async ({ where }: any) => s.products.find((p) => p.name === where.name) ?? null,
+            findUnique: async ({ where }: IdWhere) => s.products.find((p) => p.id === where.id) ?? null,
+            findFirst: async ({ where }: { where: { name: string } }) => s.products.find((p) => p.name === where.name) ?? null,
         },
         giftSet: {
-            findUnique: async ({ where }: any) => s.giftSets.find((g) => g.slug === where.slug) ?? null,
+            findUnique: async ({ where }: { where: { slug: string } }) => s.giftSets.find((g) => g.slug === where.slug) ?? null,
         },
         orderEvent: {
-            create: async ({ data }: any) => { s.events.push(data); return data; },
+            create: async ({ data }: { data: EventRow }) => { s.events.push(data); return data; },
         },
         coupon: {
-            update: async ({ where, data }: any) => {
+            update: async ({ where, data }: IdWhere & { data: { usageCount?: { increment?: number; decrement?: number } } }) => {
                 const c = s.coupons.find((x) => x.id === where.id);
                 if (c && data.usageCount?.increment) c.usageCount += data.usageCount.increment;
                 if (c && data.usageCount?.decrement) c.usageCount -= data.usageCount.decrement;
@@ -111,13 +117,13 @@ const store = vi.hoisted(() => {
             },
         },
         cart: {
-            findUnique: async ({ where }: any) => s.carts.find((c) => c.userId === where.userId) ?? null,
+            findUnique: async ({ where }: { where: { userId: string } }) => s.carts.find((c) => c.userId === where.userId) ?? null,
         },
         cartItem: {
             deleteMany: async () => { s.cartItemsDeleted++; return { count: 1 }; },
         },
         webhookEvent: {
-            create: async ({ data }: any) => { s.webhookEvents.push(data); return data; },
+            create: async ({ data }: { data: { gateway: string; eventType: string; eventId: string | null; orderId: string | null; payload: unknown } }) => { s.webhookEvents.push(data); return data; },
         },
     };
 
@@ -148,14 +154,11 @@ import { sendOrderConfirmation, sendNewOrderAdminNotification } from '../service
 const { s } = store;
 
 // Minimal Express res double.
-function mockRes() {
-    const res: any = {};
-    res.statusCode = 200;
-    res.body = undefined;
-    res.status = (n: number) => { res.statusCode = n; return res; };
-    res.json = (b: unknown) => { res.body = b; return res; };
-    res.send = (b: unknown) => { res.body = b; return res; };
-    return res;
+const mockRes = responseDouble;
+const stripeRequest = () => requestDouble({ headers: { 'stripe-signature': 'sig' }, body: Buffer.from('{}') });
+type StripeEvent = ReturnType<typeof constructWebhookEvent>;
+function stripeEvent(fields: { id?: string; type: string; data: { object: Record<string, unknown> } }): StripeEvent {
+    return fields as unknown as StripeEvent;
 }
 
 beforeEach(() => {
@@ -404,14 +407,14 @@ describe('confirmOrderPaid — admin new-order notification (roadmap: operationa
 
 // ── webhook event log (roadmap: replay/dispute debugging) ───────────────
 describe('stripeWebhook — event log', () => {
-    const stripeReq = () => ({ headers: { 'stripe-signature': 'sig' }, body: Buffer.from('{}') }) as any;
+    const stripeReq = stripeRequest;
 
     it('logs every verified delivery verbatim, linked to the order via metadata', async () => {
-        vi.mocked(constructWebhookEvent).mockReturnValue({
+        vi.mocked(constructWebhookEvent).mockReturnValue(stripeEvent({
             id: 'evt_1',
             type: 'payment_intent.succeeded',
             data: { object: { id: 'pi_123', metadata: { orderId: 'order_1' } } },
-        } as any);
+        }));
 
         await stripeWebhook(stripeReq(), mockRes());
 
@@ -422,11 +425,11 @@ describe('stripeWebhook — event log', () => {
     });
 
     it('logs a delivery it cannot resolve to an order with orderId null, without throwing', async () => {
-        vi.mocked(constructWebhookEvent).mockReturnValue({
+        vi.mocked(constructWebhookEvent).mockReturnValue(stripeEvent({
             id: 'evt_2',
             type: 'charge.dispute.created',
             data: { object: { id: 'ch_1' } },
-        } as any);
+        }));
 
         await stripeWebhook(stripeReq(), mockRes());
 
@@ -465,7 +468,7 @@ describe('payHereWebhook — event log', () => {
 
 // ── #15 PayHere cross-checks ────────────────────────────────────────────
 function payHereReq(overrides: Record<string, string> = {}) {
-    return {
+    return requestDouble({
         body: {
             merchant_id: 'MERCHANT_OK',
             order_id: 'order_1',
@@ -476,7 +479,7 @@ function payHereReq(overrides: Record<string, string> = {}) {
             md5sig: 'sig',
             ...overrides,
         },
-    } as any;
+    });
 }
 
 describe('payHereWebhook — #15 cross-checks', () => {
@@ -532,13 +535,13 @@ describe('payHereWebhook — #16 failure handling', () => {
 });
 
 describe('stripeWebhook — #16 failure handling', () => {
-    const stripeReq = () => ({ headers: { 'stripe-signature': 'sig' }, body: Buffer.from('{}') }) as any;
+    const stripeReq = stripeRequest;
 
     it('does NOT cancel the order on payment_failed — leaves it open for retry', async () => {
-        vi.mocked(constructWebhookEvent).mockReturnValue({
+        vi.mocked(constructWebhookEvent).mockReturnValue(stripeEvent({
             type: 'payment_intent.payment_failed',
             data: { object: { id: 'pi_123', last_payment_error: { message: 'card_declined' } } },
-        } as any);
+        }));
 
         await stripeWebhook(stripeReq(), mockRes());
 
@@ -548,10 +551,10 @@ describe('stripeWebhook — #16 failure handling', () => {
 
     it('cancels the order on payment_intent.canceled and releases its reserved stock', async () => {
         const beforeA = s.variants.find((v) => v.id === 'var_a')!.stock;
-        vi.mocked(constructWebhookEvent).mockReturnValue({
+        vi.mocked(constructWebhookEvent).mockReturnValue(stripeEvent({
             type: 'payment_intent.canceled',
             data: { object: { id: 'pi_123' } },
-        } as any);
+        }));
 
         await stripeWebhook(stripeReq(), mockRes());
         expect(s.orders[0]!.status).toBe('CANCELLED');
@@ -559,10 +562,10 @@ describe('stripeWebhook — #16 failure handling', () => {
     });
 
     it('confirms the order on payment_intent.succeeded', async () => {
-        vi.mocked(constructWebhookEvent).mockReturnValue({
+        vi.mocked(constructWebhookEvent).mockReturnValue(stripeEvent({
             type: 'payment_intent.succeeded',
             data: { object: { id: 'pi_123', metadata: { orderId: 'order_1' } } },
-        } as any);
+        }));
 
         await stripeWebhook(stripeReq(), mockRes());
         expect(s.orders[0]!.status).toBe('PAID');

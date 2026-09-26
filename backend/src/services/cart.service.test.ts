@@ -8,14 +8,31 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+interface CartRow {
+    id: string;
+    userId?: string;
+    guestToken?: string;
+    abandonedEmailSentAt?: Date | null;
+    couponId?: string | null;
+    items?: Array<{ productId?: string; variantId?: string; quantity: number; variant?: { id: string; price: number | string } }>;
+}
+interface CartItemRow { id: string; cartId: string; productId: string; variantId: string; quantity: number }
+interface VariantRow { id: string; market: string; stock: number }
+interface CouponRow {
+    id: string; code: string; discountType: 'PERCENTAGE' | 'FIXED_AMOUNT';
+    discountValue: number; usageLimit: number | null; usageCount: number; expiresAt: Date | null;
+}
+type CartWhere = { where: { id?: string; userId?: string; guestToken?: string } };
+type CartItemWhere = { where: { id: string; cartId: string } };
+
 const store = vi.hoisted(() => {
     const s = {
-        cart: null as any,
-        carts: [] as any[],
-        cartItems: [] as any[],
-        variants: new Map<string, any>(),
-        couponsById: new Map<string, any>(),
-        couponsByCode: new Map<string, any>(),
+        cart: null as CartRow | null,
+        carts: [] as CartRow[],
+        cartItems: [] as CartItemRow[],
+        variants: new Map<string, VariantRow>(),
+        couponsById: new Map<string, CouponRow>(),
+        couponsByCode: new Map<string, CouponRow>(),
     };
     return { s };
 });
@@ -32,12 +49,12 @@ vi.mock('../lib/prisma.js', () => ({
             // Existing single-cart tests below key off store.s.cart directly
             // (via a plain {id} where) — guestToken/userId lookups added on
             // top for addToCart/mergeGuestCart coverage.
-            findUnique: async ({ where }: any) => {
+            findUnique: async ({ where }: CartWhere) => {
                 if (where.guestToken) return store.s.carts.find((c) => c.guestToken === where.guestToken) ?? null;
                 if (where.userId) return store.s.carts.find((c) => c.userId === where.userId) ?? null;
                 return store.s.cart;
             },
-            upsert: async ({ where, update, create }: any) => {
+            upsert: async ({ where, update, create }: CartWhere & { update: Partial<CartRow>; create: Omit<CartRow, 'id'> }) => {
                 let c = where.userId
                     ? store.s.carts.find((x) => x.userId === where.userId)
                     : store.s.carts.find((x) => x.guestToken === where.guestToken);
@@ -45,18 +62,22 @@ vi.mock('../lib/prisma.js', () => ({
                 else { c = { id: `cart_${store.s.carts.length + 1}`, abandonedEmailSentAt: null, ...create }; store.s.carts.push(c); }
                 return c;
             },
-            update: async ({ where, data }: any) => {
+            update: async ({ where, data }: CartWhere & { data: Partial<CartRow> }) => {
                 const c = store.s.carts.find((x) => x.id === where.id) ?? (store.s.cart?.id === where.id ? store.s.cart : undefined);
                 if (!c) notFound();
                 Object.assign(c, data);
                 return c;
             },
-            delete: async ({ where }: any) => {
+            delete: async ({ where }: CartWhere) => {
                 store.s.carts = store.s.carts.filter((c) => c.id !== where.id);
             },
         },
         cartItem: {
-            upsert: async ({ where, update, create }: any) => {
+            upsert: async ({ where, update, create }: {
+                where: { cartId_variantId: { cartId: string; variantId: string } };
+                update: { quantity: { increment: number } };
+                create: Omit<CartItemRow, 'id'>;
+            }) => {
                 const key = where.cartId_variantId;
                 let item = store.s.cartItems.find((i) => i.cartId === key.cartId && i.variantId === key.variantId);
                 if (item) {
@@ -68,30 +89,30 @@ vi.mock('../lib/prisma.js', () => ({
                 }
                 return item;
             },
-            update: async ({ where, data }: any) => {
+            update: async ({ where, data }: CartItemWhere & { data: { quantity: number } }) => {
                 const item = store.s.cartItems.find((i) => i.id === where.id && i.cartId === where.cartId);
                 if (!item) notFound();
                 Object.assign(item, data);
                 return item;
             },
-            delete: async ({ where }: any) => {
+            delete: async ({ where }: CartItemWhere) => {
                 const idx = store.s.cartItems.findIndex((i) => i.id === where.id && i.cartId === where.cartId);
                 if (idx === -1) notFound();
                 return store.s.cartItems.splice(idx, 1)[0];
             },
-            deleteMany: async ({ where }: any) => {
+            deleteMany: async ({ where }: { where: { cartId: string } }) => {
                 const before = store.s.cartItems.length;
                 store.s.cartItems = store.s.cartItems.filter((i) => i.cartId !== where.cartId);
                 return { count: before - store.s.cartItems.length };
             },
         },
         variant: {
-            findFirst: async ({ where }: any) => store.s.variants.get(where.id) ?? null,
+            findFirst: async ({ where }: { where: { id: string } }) => store.s.variants.get(where.id) ?? null,
         },
         $transaction: async (ops: Promise<unknown>[]) => Promise.all(ops),
         coupon: {
-            findUnique: async ({ where }: any) =>
-                (where.id ? store.s.couponsById.get(where.id) : store.s.couponsByCode.get(where.code)) ?? null,
+            findUnique: async ({ where }: { where: { id?: string; code?: string } }) =>
+                (where.id ? store.s.couponsById.get(where.id) : where.code ? store.s.couponsByCode.get(where.code) : undefined) ?? null,
         },
     },
 }));
