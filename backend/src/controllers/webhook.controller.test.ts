@@ -158,7 +158,10 @@ const mockRes = responseDouble;
 const stripeRequest = () => requestDouble({ headers: { 'stripe-signature': 'sig' }, body: Buffer.from('{}') });
 type StripeEvent = ReturnType<typeof constructWebhookEvent>;
 function stripeEvent(fields: { id?: string; type: string; data: { object: Record<string, unknown> } }): StripeEvent {
-    return fields as unknown as StripeEvent;
+    const object = fields.type === 'payment_intent.succeeded'
+        ? { amount_received: 250000, currency: 'lkr', ...fields.data.object }
+        : fields.data.object;
+    return { ...fields, data: { object } } as unknown as StripeEvent;
 }
 
 beforeEach(() => {
@@ -402,6 +405,75 @@ describe('confirmOrderPaid — admin new-order notification (roadmap: operationa
         s.orders[0]!.guestEmail = null;
         await confirmOrderPaid('order_1', 'ref', 'Stub');
         expect(sendNewOrderAdminNotification).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('stripeWebhook — recorded payment validation', () => {
+    const succeeded = (fields: Record<string, unknown> = {}) => {
+        vi.mocked(constructWebhookEvent).mockReturnValue(stripeEvent({
+            id: 'evt_paid', type: 'payment_intent.succeeded',
+            data: { object: { id: 'pi_123', metadata: { orderId: 'order_1' }, ...fields } },
+        }));
+    };
+
+    it('confirms a matching payment only once across duplicate deliveries', async () => {
+        succeeded();
+        await stripeWebhook(stripeRequest(), mockRes());
+        await stripeWebhook(stripeRequest(), mockRes());
+        expect(s.orders[0]!.status).toBe('PAID');
+        expect(s.events.filter((event) => event.status === 'PAID')).toHaveLength(1);
+        expect(sendOrderConfirmation).toHaveBeenCalledTimes(1);
+        expect(s.cartItemsDeleted).toBe(1);
+    });
+
+    it.each([
+        ['another intent', { id: 'pi_unrelated' }],
+        ['underpayment', { amount_received: 249999 }],
+        ['overpayment', { amount_received: 250001 }],
+        ['another currency', { currency: 'usd' }],
+    ])('rejects %s without changing an order or sending email', async (_name, fields) => {
+        succeeded(fields);
+        const res = mockRes();
+        await stripeWebhook(stripeRequest(), res);
+        expect(res.statusCode).toBe(400);
+        expect(s.orders[0]!.status).toBe('PENDING');
+        expect(s.events).toHaveLength(0);
+        expect(s.cartItemsDeleted).toBe(0);
+        expect(sendOrderConfirmation).not.toHaveBeenCalled();
+        expect(s.webhookEvents).toHaveLength(1);
+    });
+
+    it('resolves a payment from its recorded intent when metadata is absent', async () => {
+        succeeded({ metadata: {} });
+        await stripeWebhook(stripeRequest(), mockRes());
+        expect(s.orders[0]!.status).toBe('PAID');
+    });
+
+    it('requests a retry when checkout has not persisted its intent ID yet', async () => {
+        s.orders[0]!.paymentIntentId = null;
+        succeeded();
+        const res = mockRes();
+        await stripeWebhook(stripeRequest(), res);
+        expect(res.statusCode).toBe(503);
+        expect(s.orders[0]!.status).toBe('PENDING');
+        expect(s.events).toHaveLength(0);
+    });
+
+    it('acknowledges an unrelated payment without mutating existing orders', async () => {
+        succeeded({ id: 'pi_other', metadata: {} });
+        const res = mockRes();
+        await stripeWebhook(stripeRequest(), res);
+        expect(res.body).toEqual({ received: true });
+        expect(s.orders[0]!.status).toBe('PENDING');
+        expect(s.events).toHaveLength(0);
+    });
+
+    it('uses integer cents for decimal USD totals', async () => {
+        s.orders[0]!.total = 25.99;
+        s.orders[0]!.currency = 'USD';
+        succeeded({ amount_received: 2599, currency: 'usd' });
+        await stripeWebhook(stripeRequest(), mockRes());
+        expect(s.orders[0]!.status).toBe('PAID');
     });
 });
 
