@@ -265,7 +265,25 @@ export async function stripeWebhook(req: Request, res: Response) {
         case 'payment_intent.succeeded': {
             const pi = event.data.object;
             const orderId = pi.metadata?.orderId;
-            if (orderId) await confirmOrderPaid(orderId, pi.id, 'Stripe');
+            // Bind a signed event to the intent and price recorded at checkout,
+            // just as the PayHere path validates its amount and currency.
+            const order = await prisma.order.findUnique({
+                where: orderId ? { id: orderId } : { paymentIntentId: pi.id },
+            });
+            if (!order) break; // Unrelated payment on the same Stripe account.
+            if (!order.paymentIntentId && order.status === 'PENDING') {
+                // Stripe can deliver before checkout persists the intent ID.
+                // Ask it to retry rather than lose a legitimately paid order.
+                return res.status(503).json({ error: 'Payment intent is not recorded yet' });
+            }
+            const expectedAmount = Math.round(Number(order.total) * 100);
+            if (order.paymentIntentId !== pi.id ||
+                !Number.isSafeInteger(expectedAmount) || expectedAmount <= 0 ||
+                pi.amount_received !== expectedAmount ||
+                pi.currency?.toUpperCase() !== order.currency) {
+                return res.status(400).json({ error: 'Payment does not match the recorded order' });
+            }
+            await confirmOrderPaid(order.id, pi.id, 'Stripe');
             break;
         }
         case 'payment_intent.payment_failed': {
