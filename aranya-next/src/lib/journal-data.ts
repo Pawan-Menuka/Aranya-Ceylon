@@ -136,7 +136,8 @@ export function toPost(b: Blog): Post {
     date: b.publishedAt ? new Date(b.publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "",
     readTime: readingTime(b.content),
     accent: ACCENTS[hashIndex(b.slug, ACCENTS.length)],
-    slot: "post-" + b.slug,
+    // Reuse the curated cover slot when a live post replaces its demo article.
+    slot: JOURNAL.find((post) => post.slug === b.slug)?.slot ?? "post-" + b.slug,
     featured: false,
     // Real article body from content; falls back to canned prose only when empty.
     ...(body.length ? { body } : {}),

@@ -38,6 +38,20 @@ const pool = new Pool({
 
 const MULT: Record<number, number> = { 50: 0.6, 100: 1.0, 250: 2.3 };
 const WEIGHTS = [50, 100, 250] as const;
+const THIRD_VIEW: Record<string, string> = {
+    'ceylon-cinnamon-quills': '03-milled',
+    'green-cardamom-pods': '03-crushed',
+    'whole-cloves': '03-milled',
+    'whole-nutmeg': '03-grated',
+    'black-peppercorns': '03-cracked',
+    'white-peppercorns': '03-cracked',
+    'mace-blades': '03-origin',
+    'ceylon-cinnamon-ground': '03-process',
+    'ground-turmeric': '03-process',
+    'ground-ginger': '03-process',
+    'ceylon-curry-powder': '03-ingredients',
+    'kandyan-garam-masala': '03-ingredients',
+};
 
 function lkrPrice(base100: number, w: number) {
     return Math.round(base100 * MULT[w]);
@@ -255,17 +269,37 @@ async function main() {
                 );
             }
 
-            // Placeholder image
-            await q(
-                `INSERT INTO "ProductImage" (id, "productId", url, "altText", position, "createdAt")
-                 VALUES ($1,$2,$3,$4,0,$5)`,
-                [createId(), productId,
-                 `https://res.cloudinary.com/aranya/image/upload/products/${p.slug}.jpg`,
-                 p.name, now],
-            );
-
             created++;
             process.stdout.write(`  +  ${p.name}  (6 variants)\n`);
+        }
+
+        // Populate the four generated views. An existing admin upload is left
+        // alone; only empty galleries and the old seeded demo URL are replaced.
+        const imageRows = await q(
+            `SELECT id, url, position FROM "ProductImage" WHERE "productId" = $1 ORDER BY position`,
+            [productId],
+        ) as Array<{ id: string; url: string; position: number }>;
+        const oldUrl = `https://res.cloudinary.com/aranya/image/upload/products/${p.slug}.jpg`;
+        const localPrefix = `/images/products/${p.slug}/`;
+        if (imageRows.every((image) => image.url === oldUrl || image.url.startsWith(localPrefix))) {
+            const third = THIRD_VIEW[p.slug];
+            if (!third) throw new Error(`Missing generated image mapping for ${p.slug}`);
+            const views = ['01-primary', '02-detail', third, '04-packaging'];
+            for (const [position, view] of views.entries()) {
+                const url = `${localPrefix}${view}.webp`;
+                const current = imageRows.find((image) => image.position === position);
+                if (current && current.url !== url) {
+                    await q(`UPDATE "ProductImage" SET url = $1, "altText" = $2 WHERE id = $3`,
+                        [url, `${p.name} — ${view.replace(/^\d+-/, '').replace(/-/g, ' ')}`, current.id]);
+                } else if (!current) {
+                    await q(
+                        `INSERT INTO "ProductImage" (id, "productId", url, "altText", position, "createdAt")
+                         VALUES ($1,$2,$3,$4,$5,$6)`,
+                        [createId(), productId, url,
+                         `${p.name} — ${view.replace(/^\d+-/, '').replace(/-/g, ' ')}`, position, now],
+                    );
+                }
+            }
         }
     }
 

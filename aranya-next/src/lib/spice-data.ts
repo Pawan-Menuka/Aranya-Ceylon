@@ -100,8 +100,19 @@ function headlinePrice(p: Product, market: Market): string {
 export function toSpice(p: Product): Spice {
   const pal = paletteFor(p.slug, p.color);
   const weights = Array.from(new Set(p.variants.map((v) => v.weight))).sort((a, b) => a - b);
+  const seededPlaceholder = `https://res.cloudinary.com/aranya/image/upload/products/${p.slug}.jpg`;
+  const demoPlaceholders = new Set([
+    'https://res.cloudinary.com/demo/image/upload/cinnamon.jpg',
+    'https://res.cloudinary.com/demo/image/upload/pepper.jpg',
+    'https://res.cloudinary.com/demo/image/upload/tea.jpg',
+  ]);
+  const imageSources = [...(p.images ?? [])]
+    .sort((a, b) => a.position - b.position)
+    .map((image) => image.url)
+    .filter((url) => url !== seededPlaceholder && !demoPlaceholders.has(url));
   return {
     slug: p.slug,
+    ...(imageSources.length ? { imageSrc: imageSources[0], imageSources } : {}),
     name: p.name,
     latin: p.latin || "",
     origin: p.originLabel || p.category?.name || "Sri Lanka",

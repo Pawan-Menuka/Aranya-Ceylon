@@ -138,6 +138,8 @@ export interface Paginated<T> {
 // so every ported component renders unchanged whether data is live or demo.
 export interface Spice {
   slug?: string;
+  imageSrc?: string;
+  imageSources?: string[];
   name: string;
   latin: string;
   origin: string;

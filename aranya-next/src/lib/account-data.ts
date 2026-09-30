@@ -7,6 +7,7 @@ import { formatOrderNumber } from "./order-number";
 // arrive from GET /orders when authed (toAccountOrder maps them onto this shape).
 
 interface BaseSpice {
+  slug: string;
   name: string;
   latin: string;
   color: string;
@@ -19,19 +20,20 @@ interface BaseSpice {
 
 // small palette pulled from the catalogue (key → colour + base price)
 export const ACCOUNT_SPICES: Record<string, BaseSpice> = {
-  cinnamon: { name: "Ceylon Cinnamon Quills", latin: "Cinnamomum verum", color: "#B5651D", base: "#C2772E", deep: "#7E481A", surface: "#F3E7D4", usd: 14.5, lkr: 2150 },
-  cardamom: { name: "Green Cardamom Pods", latin: "Elettaria cardamomum", color: "#7C9A5A", base: "#93AE6A", deep: "#566F37", surface: "#EAEFDD", usd: 18.0, lkr: 2680 },
-  cloves: { name: "Whole Cloves", latin: "Syzygium aromaticum", color: "#6B4226", base: "#7A4A2A", deep: "#462914", surface: "#EBDDCD", usd: 11.25, lkr: 1670 },
-  turmeric: { name: "Ground Turmeric", latin: "Curcuma longa", color: "#D99A1C", base: "#E2A62B", deep: "#A8740F", surface: "#F6E9C9", usd: 8.5, lkr: 1260 },
-  pepper: { name: "Black Peppercorns", latin: "Piper nigrum", color: "#3C3A36", base: "#54504A", deep: "#26241F", surface: "#E6E2DA", usd: 9.9, lkr: 1470 },
-  nutmeg: { name: "Whole Nutmeg", latin: "Myristica fragrans", color: "#A9683C", base: "#B57441", deep: "#7A451F", surface: "#F0E2D2", usd: 16.75, lkr: 2490 },
-  curry: { name: "Ceylon Curry Powder", latin: "Roasted estate blend", color: "#9A5B22", base: "#AC6C2D", deep: "#6E3F16", surface: "#EFE2CE", usd: 13.75, lkr: 2040 },
+  cinnamon: { slug: "ceylon-cinnamon-quills", name: "Ceylon Cinnamon Quills", latin: "Cinnamomum verum", color: "#B5651D", base: "#C2772E", deep: "#7E481A", surface: "#F3E7D4", usd: 14.5, lkr: 2150 },
+  cardamom: { slug: "green-cardamom-pods", name: "Green Cardamom Pods", latin: "Elettaria cardamomum", color: "#7C9A5A", base: "#93AE6A", deep: "#566F37", surface: "#EAEFDD", usd: 18.0, lkr: 2680 },
+  cloves: { slug: "whole-cloves", name: "Whole Cloves", latin: "Syzygium aromaticum", color: "#6B4226", base: "#7A4A2A", deep: "#462914", surface: "#EBDDCD", usd: 11.25, lkr: 1670 },
+  turmeric: { slug: "ground-turmeric", name: "Ground Turmeric", latin: "Curcuma longa", color: "#D99A1C", base: "#E2A62B", deep: "#A8740F", surface: "#F6E9C9", usd: 8.5, lkr: 1260 },
+  pepper: { slug: "black-peppercorns", name: "Black Peppercorns", latin: "Piper nigrum", color: "#3C3A36", base: "#54504A", deep: "#26241F", surface: "#E6E2DA", usd: 9.9, lkr: 1470 },
+  nutmeg: { slug: "whole-nutmeg", name: "Whole Nutmeg", latin: "Myristica fragrans", color: "#A9683C", base: "#B57441", deep: "#7A451F", surface: "#F0E2D2", usd: 16.75, lkr: 2490 },
+  curry: { slug: "ceylon-curry-powder", name: "Ceylon Curry Powder", latin: "Roasted estate blend", color: "#9A5B22", base: "#AC6C2D", deep: "#6E3F16", surface: "#EFE2CE", usd: 13.75, lkr: 2040 },
 };
 
 const MULT: Record<string, number> = { "50g": 0.6, "100g": 1, "250g": 2.3 };
 
 export interface OrderLineItem {
   key: string;
+  slug?: string;
   name: string;
   latin: string;
   weight: string;
@@ -49,7 +51,7 @@ export interface OrderLineItem {
 function L(key: string, weight: string, form: string, qty: number): OrderLineItem {
   const s = ACCOUNT_SPICES[key];
   return {
-    key, name: s.name, latin: s.latin, weight, form, qty,
+    key, slug: s.slug, name: s.name, latin: s.latin, weight, form, qty,
     color: s.color, base: s.base, deep: s.deep, surface: s.surface,
     usd: s.usd * (MULT[weight] || 1), lkr: s.lkr * (MULT[weight] || 1),
   };
@@ -212,7 +214,7 @@ export function spiceForKey(key: string): Spice | null {
   const s = ACCOUNT_SPICES[key];
   if (!s) return null;
   return {
-    slug: key,
+    slug: s.slug,
     name: s.name, latin: s.latin, origin: "Sri Lanka",
     color: s.color, base: s.base, deep: s.deep, surface: s.surface,
     rating: 4.8, reviews: 120, badge: "In Stock",
@@ -289,6 +291,7 @@ export function toAccountOrder(order: Order): AccountOrder {
       : undefined;
     return {
       key: `${order.id}-${idx}`,
+      slug,
       name: it.product?.name ?? "Spice",
       latin: "",
       weight: weightStr,

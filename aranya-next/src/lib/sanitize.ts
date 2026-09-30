@@ -1,4 +1,3 @@
-import DOMPurify from "isomorphic-dompurify";
 
 // Sanitises rich-text HTML before it is handed to dangerouslySetInnerHTML.
 //
@@ -18,6 +17,7 @@ const ALLOWED_TAGS = [
 const ALLOWED_ATTR = ["href", "title", "target", "rel"];
 
 export function sanitizeHtml(dirty: string): string {
+    const DOMPurify = require("isomorphic-dompurify") as typeof import("isomorphic-dompurify");
     return DOMPurify.sanitize(dirty, {
         ALLOWED_TAGS,
         ALLOWED_ATTR,
