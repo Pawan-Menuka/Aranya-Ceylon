@@ -35,19 +35,19 @@ export function Gallery({ spice }: { spice: Spice }) {
     { ...spice, surface: "#EFE7D8", base: spice.color, deep: spice.deep },
     { ...spice, base: spice.surface, deep: spice.base, surface: spice.surface },
   ];
-  const labels = ["Whole quills", "Detail", "Milled", "In the jar"];
+  const labels = ["Product", "Detail", "Preparation", "Packaging"];
   const [i, setI] = React.useState(0);
   return (
     <div style={{ display: "flex", gap: 16 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, width: 78, flex: "0 0 auto" }}>
         {variants.map((v, k) => (
           <button key={k} onClick={() => setI(k)} aria-label={labels[k]} style={{ padding: 0, border: k === i ? "2px solid var(--brand)" : "1px solid var(--line)", borderRadius: 5, overflow: "hidden", cursor: "pointer", background: "none", boxShadow: k === i ? "var(--shadow-sm)" : "none" }}>
-            <SpicePhoto spice={v} ratio="1 / 1" label={false} />
+            <SpicePhoto spice={v} ratio="1 / 1" label={false} imageIndex={k} />
           </button>
         ))}
       </div>
       <div style={{ position: "relative", flex: 1, borderRadius: 8, overflow: "hidden", boxShadow: "var(--shadow-md)" }}>
-        <SpicePhoto spice={variants[i]} ratio="1 / 1" label={true} />
+        <SpicePhoto spice={variants[i]} ratio="1 / 1" label={true} imageIndex={i} />
         <div style={{ position: "absolute", top: 16, left: 16 }}><Badge kind={spice.badge} solid /></div>
         <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 6, background: spice.color }} />
         <div style={{ position: "absolute", bottom: 14, right: 16, fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.7)" }}>{labels[i]}</div>

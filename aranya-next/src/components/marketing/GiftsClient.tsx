@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import type { Market, Spice } from "@/lib/types";
 import { GIFTS, GIFT_OCCASIONS, type GiftSet, giftCatalog, giftPrice, giftFmt, giftAlaCarte, giftSavePct } from "@/lib/gifts-data";
 // gifts prop: live data from backend; falls back to static GIFTS when null
@@ -11,9 +12,10 @@ import { Seal } from "../primitives/Seal";
 import { ImageSlot } from "../primitives/ImageSlot";
 import { useMarket } from "../MarketContext";
 import { useCart } from "../CartContext";
+import { giftImage } from "@/lib/image-assets";
 
 // Gift Sets page (ported from gifts.jsx). Curated bundles priced from CATALOG;
-// GiftBox is a styled top-down "ribboned box" placeholder. Adds a set to the
+// GiftBox uses generated set photography where available. Adds a set to the
 // shared cart as a single line.
 
 function GIcon({ name, size = 22, stroke = "var(--brand)", w = 1.6 }: { name: string; size?: number; stroke?: string; w?: number }) {
@@ -35,6 +37,12 @@ function GiftBadge({ kind }: { kind: string }) {
 }
 
 function GiftBox({ set, ratio = "4 / 3" }: { set: GiftSet; ratio?: string }) {
+  const src = giftImage(set.id);
+  if (src) {
+    return <div style={{ position: "relative", width: "100%", aspectRatio: ratio, overflow: "hidden" }}>
+      <Image src={src} alt="" fill sizes="(max-width: 768px) 100vw, 600px" style={{ objectFit: "cover" }} />
+    </div>;
+  }
   const dots = set.contents.map((nm) => (giftCatalog(nm) || ({} as { color?: string })).color || set.color);
   return (
     <div className="grain" style={{ position: "relative", width: "100%", aspectRatio: ratio, overflow: "hidden", background: `radial-gradient(120% 120% at 50% 0%, ${set.surface} 0%, ${set.surface} 46%, rgba(0,0,0,.06) 100%)` }}>
@@ -89,7 +97,7 @@ function GiftPrice({ set, market, size = 30 }: { set: GiftSet; market: Market; s
 function useGiftAdd() {
   const cart = useCart();
   return React.useCallback((set: GiftSet) => {
-    cart.add(set as unknown as Spice, "Gift box", "Set", 1);
+    cart.add({ ...set, imageSrc: giftImage(set.id) } as unknown as Spice, "Gift box", "Set", 1);
     cart.openCart();
   }, [cart]);
 }

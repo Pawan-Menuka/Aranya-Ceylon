@@ -27,6 +27,8 @@ export const CONFIG: Record<Market, MarketConfig> = {
 
 export interface CartLine {
   id: string;
+  slug?: string;
+  imageSrc?: string;
   name: string;
   latin: string;
   weight: string;
@@ -176,6 +178,8 @@ export function lineFromSpice(
   const id = variantId ? `v:${variantId}` : `${spice.name}|${weight}|${form}`;
   return {
     id,
+    ...(spice.slug ? { slug: spice.slug } : {}),
+    ...(spice.imageSrc ? { imageSrc: spice.imageSrc } : {}),
     name: spice.name,
     latin: spice.latin || "",
     weight,
@@ -203,6 +207,7 @@ export function lineFromServerItem(item: CartItem): CartLine {
   const isLkr = item.variant.currency === "LKR";
   return {
     id: `v:${item.variant.id}`,
+    slug: item.product.slug,
     name: item.product.name,
     latin: "",
     weight: `${item.variant.weight}g`,

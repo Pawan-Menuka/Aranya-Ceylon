@@ -1,18 +1,30 @@
 import type { Spice } from "@/lib/types";
+import { imageForName, productImage } from "@/lib/image-assets";
+import Image from "next/image";
 
-// ---- Styled spice-photo placeholder (ported from shared.jsx) ----
-// Used until real product photography is supplied (spec §3 "Photography").
+// Use a live product gallery when present, then generated photography for known
+// slugs. The styled fallback covers products with neither source.
 export function SpicePhoto({
   spice,
   ratio = "1 / 1",
   round = 0,
   label = true,
+  imageIndex = 0,
 }: {
-  spice: Pick<Spice, "base" | "deep" | "surface">;
+  spice: Pick<Spice, "base" | "deep" | "surface"> & { name?: string; slug?: string; imageSrc?: string; imageSources?: string[] };
   ratio?: string;
   round?: number;
   label?: boolean;
+  imageIndex?: number;
 }) {
+  const src = spice.imageSources?.[imageIndex] ?? (imageIndex === 0 ? spice.imageSrc : undefined) ?? productImage(spice.slug, imageIndex) ?? imageForName(spice.name, imageIndex);
+  if (src) {
+    return (
+      <div style={{ position: "relative", width: "100%", aspectRatio: ratio, borderRadius: round, overflow: "hidden" }}>
+        <Image src={src} alt="" fill sizes="(max-width: 768px) 100vw, 600px" style={{ objectFit: "cover" }} />
+      </div>
+    );
+  }
   return (
     <div
       className="grain"

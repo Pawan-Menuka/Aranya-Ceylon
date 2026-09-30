@@ -15,6 +15,20 @@ if (process.env.ENABLE_DEV_ROUTES === 'true') {
 
     const WEIGHTS = [50, 100, 250] as const;
     const MULT: Record<(typeof WEIGHTS)[number], number> = { 50: 0.6, 100: 1.0, 250: 2.3 };
+    const THIRD_VIEW: Record<string, string> = {
+        'ceylon-cinnamon-quills': '03-milled',
+        'green-cardamom-pods': '03-crushed',
+        'whole-cloves': '03-milled',
+        'whole-nutmeg': '03-grated',
+        'black-peppercorns': '03-cracked',
+        'white-peppercorns': '03-cracked',
+        'mace-blades': '03-origin',
+        'ceylon-cinnamon-ground': '03-process',
+        'ground-turmeric': '03-process',
+        'ground-ginger': '03-process',
+        'ceylon-curry-powder': '03-ingredients',
+        'kandyan-garam-masala': '03-ingredients',
+    };
 
     const CATALOG = [
         // ── Whole Spices ───────────────────────────────────────────────────────
@@ -39,6 +53,26 @@ if (process.env.ENABLE_DEV_ROUTES === 'true') {
         const { prisma } = await import('../lib/prisma.js');
         const log: string[] = [];
 
+        const ensureImages = async (productId: string, slug: string, name: string) => {
+            const images = await prisma.productImage.findMany({ where: { productId }, orderBy: { position: 'asc' } });
+            const oldUrl = `https://res.cloudinary.com/aranya/image/upload/products/${slug}.jpg`;
+            const prefix = `/images/products/${slug}/`;
+            if (images.some((image) => image.url !== oldUrl && !image.url.startsWith(prefix))) return;
+            const third = THIRD_VIEW[slug];
+            if (!third) throw new Error(`Missing generated image mapping for ${slug}`);
+            const views = ['01-primary', '02-detail', third, '04-packaging'];
+            for (const [position, view] of views.entries()) {
+                const url = `${prefix}${view}.webp`;
+                const altText = `${name} — ${view.replace(/^\d+-/, '').replace(/-/g, ' ')}`;
+                const current = images.find((image) => image.position === position);
+                if (current && current.url !== url) {
+                    await prisma.productImage.update({ where: { id: current.id }, data: { url, altText } });
+                } else if (!current) {
+                    await prisma.productImage.create({ data: { productId, url, altText, position } });
+                }
+            }
+        };
+
         try {
             // 1. Categories
             const catDefs = [
@@ -61,7 +95,10 @@ if (process.env.ENABLE_DEV_ROUTES === 'true') {
                     where: { slug: p.slug },
                     select: { id: true },
                 });
-                if (exists) { skipped++; log.push(`skip: ${p.slug}`); continue; }
+                if (exists) {
+                    await ensureImages(exists.id, p.slug, p.name);
+                    skipped++; log.push(`skip: ${p.slug}`); continue;
+                }
 
                 const variants = WEIGHTS.flatMap((w) => [
                     {
@@ -88,7 +125,7 @@ if (process.env.ENABLE_DEV_ROUTES === 'true') {
                     },
                 ]);
 
-                await prisma.product.create({
+                const createdProduct = await prisma.product.create({
                     data: {
                         name: p.name, slug: p.slug, description: p.desc,
                         categoryId: catMap[p.cat]!,
@@ -96,15 +133,9 @@ if (process.env.ENABLE_DEV_ROUTES === 'true') {
                         status: 'ACTIVE', featured: p.featured, market: 'BOTH',
                         latin: p.latin, originLabel: p.origin, color: p.color,
                         variants: { create: variants },
-                        images: {
-                            create: [{
-                                url: `https://res.cloudinary.com/aranya/image/upload/products/${p.slug}.jpg`,
-                                altText: p.name,
-                                position: 0,
-                            }],
-                        },
                     },
                 });
+                await ensureImages(createdProduct.id, p.slug, p.name);
                 created++;
                 log.push(`created: ${p.name} (6 variants)`);
             }

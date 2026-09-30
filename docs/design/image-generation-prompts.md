@@ -2027,5 +2027,5 @@ Avoid: generic stock-photo staging, tourism clichés, colonial imagery, excessiv
 - Existing hero animation frames and `public/hero/poster.webp` were treated as supplied media, not dummy images.
 - SVG motifs, icons, CSS gradients and the procedural grain texture are interface artwork rather than photography placeholders, so they do not need image-generation prompts.
 - Repeated uses of the same product, recipe or journal image are intentionally mapped to one master path rather than generating inconsistent duplicates.
-- The frontend currently renders `SpicePhoto` instead of reading `Product.images`; implementing these files in the UI will require wiring the recommended paths (or uploaded CDN equivalents) into the product view model.
-- `GiftBox` is also procedural at present; the five gift-set prompts above provide the real product photography needed to replace it.
+- `ImageSlot` and `SpicePhoto` now resolve the generated files in `public/images`. Live product galleries use `Product.images` when present and fall back to the generated views by slug.
+- `GiftBox` and gift cart thumbnails use the five generated gift-set images.

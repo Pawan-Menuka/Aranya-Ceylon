@@ -518,7 +518,7 @@ export function AccountDashboard() {
         usd: "$" + it.usd.toFixed(2),
         lkr: "Rs " + it.lkr.toLocaleString("en-US"),
         weights: ["50g", "100g", "250g"],
-        slug: it.key,
+        slug: it.slug ?? staticBase?.slug ?? it.key,
       };
       cart.add(spice, it.weight, it.form, it.qty, it.backendIds);
     });
