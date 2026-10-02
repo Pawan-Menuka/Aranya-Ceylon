@@ -58,6 +58,10 @@ try {
   });
   await check('Unavailable session shows retry without granting account/admin access',async()=>{
     faults.set('/auth/refresh',{delayMs:6500});
+    // The storefront only restores a session when the API's readable session
+    // marker is present; without it a visitor is anonymous and never calls
+    // /auth/refresh. This check is about a RETURNING visitor whose restore stalls.
+    await context.addCookies([{name:'aranya_session',value:'1',url:baseUrl}]);
     await page.goto(baseUrl+'/account',{waitUntil:'domcontentloaded'});
     await page.locator('[data-session-error]').waitFor({state:'visible',timeout:7000});
     await page.screenshot({path:output+'/account-session-error.png'});
