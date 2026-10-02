@@ -29,10 +29,25 @@ export const loginLimiter = rateLimit({
     ...json429('Too many login attempts. Please try again in a few minutes.'),
 });
 
-// Broader limiter for the rest of the auth surface (register, refresh, etc.).
+// Broader limiter for the rest of the auth surface (register, logout, etc.).
 export const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 50,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    keyGenerator,
+    ...json429('Too many requests. Please slow down and try again shortly.'),
+});
+
+// Session refresh is not a guessing surface: it needs an unguessable 48-char
+// cookie, and reuse of a spent one already revokes the whole token family.
+// A signed-in shopper legitimately calls it on every full page load and every
+// 15 minutes, and many shoppers can sit behind one address (carrier NAT), so
+// it gets its own, much roomier bucket instead of sharing authLimiter's 50 —
+// exhausting that left signed-in visitors unable to restore their session.
+export const refreshLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 300,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     keyGenerator,

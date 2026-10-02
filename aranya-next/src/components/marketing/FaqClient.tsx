@@ -4,6 +4,7 @@ import * as React from "react";
 import { Reveal } from "../primitives/Reveal";
 import { Eyebrow } from "../primitives/Motif";
 import { useMarket } from "../MarketContext";
+import { CONFIG, fmt } from "@/lib/cart";
 import { SupportHeader, SupportCTA, SIcon } from "./SupportCommon";
 
 // FAQ page (ported from faq.jsx). Categorised accordions with a sticky category
@@ -26,7 +27,11 @@ const FAQ_CATS: FaqCat[] = [
     items: [
       ["Where do you ship?", "Across Sri Lanka and to 40+ countries worldwide. Domestic orders are dispatched from Kandy; international orders ship tracked and insured. Full rates and timings live on our Shipping & Returns page."],
       ["How long will my order take?", "Within Sri Lanka, expect 2–4 working days (1–2 for Colombo express). International standard runs 7–14 working days, express 3–6, depending on destination and customs."],
-      ["When is shipping free?", "Domestic orders over Rs 5,000 ship free; international orders over $60 ship free. Below that, a flat rate is shown at checkout before you pay."],
+      // Answered only while free shipping is actually offered (lib/cart.ts CONFIG).
+      ...(CONFIG.local.freeShip === null || CONFIG.intl.freeShip === null ? [] : [[
+        "When is shipping free?",
+        `Domestic orders over ${fmt(CONFIG.local.freeShip, "local")} ship free; international orders over $${CONFIG.intl.freeShip} ship free. Below that, a flat rate is shown at checkout before you pay.`,
+      ] as [string, string]]),
       ["Will I be charged customs or duties?", "International parcels may attract import duties or taxes set by your country — these are the recipient's responsibility and aren't included in our prices. See the Shipping & Returns page for details."],
     ],
   },

@@ -56,7 +56,11 @@ export async function refreshSession(): Promise<boolean> {
         return !!j?.accessToken;
       })
       .catch((error) => {
-        if ((error as ApiError).status === 401) return false;
+        // 429 means "not now", not "the API is broken": carry on signed out
+        // instead of raising a session error, which would also pause every
+        // queued cart write until the visitor pressed retry.
+        const status = (error as ApiError).status;
+        if (status === 401 || status === 429) return false;
         throw error;
       })
       .finally(() => {

@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import { prisma } from '../lib/prisma.js';
 import { sendLowStockAlert, sendAbandonedCartEmail } from '../services/email.service.js';
 import { revalidateFrontend } from '../lib/revalidate.js';
-import { cancelOrderAndReleaseStock } from '../controllers/webhook.controller.js';
+import { cancelPendingOrder, isPastForceCancelAge, pendingOrderTtlMs } from '../services/pending-order.service.js';
 import { outboxEnabled } from '../lib/outbox.js';
 import { distributedJobsEnabled } from './jobLease.js';
 import { startLeasedJobs, runBoundedLowStock, runBoundedAbandonedCarts } from './leasedScheduler.js';
@@ -111,18 +111,19 @@ export function startLowStockAlertJob() {
 }
 
 // --- Job 4: Cancel stale unpaid orders ---
-// Runs hourly. Cancels orders stuck in PENDING for more than 24h — a failed or
-// abandoned checkout. This is the real cancellation path now that the payment
-// webhooks no longer cancel on a single failed attempt (#16), since the same
-// PaymentIntent / PayHere order can be retried.
+// Runs every 10 minutes. Cancels orders stuck in PENDING for longer than the
+// pending-order TTL (pending-order.service.ts, default 60 minutes) — a failed
+// or abandoned checkout. This is the real cancellation path now that the
+// payment webhooks no longer cancel on a single failed attempt (#16), since
+// the same PaymentIntent / PayHere order can be retried.
 //
-// Goes through cancelOrderAndReleaseStock (one order at a time, not a bulk
+// Goes through cancelPendingOrder (one order at a time, not a bulk
 // updateMany) because each stale order reserved real stock at checkout-intent
 // creation (roadmap: stock reservation at checkout) that must be released
-// back — a bulk status flip would silently leak that stock forever. The
-// per-order `status: 'PENDING'` guard inside it is still race-safe against a
-// payment that completes in the gap between this query and the cancel call.
-const STALE_ORDER_HOURS = 24;
+// back — a bulk status flip would silently leak that stock forever — and its
+// Stripe PaymentIntent must be closed first so it can't be paid afterwards.
+// The per-order `status: 'PENDING'` guard inside the cancel is still race-safe
+// against a payment that completes in the gap between this query and the call.
 // Caps how many stale orders one hourly run will process (perf audit #7):
 // each is its own transaction on its own pooled connection, so an unbounded
 // backlog (e.g. after an outage) could otherwise open hundreds of
@@ -132,20 +133,25 @@ const STALE_ORDER_HOURS = 24;
 const STALE_ORDER_BATCH_LIMIT = 200;
 
 export function startStaleOrderCancellationJob() {
-    cron.schedule('0 * * * *', async () => {
+    cron.schedule('*/10 * * * *', async () => {
         try {
-            const cutoff = new Date(Date.now() - STALE_ORDER_HOURS * 60 * 60 * 1000);
+            const cutoff = new Date(Date.now() - pendingOrderTtlMs());
             const stale = await prisma.order.findMany({
                 where: { status: 'PENDING', createdAt: { lt: cutoff } },
-                select: { id: true },
+                select: { id: true, paymentIntentId: true, createdAt: true },
+                orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
                 take: STALE_ORDER_BATCH_LIMIT,
             });
 
+            let cancelled = 0;
             for (const o of stale) {
-                await cancelOrderAndReleaseStock(o.id, `Cancelled — stale PENDING order older than ${STALE_ORDER_HOURS}h.`);
+                const done = await cancelPendingOrder(o, 'Cancelled — unpaid order past its reservation window.', {
+                    force: isPastForceCancelAge(o.createdAt),
+                });
+                if (done) cancelled++;
             }
 
-            if (stale.length > 0) console.log(`🛒 Cancelled ${stale.length} stale unpaid order(s)`);
+            if (cancelled > 0) console.log(`🛒 Cancelled ${cancelled} stale unpaid order(s)`);
         } catch (err) {
             console.error('[CRON] Stale order cancellation job failed:', err);
         }

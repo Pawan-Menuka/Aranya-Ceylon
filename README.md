@@ -60,7 +60,8 @@ pnpm --filter @aranya/backend run seed:catalog
 | `COOKIE_SECRET` | Secret for the signed `x-market` cookie |
 | `FRONTEND_URL` | Allowed CORS origin(s), comma-separated; also used in payment redirects |
 | `API_URL` | Public API base URL (used in PayHere `notify_url`) |
-| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe (international market) |
+| `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe (international market). All three are required when `PAYMENTS_MODE=live` |
+| `PENDING_ORDER_TTL_MINUTES` | How long an unpaid order keeps its stock reserved (default 60) |
 | `PAYHERE_MERCHANT_ID`, `PAYHERE_MERCHANT_SECRET`, `PAYHERE_MODE` | PayHere (local market) |
 | `RESEND_API_KEY`, `EMAIL_FROM` | Transactional email |
 | `LOW_STOCK_THRESHOLD` | Low-stock alert threshold (default 10) |

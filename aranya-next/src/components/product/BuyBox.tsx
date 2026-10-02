@@ -8,7 +8,7 @@ import { Stars } from "../primitives/Stars";
 import { Badge } from "../primitives/Badge";
 import { pdContent, pdPrice } from "@/lib/pd-content";
 import { useCart } from "../CartContext";
-import { resolveVariant } from "@/lib/cart";
+import { resolveVariant, CONFIG, fmt } from "@/lib/cart";
 import { addToWishlist, removeFromWishlist, getWishlist } from "@/lib/api/wishlist";
 import { getAccessToken } from "@/lib/api/http";
 
@@ -131,6 +131,7 @@ export function BuyBox({ spice, market, product }: { spice: Spice; market: Marke
     setTimeout(() => setAdded(false), 1400);
   };
   const isLocal = market === "local";
+  const freeShipThreshold = CONFIG[market].freeShip;
   const accent = isLocal ? "var(--brand)" : "var(--accent)";
   // P6-8: derive available weights from the backend product variants when possible
   const wantCurrency = isLocal ? "LKR" : "USD";
@@ -203,7 +204,8 @@ export function BuyBox({ spice, market, product }: { spice: Spice; market: Marke
       <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 18, paddingTop: 18, borderTop: "1px solid var(--line)" }}>
         {[
           ["Ships in 24 hours", isLocal ? "Island-wide courier, 1–3 days" : "Tracked & insured worldwide"],
-          [isLocal ? "Free over Rs 5,000" : "Free shipping over $60", "Sealed at peak aroma"],
+          // Only promised while the store actually offers free shipping (lib/cart.ts CONFIG).
+          ...(freeShipThreshold === null ? [] : [[isLocal ? `Free over ${fmt(freeShipThreshold, "local")}` : `Free shipping over $${freeShipThreshold}`, "Sealed at peak aroma"]]),
           ["GI Protected origin", "Verified single-estate harvest"],
         ].map((t) => (
           <div key={t[0]} style={{ display: "flex", alignItems: "center", gap: 11 }}>

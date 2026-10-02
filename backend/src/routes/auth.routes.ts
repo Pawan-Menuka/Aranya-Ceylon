@@ -3,7 +3,7 @@ import { register, login, refresh, logout, logoutAll, getMe, patchMe, verifyEmai
 import { requireAuth } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { validate } from '../middleware/validate.js';
-import { authLimiter, loginLimiter } from '../middleware/rateLimit.js';
+import { authLimiter, loginLimiter, refreshLimiter } from '../middleware/rateLimit.js';
 import { registerSchema, loginSchema, patchMeSchema, createAddressSchema, updateAddressSchema, forgotPasswordSchema, resetPasswordSchema } from '@aranya/shared';
 
 const router = Router();
@@ -18,7 +18,7 @@ router.post('/login', loginLimiter, validate(loginSchema), asyncHandler(login));
 // Neutral (anti-enumeration), same reasoning as resend-verification.
 router.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), asyncHandler(forgotPassword));
 router.post('/reset-password', authLimiter, validate(resetPasswordSchema), asyncHandler(resetPassword));
-router.post('/refresh', authLimiter, asyncHandler(refresh));
+router.post('/refresh', refreshLimiter, asyncHandler(refresh));
 // Logout needs no access token — possession of the refresh cookie is the proof
 router.post('/logout', authLimiter, asyncHandler(logout));
 router.post('/logout-all', asyncHandler(requireAuth), asyncHandler(logoutAll));

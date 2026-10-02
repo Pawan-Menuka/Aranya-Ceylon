@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
 import { constructWebhookEvent } from '../services/stripe.service.js';
 import { verifyPayHereNotification } from '../services/payhere.service.js';
-import { sendOrderConfirmation, sendNewOrderAdminNotification } from '../services/email.service.js';
+import { sendOrderConfirmation, sendNewOrderAdminNotification, sendPaymentForClosedOrderAlert } from '../services/email.service.js';
+import type { OrderStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { outboxEnabled } from '../lib/outbox.js';
 import { enqueueEmail } from '../services/email.service.js';
@@ -193,11 +194,56 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
     }
 }
 
+// ── A verified payment landed on an order that is no longer open ────
+// confirmOrderPaid only acts on PENDING orders, so a payment for an order
+// that was already cancelled (stale sweep, superseded checkout, PayHere
+// cancel, admin) or refunded used to be acked and dropped: the customer was
+// charged, the stock was back on sale, and nobody was told. Cancelling a
+// Stripe order now closes its PaymentIntent first (pending-order.service.ts),
+// but PayHere has no cancel API and a race is always possible — so the money
+// is recorded on the order's timeline and the merchant is alerted to refund
+// or reinstate it. Reported once per order: gateways retry deliveries.
+const CLOSED_ORDER_PAYMENT_NOTE = 'Payment received after the order was closed';
+const CLOSED_ORDER_STATUSES = ['CANCELLED', 'REFUNDED'];
+
+async function reportPaymentForClosedOrder(
+    order: { id: string; status: string; total: unknown; currency: string },
+    paymentRef: string,
+    gateway: string,
+) {
+    const reported = await prisma.orderEvent.findFirst({
+        where: { orderId: order.id, note: { startsWith: CLOSED_ORDER_PAYMENT_NOTE } },
+        select: { id: true },
+    });
+    if (reported) return;
+
+    await prisma.orderEvent.create({
+        data: {
+            orderId: order.id,
+            status: order.status as OrderStatus,
+            note: `${CLOSED_ORDER_PAYMENT_NOTE} (${gateway}, ref ${paymentRef}). The customer has been charged — refund or reinstate this order manually.`,
+        },
+    });
+    console.error(`⚠ Order ${order.id} is ${order.status} but a ${gateway} payment was received. Needs manual review.`);
+
+    await sendPaymentForClosedOrderAlert({
+        orderId: order.id,
+        status: order.status,
+        total: Number(order.total),
+        currency: order.currency,
+        gateway,
+        paymentRef,
+    }).catch((err) =>
+        console.error(`✉ Closed-order payment alert failed for ${order.id}:`, err),
+    );
+}
+
 // ── Cancel a PENDING order and release its reserved stock ───────────
 // Stock for a regular line item is reserved (decremented) at checkout-intent
 // creation, not at payment time — see checkout.controller.ts. If the order
-// never gets paid (explicit gateway cancellation, or the stale-order cron
-// sweep after 24h), that reservation must be released back to real stock,
+// never gets paid (explicit gateway cancellation, a newer checkout attempt
+// for the same basket, or the stale-order cron sweep — callers go through
+// pending-order.service.ts), that reservation must be released back to real stock,
 // or it's gone forever. Idempotent and concurrency-safe the same way
 // confirmOrderPaid is: the PENDING→CANCELLED flip is a conditional
 // updateMany, so calling this twice (or racing a late successful payment)
@@ -293,6 +339,10 @@ export async function stripeWebhook(req: Request, res: Response) {
                 pi.amount_received !== expectedAmount ||
                 pi.currency?.toUpperCase() !== order.currency) {
                 return res.status(400).json({ error: 'Payment does not match the recorded order' });
+            }
+            if (CLOSED_ORDER_STATUSES.includes(order.status)) {
+                await reportPaymentForClosedOrder(order, pi.id, 'Stripe');
+                break;
             }
             await confirmOrderPaid(order.id, pi.id, 'Stripe');
             break;
@@ -410,6 +460,11 @@ export async function payHereWebhook(req: Request, res: Response) {
                 expectedCurrency: order.currency, receivedCurrency: payhere_currency,
             });
             return res.status(400).send('Amount mismatch');
+        }
+
+        if (CLOSED_ORDER_STATUSES.includes(order.status)) {
+            await reportPaymentForClosedOrder(order, payment_id, 'PayHere');
+            return res.send('OK');
         }
 
         await confirmOrderPaid(order_id, payment_id, 'PayHere');
