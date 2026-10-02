@@ -131,6 +131,7 @@ const COUPON_ERROR_MESSAGES: Record<string, string> = {
     COUPON_NOT_FOUND: 'That coupon code is not valid.',
     COUPON_EXPIRED: 'That coupon has expired.',
     COUPON_USAGE_LIMIT_REACHED: 'That coupon has reached its usage limit.',
+    COUPON_WRONG_STORE: 'That coupon can\'t be used in this store.',
 };
 
 export async function applyCoupon(req: Request, res: Response) {
@@ -140,10 +141,10 @@ export async function applyCoupon(req: Request, res: Response) {
     const { code } = applyCouponSchema.parse(req.body);
     const cart = await cartService.findExistingCart(userId, guestToken);
     if (!cart) return res.status(400).json({ error: 'Add an item to your cart before applying a coupon.' });
-    const { subtotalCents } = await cartService.calculateCartTotal(cart.id, req.market!);
+    const { subtotalCents, currency } = await cartService.calculateCartTotal(cart.id, req.market!);
 
     try {
-        const couponResult = await cartService.validateCoupon(code, subtotalCents);
+        const couponResult = await cartService.validateCoupon(code, subtotalCents, currency);
 
         await prisma.cart.update({
             where: { id: cart.id },

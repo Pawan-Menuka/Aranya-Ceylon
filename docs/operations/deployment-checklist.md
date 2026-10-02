@@ -30,7 +30,9 @@ Set every variable from `backend/.env.example`. The app **fails to boot** if a r
 - [ ] `ENABLE_DEV_ROUTES` unset or `false` — boot refuses to start if `true` in production, but don't rely on that; just don't set it.
 - [ ] `PAYMENTS_MODE=live` — **only** once real Stripe + PayHere keys are in place below. Boot refuses `stub` mode in production (would let anyone mark orders PAID for free).
 - [ ] `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` — live-mode keys from the Stripe dashboard. All three are required when `PAYMENTS_MODE=live` (boot fails otherwise); without the publishable key the card form never loads and international checkout cannot be paid.
-- [ ] `PAYHERE_MERCHANT_ID`, `PAYHERE_MERCHANT_SECRET`, `PAYHERE_MODE=live` — from the PayHere merchant portal.
+- [ ] `PAYHERE_MERCHANT_ID`, `PAYHERE_MERCHANT_SECRET`, `PAYHERE_MODE=live` — from the PayHere merchant portal. `PAYHERE_MODE` has no default in live mode: boot fails unless it is `live` or `sandbox`, so a forgotten value can no longer send real customers to the sandbox.
+- [ ] **Stripe webhook events** — subscribe the endpoint to `payment_intent.succeeded`, `payment_intent.payment_failed`, `payment_intent.canceled`, **`charge.refunded`** and **`charge.dispute.created`**. The last two put dashboard refunds and disputes on the order timeline and email `ADMIN_EMAIL`; without them they go unnoticed.
+- [ ] **Coupons** — after `prisma migrate deploy` (adds `Coupon.currency`), give every existing `FIXED_AMOUNT` coupon a currency (`LKR` or `USD`). A fixed coupon with no currency is refused; percentage coupons keep working with none.
 - [ ] `API_URL` — the real public API origin (e.g. `https://api.aranyaceylon.com`). Required when `PAYMENTS_MODE=live`; it builds the PayHere `notify_url` — wrong/unset means PayHere webhooks go nowhere and orders never confirm.
 - [ ] `FRONTEND_URL` — the real storefront origin(s), comma-separated if more than one. This is the CORS allow-list, not cosmetic.
 - [ ] `TRUST_PROXY` / `TRUST_CLOUDFLARE` — see the Cloudflare section below; get this wrong and rate limiting + audit-log IPs key on a proxy's IP instead of the real client.

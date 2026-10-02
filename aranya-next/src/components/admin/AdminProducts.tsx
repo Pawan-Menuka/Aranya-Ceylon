@@ -98,13 +98,19 @@ function draftVariants(p: ProductRow): VariantDraft[] {
   return buildVariants(p).map((v) => ({ ...v, id: "", price: String(v.price) })) as VariantDraft[];
 }
 
-function variantsForApi(variants: VariantDraft[]): NonNullable<AdminProductInput["variants"]> {
+// `loaded` is the variant list as the editor received it. For an existing
+// variant its stock is sent back as `stockBase`, so the API applies the admin's
+// change as a delta (new − loaded) instead of overwriting units that were
+// reserved by orders while the editor was open.
+function variantsForApi(variants: VariantDraft[], loaded: VariantDraft[] = []): NonNullable<AdminProductInput["variants"]> {
+  const loadedStock = new Map(loaded.filter((v) => v.id).map((v) => [v.id, Number(v.stock)]));
   return variants.map((v) => ({
     ...(v.id ? { id: v.id } : {}),
     sku: v.sku.trim(),
     weight: Number(v.weight),
     price: Number(v.price),
     stock: Number(v.stock),
+    ...(v.id && loadedStock.has(v.id) ? { stockBase: loadedStock.get(v.id) } : {}),
     market: v.market,
     currency: v.currency,
   }));
@@ -431,7 +437,7 @@ export function AdminProducts() {
     const slug = p.slug || toSlug(p.name);
     const desc = extra.description || p.latin || "Premium Ceylon spice.";
     const catId = extra.categoryId || categories[0]?.id || "";
-    const variants = variantsForApi(extra.variants);
+    const variants = variantsForApi(extra.variants, (p as ProductRow)._variants);
     setMessage(null);
     try {
       if (backendId) {

@@ -28,9 +28,24 @@ function toCents(value: Prisma.Decimal | number | string): number {
     return Math.round(Number(value) * 100);
 }
 
+// Whether a coupon may be used for an order in this currency. A coupon tied
+// to a currency only works there. One with no currency works anywhere — but
+// only as a PERCENTAGE: a fixed amount without a currency has no defined
+// value, and used to be applied as that many units of whatever currency the
+// cart was in (Rs 500 off locally, $500 off abroad).
+export function couponAppliesToCurrency(
+    coupon: Pick<Coupon, 'discountType'> & { currency?: Coupon['currency'] },
+    currency: string,
+): boolean {
+    const couponCurrency = coupon.currency ?? null;
+    if (couponCurrency !== null) return couponCurrency === currency;
+    return coupon.discountType === 'PERCENTAGE';
+}
+
 // Pure discount calculation (no DB). Throws if the coupon can't be applied.
 // subtotalCents in, discount in cents out (clamped so it can't exceed subtotal).
-function couponDiscountCents(coupon: Coupon, subtotalCents: number): number {
+function couponDiscountCents(coupon: Coupon, subtotalCents: number, currency: string): number {
+    if (!couponAppliesToCurrency(coupon, currency)) throw new Error('COUPON_WRONG_STORE');
     if (coupon.expiresAt && coupon.expiresAt < new Date()) throw new Error('COUPON_EXPIRED');
     if (coupon.usageLimit !== null && coupon.usageCount >= coupon.usageLimit) {
         throw new Error('COUPON_USAGE_LIMIT_REACHED');
@@ -310,10 +325,10 @@ export async function calculateTotalsForLines(
         const coupon = await prisma.coupon.findUnique({ where: { id: cart.couponId } });
         if (coupon) {
             try {
-                discountCents = couponDiscountCents(coupon, subtotalCents);
+                discountCents = couponDiscountCents(coupon, subtotalCents, currency);
                 appliedCouponId = coupon.id;
             } catch {
-                // Coupon expired / limit reached since it was applied — drop it.
+                // Coupon expired / limit reached / not valid in this store — drop it.
             }
         }
     }
@@ -345,11 +360,11 @@ export async function calculateTotalsForLines(
 
 // --- Validate a coupon code against a subtotal (in cents) ---
 // Used by the apply-coupon endpoint. Throws COUPON_* on invalid codes.
-export async function validateCoupon(code: string, subtotalCents: number) {
+export async function validateCoupon(code: string, subtotalCents: number, currency: string) {
     const coupon = await prisma.coupon.findUnique({ where: { code } });
     if (!coupon) throw new Error('COUPON_NOT_FOUND');
 
-    const discountCents = couponDiscountCents(coupon, subtotalCents);
+    const discountCents = couponDiscountCents(coupon, subtotalCents, currency);
 
     return {
         couponId: coupon.id,

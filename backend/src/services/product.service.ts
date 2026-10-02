@@ -243,6 +243,14 @@ export async function createProduct(data: CreateProductInput, tx: Prisma.Transac
     return enrichProductWithRatingAvg(product);
 }
 
+// Thrown by updateProduct when an admin lowers a variant's stock by more than
+// is still unreserved — orders took units while the editor was open.
+export class StockConflictError extends Error {
+    constructor(public sku: string) {
+        super('STOCK_CHANGED');
+    }
+}
+
 // --- Update product (admin only) ---
 // Updates product fields and, when `variants` is supplied, reconciles them by
 // id within a transaction: rows with an `id` are updated, rows without are
@@ -301,7 +309,23 @@ export async function updateProduct(id: string, data: UpdateProductInput, tx?: P
                     currency: v.currency,
                 };
                 if (v.id && existingIds.has(v.id)) {
-                    await tx.variant.update({ where: { id: v.id }, data: fieldsForVariant });
+                    if (v.stockBase === undefined) {
+                        // Caller did not say what stock it started from: absolute write.
+                        await tx.variant.update({ where: { id: v.id }, data: fieldsForVariant });
+                        continue;
+                    }
+                    // Apply the admin's change as a delta against live stock.
+                    // Writing the form's absolute value would erase every unit
+                    // reserved by an order since the editor was opened — any
+                    // product edit, even a description fix, could oversell.
+                    const { stock, ...otherFields } = fieldsForVariant;
+                    const delta = stock - v.stockBase;
+                    const changed = await tx.variant.updateMany({
+                        // A reduction must still fit what is actually left.
+                        where: { id: v.id, ...(delta < 0 && { stock: { gte: -delta } }) },
+                        data: { ...otherFields, ...(delta !== 0 && { stock: { increment: delta } }) },
+                    });
+                    if (changed.count === 0) throw new StockConflictError(v.sku);
                 } else {
                     await tx.variant.create({ data: { productId: id, ...fieldsForVariant } });
                 }

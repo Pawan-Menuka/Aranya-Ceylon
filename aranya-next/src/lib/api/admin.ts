@@ -102,6 +102,8 @@ export interface AdminProductInput {
     currency: string;
     market: string;
     stock?: number;
+    // Stock as loaded into the editor; the API then applies stock − stockBase.
+    stockBase?: number;
   }>;
 }
 

@@ -3,8 +3,8 @@ import { prisma } from '../lib/prisma.js';
 import { Currency } from '@prisma/client';
 import { createPaymentIntent } from '../services/stripe.service.js';
 import { buildPayHerePayload, PAYHERE_CHECKOUT_URL } from '../services/payhere.service.js';
-import { calculateTotalsForLines } from '../services/cart.service.js';
-import { supersedePendingOrders } from '../services/pending-order.service.js';
+import { calculateTotalsForLines, couponAppliesToCurrency } from '../services/cart.service.js';
+import { supersedePendingOrders, cancelPendingOrder } from '../services/pending-order.service.js';
 import { confirmOrderPaid } from './webhook.controller.js';
 import { checkoutSchema } from '@aranya/shared';
 
@@ -136,6 +136,9 @@ export async function createIntent(req: Request, res: Response) {
         }
         if (coupon.usageLimit !== null && coupon.usageCount >= coupon.usageLimit) {
             return res.status(400).json({ error: 'That coupon has reached its usage limit.' });
+        }
+        if (!couponAppliesToCurrency(coupon, expectedCurrency)) {
+            return res.status(400).json({ error: 'That coupon can\'t be used in this store.' });
         }
         await prisma.cart.update({ where: { id: cart.id }, data: { couponId: coupon.id } });
         checkoutCouponId = coupon.id;
@@ -276,18 +279,25 @@ export async function createIntent(req: Request, res: Response) {
         throw err;
     }
 
-    // Save address to the authenticated user's address book if requested
+    // Save address to the authenticated user's address book if requested.
+    // Best-effort: the order (and its stock reservation) is already committed,
+    // so a failed convenience write must not turn the checkout into a 500 the
+    // shopper would retry into a second order.
     if (saveAddress && userId) {
-        await prisma.address.create({
-            data: {
-                userId,
-                line1: shippingAddress.line1,
-                line2: shippingAddress.line2,
-                city: shippingAddress.city,
-                country: shippingAddress.country,
-                postalCode: shippingAddress.postalCode ?? '',
-            },
-        });
+        try {
+            await prisma.address.create({
+                data: {
+                    userId,
+                    line1: shippingAddress.line1,
+                    line2: shippingAddress.line2,
+                    city: shippingAddress.city,
+                    country: shippingAddress.country,
+                    postalCode: shippingAddress.postalCode ?? '',
+                },
+            });
+        } catch {
+            console.warn('[checkout] Could not save the shipping address to the address book.');
+        }
     }
 
     // Stub payment mode: skip real gateways during development
@@ -328,16 +338,35 @@ export async function createIntent(req: Request, res: Response) {
     }
 
     // INTERNATIONAL — Stripe PaymentIntent
-    const paymentIntent = await createPaymentIntent(
-        totalInCents,
-        currency,
-        { orderId: order.id, userId: userId ?? 'guest', market },
-    );
+    let paymentIntent;
+    try {
+        paymentIntent = await createPaymentIntent(
+            totalInCents,
+            currency,
+            { orderId: order.id, userId: userId ?? 'guest', market },
+        );
 
-    await prisma.order.update({
-        where: { id: order.id },
-        data: { paymentIntentId: paymentIntent.id },
-    });
+        await prisma.order.update({
+            where: { id: order.id },
+            data: { paymentIntentId: paymentIntent.id },
+        });
+    } catch (err) {
+        // The order exists but can never be paid: without an intent the
+        // shopper has nothing to pay against, and an intent we failed to
+        // record would be rejected by the webhook. Release the reservation
+        // now instead of holding stock until the sweep. A created-but-
+        // unrecorded intent is closed too, so it can't be paid into a void.
+        console.error(`[checkout] Stripe payment setup failed for order ${order.id}:`, err);
+        await cancelPendingOrder(
+            { id: order.id, paymentIntentId: paymentIntent?.id ?? null },
+            'Cancelled — payment could not be set up with Stripe.',
+            { force: true },
+        ).catch((releaseErr) => console.error(`[checkout] Could not release order ${order.id}:`, releaseErr));
+        return res.status(502).json({
+            error: 'We could not reach our payment provider. Your basket is unchanged — please try again in a moment.',
+            code: 'PAYMENT_SETUP_FAILED',
+        });
+    }
 
     return res.json({
         provider: 'stripe',

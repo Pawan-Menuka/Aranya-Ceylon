@@ -150,12 +150,13 @@ vi.mock('../services/email.service.js', () => ({
     sendOrderConfirmation: vi.fn().mockResolvedValue(undefined),
     sendNewOrderAdminNotification: vi.fn().mockResolvedValue(undefined),
     sendPaymentForClosedOrderAlert: vi.fn().mockResolvedValue(undefined),
+    sendGatewayReversalAlert: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { confirmOrderPaid, cancelOrderAndReleaseStock, stripeWebhook, payHereWebhook } from './webhook.controller.js';
 import { constructWebhookEvent } from '../services/stripe.service.js';
 import { verifyPayHereNotification } from '../services/payhere.service.js';
-import { sendOrderConfirmation, sendNewOrderAdminNotification, sendPaymentForClosedOrderAlert } from '../services/email.service.js';
+import { sendOrderConfirmation, sendNewOrderAdminNotification, sendPaymentForClosedOrderAlert, sendGatewayReversalAlert } from '../services/email.service.js';
 
 const { s } = store;
 
@@ -704,5 +705,91 @@ describe('payment received for a closed order', () => {
         stripeSucceeded();
         await stripeWebhook(stripeRequest(), mockRes());
         expect(sendPaymentForClosedOrderAlert).not.toHaveBeenCalled();
+    });
+});
+
+// Final audit #14: refunds, disputes and chargebacks raised at the gateway
+// used to be ignored entirely. They are recorded and escalated, never applied
+// automatically.
+describe('gateway-side refunds, disputes and chargebacks', () => {
+    const refunded = (fields: Record<string, unknown> = {}) => {
+        vi.mocked(constructWebhookEvent).mockReturnValue(stripeEvent({
+            id: 'evt_refund', type: 'charge.refunded',
+            data: { object: { id: 'ch_1', payment_intent: 'pi_123', amount: 250000, amount_refunded: 250000, currency: 'lkr', ...fields } },
+        }));
+    };
+
+    it('records a dashboard refund on a paid order and alerts the merchant without changing it', async () => {
+        s.orders[0]!.status = 'PAID';
+        const stockBefore = s.variants.find((v) => v.id === 'var_a')!.stock;
+        refunded();
+        const res = mockRes();
+        await stripeWebhook(stripeRequest(), res);
+
+        expect(res.statusCode).toBe(200);
+        expect(s.orders[0]!.status).toBe('PAID'); // reconciled by a person, not here
+        expect(s.variants.find((v) => v.id === 'var_a')!.stock).toBe(stockBefore);
+        expect(s.events).toHaveLength(1);
+        expect(s.events[0]!.note).toMatch(/refund \(Stripe, ref ch_1\): refunded in full/);
+        expect(sendGatewayReversalAlert).toHaveBeenCalledWith(expect.objectContaining({
+            orderId: 'order_1', kind: 'refund', gateway: 'Stripe', reference: 'ch_1',
+        }));
+    });
+
+    it('describes a partial refund as partial', async () => {
+        s.orders[0]!.status = 'SHIPPED';
+        refunded({ amount_refunded: 50000 });
+        await stripeWebhook(stripeRequest(), mockRes());
+        expect(s.events[0]!.note).toMatch(/partially refunded \(500\.00 LKR\)/);
+    });
+
+    it('stays quiet when the refund was started from the admin console', async () => {
+        s.orders[0]!.status = 'REFUNDED';
+        refunded();
+        await stripeWebhook(stripeRequest(), mockRes());
+        expect(s.events).toHaveLength(0);
+        expect(sendGatewayReversalAlert).not.toHaveBeenCalled();
+    });
+
+    it('reports each refund only once across redeliveries', async () => {
+        s.orders[0]!.status = 'PAID';
+        refunded();
+        await stripeWebhook(stripeRequest(), mockRes());
+        await stripeWebhook(stripeRequest(), mockRes());
+        expect(s.events).toHaveLength(1);
+        expect(sendGatewayReversalAlert).toHaveBeenCalledTimes(1);
+    });
+
+    it('escalates a Stripe dispute', async () => {
+        s.orders[0]!.status = 'DELIVERED';
+        vi.mocked(constructWebhookEvent).mockReturnValue(stripeEvent({
+            id: 'evt_dispute', type: 'charge.dispute.created',
+            data: { object: { id: 'dp_1', payment_intent: { id: 'pi_123' }, amount: 250000, currency: 'lkr', reason: 'fraudulent' } },
+        }));
+        await stripeWebhook(stripeRequest(), mockRes());
+
+        expect(s.orders[0]!.status).toBe('DELIVERED');
+        expect(sendGatewayReversalAlert).toHaveBeenCalledWith(expect.objectContaining({ kind: 'dispute', reference: 'dp_1' }));
+        expect(s.events[0]!.note).toMatch(/fraudulent/);
+    });
+
+    it('ignores a refund for a payment that belongs to no order', async () => {
+        refunded({ payment_intent: 'pi_someone_else' });
+        const res = mockRes();
+        await stripeWebhook(stripeRequest(), res);
+        expect(res.statusCode).toBe(200);
+        expect(sendGatewayReversalAlert).not.toHaveBeenCalled();
+    });
+
+    it('escalates a PayHere chargeback and still answers OK', async () => {
+        s.orders[0]!.status = 'PAID';
+        const res = mockRes();
+        await payHereWebhook(payHereReq({ status_code: '-3' }), res);
+
+        expect(res.body).toBe('OK');
+        expect(s.orders[0]!.status).toBe('PAID');
+        expect(sendGatewayReversalAlert).toHaveBeenCalledWith(expect.objectContaining({
+            kind: 'chargeback', gateway: 'PayHere', reference: 'ph_pay_1',
+        }));
     });
 });

@@ -267,6 +267,38 @@ export async function sendPaymentForClosedOrderAlert(params: {
     }, 'PAYMENT_FOR_CLOSED_ORDER');
 }
 
+// --- Admin alert: refund, dispute or chargeback raised at the gateway ---
+// Money moved back outside the admin console (webhook.controller.ts
+// reportGatewayReversal). The order's status and stock were NOT changed.
+export async function sendGatewayReversalAlert(params: {
+    orderId: string;
+    status: string;
+    total: number;
+    currency: string;
+    gateway: string;
+    kind: 'refund' | 'dispute' | 'chargeback';
+    reference: string;
+    detail: string;
+}) {
+    const { orderId, status, total, currency, gateway, kind, reference, detail } = params;
+    const currencySymbol = currency === 'LKR' ? 'LKR ' : '$';
+    const frontend = (process.env.FRONTEND_URL ?? 'http://localhost:3000').split(',')[0]!.trim();
+    const shortId = orderId.slice(-8).toUpperCase();
+
+    await sendMail({
+        from: FROM,
+        to: process.env.ADMIN_EMAIL ?? FROM,
+        subject: `Action needed: ${gateway} ${kind} on order #${shortId}`,
+        html: `
+            <h2>${escapeHtml(gateway)} ${escapeHtml(kind)} on order #${shortId}</h2>
+            <p>${escapeHtml(gateway)} reports that ${escapeHtml(detail)}.</p>
+            <p>Order total: <strong>${currencySymbol}${total.toFixed(2)}</strong> · current status: <strong>${escapeHtml(status)}</strong> · gateway reference: <strong>${escapeHtml(reference)}</strong></p>
+            <p>The order's status and stock have <strong>not</strong> been changed. Review it and reconcile manually.</p>
+            <p><a href="${frontend}/admin#orders">Open the admin console</a></p>
+        `,
+    }, 'GATEWAY_REVERSAL');
+}
+
 // --- Shipping notification ---
 export async function sendShippingNotification(params: {
     to: string;

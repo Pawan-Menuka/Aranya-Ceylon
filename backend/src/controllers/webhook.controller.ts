@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { constructWebhookEvent } from '../services/stripe.service.js';
 import { verifyPayHereNotification } from '../services/payhere.service.js';
-import { sendOrderConfirmation, sendNewOrderAdminNotification, sendPaymentForClosedOrderAlert } from '../services/email.service.js';
+import { sendOrderConfirmation, sendNewOrderAdminNotification, sendPaymentForClosedOrderAlert, sendGatewayReversalAlert } from '../services/email.service.js';
 import type { OrderStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { outboxEnabled } from '../lib/outbox.js';
@@ -238,6 +238,67 @@ async function reportPaymentForClosedOrder(
     );
 }
 
+// ── Money was taken back at the gateway, outside the admin console ──
+// A refund issued from the Stripe dashboard, a dispute, or a PayHere
+// chargeback used to be ignored: the order stayed PAID/SHIPPED, its stock was
+// never returned, and nobody knew. These are not resolved automatically — a
+// dispute can be won, a refund can be partial, the goods may already have
+// shipped — so the event is put on the order's timeline and the merchant is
+// alerted to reconcile it. Reported once per gateway reference.
+type ReversalKind = 'refund' | 'dispute' | 'chargeback';
+const REVERSAL_NOTE = 'Gateway reported a';
+
+async function reportGatewayReversal(
+    order: { id: string; status: string; total: unknown; currency: string } | null,
+    reversal: { gateway: string; kind: ReversalKind; reference: string; detail: string },
+) {
+    if (!order) return; // unrelated to any order we know
+    // A refund the admin console started is already recorded as REFUNDED and
+    // restocked by refundOrder — Stripe confirming it is not news.
+    if (reversal.kind === 'refund' && order.status === 'REFUNDED') return;
+
+    const marker = `${REVERSAL_NOTE} ${reversal.kind} (${reversal.gateway}, ref ${reversal.reference})`;
+    const reported = await prisma.orderEvent.findFirst({
+        where: { orderId: order.id, note: { startsWith: marker } },
+        select: { id: true },
+    });
+    if (reported) return;
+
+    await prisma.orderEvent.create({
+        data: {
+            orderId: order.id,
+            status: order.status as OrderStatus,
+            note: `${marker}: ${reversal.detail}. The order is still ${order.status} and its stock has not been returned — reconcile it manually.`,
+        },
+    });
+    console.error(`⚠ Order ${order.id}: ${reversal.gateway} ${reversal.kind} (${reversal.reference}). Needs manual review.`);
+
+    await sendGatewayReversalAlert({
+        orderId: order.id,
+        status: order.status,
+        total: Number(order.total),
+        currency: order.currency,
+        ...reversal,
+    }).catch((err) =>
+        console.error(`✉ Gateway ${reversal.kind} alert failed for ${order.id}:`, err),
+    );
+}
+
+// Stripe reports the intent either as an id or as an expanded object.
+function intentId(value: string | { id: string } | null | undefined): string | null {
+    if (!value) return null;
+    return typeof value === 'string' ? value : value.id;
+}
+
+// Smallest-unit amount → "25.00 USD", tolerant of a sparse event payload.
+function stripeMoney(amount: number | null | undefined, currency: string | null | undefined): string {
+    return `${((amount ?? 0) / 100).toFixed(2)} ${(currency ?? '').toUpperCase()}`.trim();
+}
+
+async function orderForIntent(paymentIntentId: string | null) {
+    return paymentIntentId ? prisma.order.findUnique({ where: { paymentIntentId } }) : null;
+}
+
 // ── Cancel a PENDING order and release its reserved stock ───────────
 // Stock for a regular line item is reserved (decremented) at checkout-intent
 // creation, not at payment time — see checkout.controller.ts. If the order
@@ -381,6 +442,27 @@ export async function stripeWebhook(req: Request, res: Response) {
             }
             break;
         }
+        case 'charge.refunded': {
+            const charge = event.data.object;
+            const order = await orderForIntent(intentId(charge.payment_intent));
+            if (!order) break; // a charge unrelated to any order here
+            const full = charge.amount_refunded >= charge.amount;
+            await reportGatewayReversal(order, {
+                gateway: 'Stripe', kind: 'refund', reference: charge.id,
+                detail: `${full ? 'refunded in full' : 'partially refunded'} (${stripeMoney(charge.amount_refunded, charge.currency)})`,
+            });
+            break;
+        }
+        case 'charge.dispute.created': {
+            const dispute = event.data.object;
+            const order = await orderForIntent(intentId(dispute.payment_intent));
+            if (!order) break;
+            await reportGatewayReversal(order, {
+                gateway: 'Stripe', kind: 'dispute', reference: dispute.id,
+                detail: `the customer's bank opened a dispute (${dispute.reason ?? 'no reason given'}) for ${stripeMoney(dispute.amount, dispute.currency)} — respond in the Stripe dashboard before its deadline`,
+            });
+            break;
+        }
         default:
             break;
     }
@@ -489,6 +571,14 @@ export async function payHereWebhook(req: Request, res: Response) {
             });
         }
         console.log(`⚠ PayHere payment failed for order ${order_id} — left PENDING for retry`);
+    } else if (status_code === '-3') {
+        // Chargeback: the customer's bank reversed a payment we already
+        // confirmed. Never reverse the order automatically — flag it.
+        const order = await prisma.order.findUnique({ where: { id: order_id } });
+        await reportGatewayReversal(order, {
+            gateway: 'PayHere', kind: 'chargeback', reference: String(payment_id ?? order_id),
+            detail: `the payment of ${payhere_amount} ${payhere_currency} was charged back`,
+        });
     }
 
     // PayHere REQUIRES plain text "OK" — not JSON
