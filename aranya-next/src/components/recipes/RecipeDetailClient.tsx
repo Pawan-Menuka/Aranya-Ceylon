@@ -138,7 +138,7 @@ function SpiceRow({ p, market, accentBtn }: { p: CatalogSpice; market: "intl" | 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 13, background: "#fff", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px" }}>
       <div style={{ width: 46, height: 46, borderRadius: 8, flex: "0 0 auto", overflow: "hidden", boxShadow: "inset 0 0 0 1px rgba(0,0,0,.05)" }}>
-        <SpicePhoto spice={p} ratio="1 / 1" label={false} />
+        <SpicePhoto spice={p} ratio="1 / 1" label={false} sizes="(max-width: 720px) calc(100vw - 80px), 260px" />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="disp" style={{ fontSize: 17, color: "var(--ink)", lineHeight: 1.12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
@@ -191,7 +191,7 @@ function RelatedRecipes({ related }: { related: Recipe[] }) {
           {related.map((r) => (
             <Link key={r.slug} href={"/recipes/" + r.slug} style={{ textDecoration: "none" }}>
               <div style={{ position: "relative", borderRadius: 9, overflow: "hidden", aspectRatio: "3 / 2" }}>
-                <ImageSlot id={r.slot} shape="rect" fit="cover" placeholder={`Drop a photo of ${r.title}`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
+                <ImageSlot id={r.slot} shape="rect" fit="cover" sizes="(max-width: 860px) calc(100vw - 80px), 360px" placeholder={`Drop a photo of ${r.title}`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
                 <div style={{ position: "absolute", inset: 0, background: `linear-gradient(155deg, ${r.accent}33, ${r.accent}aa)`, mixBlendMode: "multiply", pointerEvents: "none" }} />
               </div>
               <div style={{ fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: r.accent, margin: "16px 0 8px" }}>{r.course}</div>
@@ -208,7 +208,7 @@ export function RecipeDetailClient({ recipe, related, shopSpices }: { recipe: Re
   return (
     <div data-screen-label="Recipe detail">
       <header data-hero style={{ position: "relative", minHeight: "74vh", background: "#161412", color: "#FDFAF5", overflow: "hidden", display: "flex", alignItems: "flex-end" }}>
-        <ImageSlot id={recipe.slot} shape="rect" fit="cover" placeholder={`Drop the hero photo of ${recipe.title}`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
+        <ImageSlot id={recipe.slot} shape="rect" fit="cover" priority sizes="100vw" placeholder={`Drop the hero photo of ${recipe.title}`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
         <div style={{ position: "absolute", inset: 0, background: `linear-gradient(150deg, ${recipe.accent}40, rgba(11,16,13,.62))`, mixBlendMode: "multiply", pointerEvents: "none" }} />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(10,8,6,.5) 0%, transparent 30%, transparent 46%, rgba(10,8,6,.86) 100%)", pointerEvents: "none" }} />
         <div style={{ position: "relative", maxWidth: 880, margin: "0 auto", padding: "0 40px 70px", width: "100%", textAlign: "center" }}>

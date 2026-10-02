@@ -221,7 +221,7 @@ function ContactVisit() {
         </div>
         <Reveal delay={90}>
           <div style={{ position: "relative", borderRadius: 16, overflow: "hidden", aspectRatio: "4 / 3", boxShadow: "var(--shadow-lg)", border: "1px solid var(--line)" }}>
-            <ImageSlot id="contact-map" shape="rect" fit="cover" placeholder="Drop a map screenshot or storefront photo of the Kandy spice house" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
+            <ImageSlot id="contact-map" shape="rect" fit="cover" sizes="(max-width: 880px) calc(100vw - 80px), 530px" placeholder="Drop a map screenshot or storefront photo of the Kandy spice house" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
             <div style={{ position: "absolute", left: "50%", top: "44%", transform: "translate(-50%,-100%)", pointerEvents: "none", filter: "drop-shadow(0 6px 10px rgba(0,0,0,.3))" }}>
               <div style={{ width: 40, height: 40, borderRadius: "50% 50% 50% 0", transform: "rotate(-45deg)", background: "var(--accent)", display: "grid", placeItems: "center", border: "2px solid #fff" }}>
                 <span style={{ transform: "rotate(45deg)", display: "grid", placeItems: "center" }}><SIcon name="leaf" size={18} stroke="#fff" w={2} /></span>

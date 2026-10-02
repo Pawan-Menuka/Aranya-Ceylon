@@ -54,6 +54,33 @@ export interface Product {
   createdAt: string;
 }
 
+/** Public catalog cards omit detail text and review bodies. */
+export type ProductCard = Omit<Product, "description" | "status" | "reviews">;
+
+export interface ProductCardPage extends Paginated<ProductCard> {
+  total: number;
+  facets: FacetVocab;
+  featured: ProductCard[];
+  market: BackendMarket;
+}
+
+export interface CategorySummary {
+  groups: { name: string; count: number; spices: ProductCard[] }[];
+  facets: { flavour: { name: string; count: number; sample: ProductCard | null }[] };
+}
+
+export interface CatalogPage extends Omit<ProductCardPage, "items" | "featured"> {
+  items: CatalogSpice[];
+  featured: CatalogSpice[];
+  demo?: boolean;
+}
+
+export interface CatalogCategoryGroup {
+  name: string;
+  count: number;
+  spices: CatalogSpice[];
+}
+
 export interface Category {
   id: string;
   name: string;

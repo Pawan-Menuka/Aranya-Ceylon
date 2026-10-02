@@ -158,7 +158,7 @@ function OrderRow({ order, market, onOpen, onReorder }: { order: AccountOrder; m
         <div style={{ display: "flex", flex: "0 0 auto" }}>
           {order.items.slice(0, 3).map((it, i) => (
             <div key={it.key} style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", border: "2px solid #FFFDF9", marginLeft: i ? -12 : 0, boxShadow: "inset 0 0 0 1px rgba(0,0,0,.06)" }}>
-              <SpicePhoto spice={it} ratio="1 / 1" label={false} />
+              <SpicePhoto spice={it} ratio="1 / 1" label={false} sizes="40px" />
             </div>
           ))}
         </div>

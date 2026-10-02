@@ -2,16 +2,21 @@
 
 import * as React from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { Seal } from "../primitives/Seal";
 import { SpicePhoto } from "../primitives/SpicePhoto";
 import { useCart } from "../CartContext";
 import { useMarket } from "../MarketContext";
 import { useAuth } from "../AuthContext";
-import { loadStripe } from "@stripe/stripe-js";
-import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { createIntent, pollOrderPaid, type CheckoutInput, type PayHereIntent, type StripeIntent, type StubIntent } from "@/lib/api/checkout";
 import { getCartTotals, type ServerTotals } from "@/lib/api/cart";
 import type { Market } from "@/lib/types";
+
+const StripePaymentForm = dynamic(
+  () => import("./StripePaymentForm").then((m) => m.StripePaymentForm),
+  { ssr: false },
+);
 
 // Checkout page: guest-first single-page form.
 // On submit:
@@ -158,7 +163,7 @@ function OrderSummary({ serverTotals }: { serverTotals: ServerTotals | null }) {
         {items.map((it) => (
           <div key={it.id} style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <div style={{ position: "relative", flex: "0 0 auto" }}>
-              <div style={{ width: 52, height: 52, borderRadius: 7, overflow: "hidden", boxShadow: "inset 0 0 0 1px rgba(0,0,0,.06)" }}><SpicePhoto spice={it} ratio="1 / 1" label={false} /></div>
+              <div style={{ width: 52, height: 52, borderRadius: 7, overflow: "hidden", boxShadow: "inset 0 0 0 1px rgba(0,0,0,.06)" }}><SpicePhoto spice={it} ratio="1 / 1" label={false} sizes="52px" /></div>
               <span style={{ position: "absolute", top: -7, right: -7, minWidth: 19, height: 19, padding: "0 5px", background: "var(--brand)", color: "#fff", borderRadius: 999, fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 700, display: "grid", placeItems: "center" }}>{it.qty}</span>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -274,53 +279,6 @@ const INTL_COUNTRIES = [
 // but replaces the left column with a payment review + card form.
 // ---------------------------------------------------------------------------
 
-function StripePayForm({
-  orderId,
-  totalLabel,
-  onPaid,
-  onError,
-}: {
-  orderId: string;
-  totalLabel: string;
-  onPaid: () => void;
-  onError: (msg: string) => void;
-}) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [paying, setPaying] = React.useState(false);
-
-  const handlePay = async () => {
-    if (!stripe || !elements || paying) return;
-    setPaying(true);
-    const { error } = await stripe.confirmPayment({
-      elements,
-      redirect: "if_required",
-    });
-    if (error) {
-      onError(error.message ?? "Payment failed. Please try again.");
-      setPaying(false);
-    } else {
-      await pollOrderPaid(orderId).catch(() => false);
-      onPaid();
-    }
-  };
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <PaymentElement options={{ layout: "tabs" }} />
-      <button
-        type="button"
-        className="btn btn-intl"
-        onClick={handlePay}
-        disabled={!stripe || paying}
-        style={{ opacity: !stripe || paying ? 0.72 : 1 }}
-      >
-        {paying ? "Processing payment…" : `Pay now — ${totalLabel}`}
-      </button>
-    </div>
-  );
-}
-
 function StripePaymentScreen({
   intent,
   totalLabel,
@@ -341,10 +299,6 @@ function StripePaymentScreen({
   serverTotals: ServerTotals | null;
 }) {
   const [stripeError, setStripeError] = React.useState("");
-  const stripePromise = React.useMemo(
-    () => intent.publishableKey ? loadStripe(intent.publishableKey) : null,
-    [intent.publishableKey],
-  );
   return (
     <div className="aranya" style={{ minHeight: "100vh", background: "var(--bg)" }}>
       <CheckoutHeader market={market} onMarket={onMarket} />
@@ -369,28 +323,13 @@ function StripePaymentScreen({
 
             {/* Stripe card form */}
             <Section n="4" title="Card details" sub="Your payment is handled directly by Stripe — we never see your card number.">
-              <Elements
-                stripe={stripePromise}
-                options={{
-                  clientSecret: intent.clientSecret,
-                  appearance: {
-                    theme: "stripe",
-                    variables: {
-                      colorPrimary: "#0F6E56",
-                      colorText: "#1A1A1A",
-                      borderRadius: "8px",
-                      fontFamily: "var(--font-ui), system-ui, sans-serif",
-                    },
-                  },
-                }}
-              >
-                <StripePayForm
-                  orderId={intent.orderId}
-                  totalLabel={totalLabel}
-                  onPaid={onPaid}
-                  onError={setStripeError}
-                />
-              </Elements>
+              <StripePaymentForm
+                key={intent.orderId}
+                intent={intent}
+                totalLabel={totalLabel}
+                onPaid={onPaid}
+                onError={setStripeError}
+              />
               {stripeError && (
                 <div style={{ marginTop: 14, background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "11px 14px", fontFamily: "var(--font-ui)", fontSize: 13.5, color: "#b91c1c" }}>
                   {stripeError}
@@ -424,8 +363,16 @@ function StubPaymentScreen({
   onPaid: () => void;
 }) {
   const [confirming, setConfirming] = React.useState(false);
+  const router = useRouter();
+  const work = React.useRef<AbortController | null>(null);
+  React.useEffect(() => {
+    return () => { work.current?.abort(); work.current = null; };
+  }, [intent.orderId]);
 
   const handleConfirm = async () => {
+    if (work.current) return;
+    const controller = new AbortController();
+    work.current = controller;
     setConfirming(true);
     // Hit the stub-complete endpoint to flip the order to PAID
     try {
@@ -434,10 +381,14 @@ function StubPaymentScreen({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orderId: intent.orderId }),
         credentials: "include",
+        signal: controller.signal,
       });
     } catch { /* non-fatal */ }
-    await pollOrderPaid(intent.orderId).catch(() => false);
-    onPaid();
+    if (controller.signal.aborted) return;
+    const paid = await pollOrderPaid(intent.orderId, 12, 1500, { signal: controller.signal });
+    if (controller.signal.aborted) return;
+    if (paid) onPaid();
+    else router.replace(`/checkout/success?orderId=${encodeURIComponent(intent.orderId)}`);
   };
 
   return (
@@ -621,6 +572,7 @@ export function CheckoutClient() {
   if (stripeIntent) {
     return (
       <StripePaymentScreen
+        key={stripeIntent.orderId}
         intent={stripeIntent}
         totalLabel={totalLabel}
         contactSummary={[email, phone].filter(Boolean).join(" · ")}
@@ -637,6 +589,7 @@ export function CheckoutClient() {
   if (stubIntent) {
     return (
       <StubPaymentScreen
+        key={stubIntent.orderId}
         intent={stubIntent}
         totalLabel={totalLabel}
         market={market}

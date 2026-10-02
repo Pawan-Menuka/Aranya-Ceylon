@@ -6,12 +6,14 @@ import type { Post, PostBlock } from "@/lib/journal-data";
 import { Reveal } from "../primitives/Reveal";
 import { Liyawel, Eyebrow } from "../primitives/Motif";
 import { ImageSlot } from "../primitives/ImageSlot";
+import type { SanitizedHtml } from "@/lib/sanitized-html";
+export type ArticleBlock = PostBlock & { html?: SanitizedHtml };
 
 // Article / single post (ported from article.jsx). Dark editorial hero +
 // prose body + author + related. Body blocks come from the post's `body`
 // (or a fallback supplied by the server).
 
-function ArticleBody({ post, blocks }: { post: Post; blocks: PostBlock[] }) {
+function ArticleBody({ post, blocks }: { post: Post; blocks: ArticleBlock[] }) {
   return (
     <div>
       {blocks.map((b, i) => {
@@ -25,16 +27,13 @@ function ArticleBody({ post, blocks }: { post: Post; blocks: PostBlock[] }) {
         if (b.t === "img") return (
           <Reveal key={i} as="figure" style={{ margin: "40px 0" }}>
             <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", aspectRatio: "16 / 9", boxShadow: "var(--shadow-md)" }}>
-              <ImageSlot id={b.id || post.slot + "-body-" + i} shape="rect" fit="cover" placeholder="Drop a supporting photo" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
+              <ImageSlot id={b.id || post.slot + "-body-" + i} shape="rect" fit="cover" sizes="(max-width: 720px) calc(100vw - 80px), 640px" placeholder="Drop a supporting photo" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
               <div style={{ position: "absolute", inset: 0, background: `linear-gradient(155deg, ${post.accent}22, ${post.accent}66)`, mixBlendMode: "multiply", pointerEvents: "none" }} />
             </div>
             {b.cap && <figcaption style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--muted)", marginTop: 12, textAlign: "center", fontStyle: "italic" }}>{b.cap}</figcaption>}
           </Reveal>
         );
-        // b.text is sanitised server-side in journal/[slug]/page.tsx before
-        // this ever reaches the client tree — see ForestStory's comment in
-        // components/product/Sections.tsx for why.
-        return <Reveal key={i} as="p" className="prose" style={{ fontSize: 18.5, color: "var(--ink)", margin: "0 0 22px" }} dangerouslySetInnerHTML={{ __html: b.text || "" }} />;
+        return <Reveal key={i} as="p" className="prose" style={{ fontSize: 18.5, color: "var(--ink)", margin: "0 0 22px" }} dangerouslySetInnerHTML={{ __html: b.html || "" }} />;
       })}
     </div>
   );
@@ -54,7 +53,7 @@ function AuthorBlock({ post }: { post: Post }) {
   );
 }
 
-function RelatedPosts({ related }: { related: Post[] }) {
+export function RelatedPosts({ related }: { related: Post[] }) {
   if (!related.length) return null;
   return (
     <section style={{ background: "var(--surface)", padding: "84px 0" }}>
@@ -65,7 +64,7 @@ function RelatedPosts({ related }: { related: Post[] }) {
           {related.map((p) => (
             <Link key={p.slug} href={"/journal/" + p.slug} style={{ textDecoration: "none" }}>
               <div style={{ position: "relative", borderRadius: 9, overflow: "hidden", aspectRatio: "3 / 2" }}>
-                <ImageSlot id={p.slot} shape="rect" fit="cover" placeholder={`Drop a ${p.category.toLowerCase()} photo`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
+                <ImageSlot id={p.slot} shape="rect" fit="cover" sizes="(max-width: 860px) calc(100vw - 80px), 360px" placeholder={`Drop a ${p.category.toLowerCase()} photo`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
                 <div style={{ position: "absolute", inset: 0, background: `linear-gradient(155deg, ${p.accent}33, ${p.accent}aa)`, mixBlendMode: "multiply", pointerEvents: "none" }} />
               </div>
               <div style={{ fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: p.accent, margin: "16px 0 8px" }}>{p.category}</div>
@@ -92,12 +91,12 @@ function shareArticle(network: "instagram" | "facebook" | "pinterest", url: stri
   }
 }
 
-export function ArticleClient({ post, blocks, related }: { post: Post; blocks: PostBlock[]; related: Post[] }) {
+export function ArticleClient({ post, blocks, related }: { post: Post; blocks: ArticleBlock[]; related: React.ReactNode }) {
   const [copied, setCopied] = React.useState(false);
   return (
     <div data-screen-label="Article">
       <header data-hero style={{ position: "relative", minHeight: "78vh", background: "#161412", color: "#FDFAF5", overflow: "hidden", display: "flex", alignItems: "flex-end" }}>
-        <ImageSlot id={post.slot} shape="rect" fit="cover" placeholder={`Drop the ${post.category.toLowerCase()} hero photo`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
+        <ImageSlot id={post.slot} shape="rect" fit="cover" priority sizes="100vw" placeholder={`Drop the ${post.category.toLowerCase()} hero photo`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
         <div style={{ position: "absolute", inset: 0, background: `linear-gradient(150deg, ${post.accent}40, rgba(11,16,13,.6))`, mixBlendMode: "multiply", pointerEvents: "none" }} />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(10,8,6,.5) 0%, transparent 32%, transparent 46%, rgba(10,8,6,.84) 100%)", pointerEvents: "none" }} />
         <div style={{ position: "relative", maxWidth: 880, margin: "0 auto", padding: "0 40px 72px", width: "100%", textAlign: "center" }}>
@@ -131,7 +130,7 @@ export function ArticleClient({ post, blocks, related }: { post: Post; blocks: P
         </div>
       </article>
 
-      <RelatedPosts related={related} />
+      {related}
     </div>
   );
 }

@@ -25,13 +25,16 @@ type AuditEvent =
     | 'COUPON_DEACTIVATE'
     | 'WHOLESALE_APPROVE'
     | 'WHOLESALE_REJECT'
-    | 'ADMIN_LOGIN';
+    | 'ADMIN_LOGIN'
+    | 'EMAIL_SEND_FAILED';
 
 // Creates an immutable audit record.
 // The DB-level REVOKE DELETE ensures these records can never be
 // deleted even if this function or the API is compromised.
 export async function writeAuditLog(params: {
-    req: Request;
+    // Absent for events with no HTTP request in scope (e.g. a cron job's
+    // best-effort email send) — ip/userAgent fall back to 'system' then.
+    req?: Request;
     // Authentication events occur before req.user is populated, so callers may
     // explicitly identify the actor after credentials have been verified.
     actorId?: string;
@@ -46,15 +49,15 @@ export async function writeAuditLog(params: {
 
     await prisma.auditLog.create({
         data: {
-            actorId: actorId ?? req.user?.userId ?? null,
+            actorId: actorId ?? req?.user?.userId ?? null,
             event,
             targetType,
             targetId,
             // Snapshot fields may contain Dates or Prisma Decimals, which the
             // client serializes when writing the JSON column.
             diff: diff as Prisma.InputJsonObject | undefined,
-            ip: getClientIp(req),
-            userAgent: req.headers['user-agent'] ?? 'unknown',
+            ip: req ? getClientIp(req) : 'system',
+            userAgent: req ? (req.headers['user-agent'] ?? 'unknown') : 'system',
         },
     });
 }

@@ -3,12 +3,13 @@ import { Cormorant_Garamond, Plus_Jakarta_Sans, Spectral } from "next/font/googl
 import "./globals.css";
 import { resolveMarket } from "@/lib/market";
 import { CommerceProvider } from "@/components/CommerceProvider";
+import PerformanceTelemetry from "@/components/performance/PerformanceTelemetry";
 
 // Three locked brand roles (spec §3). next/font self-hosts the files and
 // exposes each as a CSS variable consumed by globals.css.
 const cormorant = Cormorant_Garamond({
   subsets: ["latin"],
-  weight: ["500", "600", "700"],
+  weight: ["500", "600"],
   style: ["normal", "italic"],
   variable: "--font-cormorant",
   display: "swap",
@@ -21,7 +22,7 @@ const jakarta = Plus_Jakarta_Sans({
 });
 const spectral = Spectral({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600"],
+  weight: ["400", "500", "600"],
   style: ["normal", "italic"],
   variable: "--font-spectral",
   display: "swap",
@@ -51,6 +52,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${cormorant.variable} ${jakarta.variable} ${spectral.variable}`}>
       <body className="aranya">
+        <PerformanceTelemetry />
+        <noscript><style>{`[data-scroll-reveal] { opacity: 1 !important; transform: none !important; }`}</style></noscript>
         <CommerceProvider initialMarket={market}>
           {children}
         </CommerceProvider>

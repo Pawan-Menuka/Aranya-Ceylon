@@ -89,5 +89,9 @@ test("insufficient stock preserves the cart and lets the shopper retry", async (
   await expect.poll(async () => {
     const value = await page.evaluate((key) => localStorage.getItem(key), CART_KEY);
     return value ? JSON.parse(value) : null;
-  }).toEqual([cartItem]);
+  }).toEqual([expect.objectContaining({
+    id: cartItem.id, name: cartItem.name, qty: cartItem.qty,
+    productId: cartItem.productId, variantId: cartItem.variantId,
+    backendItemId: cartItem.backendItemId, unitUsd: cartItem.unitUsd,
+  })]);
 });

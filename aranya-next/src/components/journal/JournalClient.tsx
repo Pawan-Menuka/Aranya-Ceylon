@@ -13,10 +13,10 @@ import { ImageSlot } from "../primitives/ImageSlot";
 // Journal index (ported from journal.jsx). Featured spotlight + category chips +
 // 3-up grid. Cards link to /journal/[slug].
 
-function PostImage({ post, ratio = "3 / 2", radius = 9 }: { post: Post; ratio?: string; radius?: number }) {
+function PostImage({ post, ratio = "3 / 2", radius = 9, featured = false }: { post: Post; ratio?: string; radius?: number; featured?: boolean }) {
   return (
     <div style={{ position: "relative", borderRadius: radius, overflow: "hidden", aspectRatio: ratio }}>
-      <ImageSlot id={post.slot} shape="rect" fit="cover" placeholder={`Drop a ${post.category.toLowerCase()} photo`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
+      <ImageSlot id={post.slot} shape="rect" fit="cover" priority={featured} sizes={featured ? "(max-width: 860px) calc(100vw - 80px), (max-width: 1280px) calc(55vw - 50px), 644px" : "(max-width: 600px) calc(100vw - 80px), (max-width: 860px) calc(50vw - 55px), (max-width: 1280px) calc(33vw - 53px), 374px"} placeholder={`Drop a ${post.category.toLowerCase()} photo`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
       <div style={{ position: "absolute", inset: 0, background: `linear-gradient(155deg, ${post.accent}33, ${post.accent}aa)`, mixBlendMode: "multiply", pointerEvents: "none" }} />
     </div>
   );
@@ -46,7 +46,7 @@ function FeaturedPost({ post }: { post: Post }) {
         <Reveal>
           <Link href={"/journal/" + post.slug} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} className="jf-grid" style={{ textDecoration: "none" }}>
             <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", aspectRatio: "16 / 11", boxShadow: h ? "var(--shadow-lg)" : "var(--shadow-md)", transition: "box-shadow .3s" }}>
-              <PostImage post={post} ratio="16 / 11" radius={12} />
+              <PostImage post={post} ratio="16 / 11" radius={12} featured />
               <span style={{ position: "absolute", top: 18, left: 18, background: "rgba(253,250,245,.94)", borderRadius: 999, padding: "7px 14px" }}>
                 <CatTag accent={post.accent}>Featured · {post.category}</CatTag>
               </span>

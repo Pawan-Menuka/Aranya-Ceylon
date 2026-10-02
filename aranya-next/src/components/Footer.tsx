@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
+import { IntentLink as Link } from "./IntentLink";
 import { Seal } from "./primitives/Seal";
 import { Liyawel } from "./primitives/Motif";
 import { useMarket } from "./MarketContext";

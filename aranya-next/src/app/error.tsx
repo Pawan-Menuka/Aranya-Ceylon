@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { SiteChrome } from "@/components/SiteChrome";
 import { Reveal } from "@/components/primitives/Reveal";
 import { Liyawel } from "@/components/primitives/Motif";
@@ -30,6 +31,9 @@ export default function Error({
   reset: () => void;
 }) {
   const { market } = useMarket();
+  const pathname = usePathname();
+  const router = useRouter();
+  const retry = () => React.startTransition(() => { router.refresh(); reset(); });
   const btn = market === "local" ? "btn btn-local" : "btn btn-intl";
 
   React.useEffect(() => {
@@ -38,9 +42,9 @@ export default function Error({
     console.error("[error boundary]", error);
   }, [error]);
 
-  return (
-    <SiteChrome>
+  const content = (
       <main
+        role="alert" data-route-error
         data-screen-label="error"
         style={{
           flex: 1,
@@ -91,7 +95,7 @@ export default function Error({
 
           <Reveal delay={220}>
             <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 30, flexWrap: "wrap" }}>
-              <button type="button" className={btn} style={{ width: "auto", padding: "12px 26px" }} onClick={() => reset()}>
+              <button type="button" className={btn} style={{ width: "auto", padding: "12px 26px" }} onClick={retry}>
                 Try again
               </button>
               <Link
@@ -142,6 +146,6 @@ export default function Error({
           )}
         </div>
       </main>
-    </SiteChrome>
   );
+  return pathname.startsWith("/admin") || pathname.startsWith("/checkout") ? content : <SiteChrome>{content}</SiteChrome>;
 }

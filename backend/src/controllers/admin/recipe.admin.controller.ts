@@ -1,7 +1,6 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../../lib/prisma.js';
-import { writeAuditLog } from '../../services/audit.service.js';
-import { revalidateFrontend } from '../../lib/revalidate.js';
+import { auditPublicMutation } from '../../lib/audit-public-mutation.js';
 import { z } from 'zod';
 
 const ingredientGroupSchema = z.object({
@@ -61,16 +60,10 @@ export async function createRecipe(req: Request, res: Response) {
         throw err;
     }
 
-    await writeAuditLog({
+    await auditPublicMutation({
         req, event: 'RECIPE_CREATE',
         targetType: 'Recipe', targetId: recipe.id,
-    });
-
-    // P3-4: revalidate when a recipe is published immediately on create
-    if (data.status === 'PUBLISHED') {
-        await revalidateFrontend(`/recipes/${recipe.slug}`);
-        await revalidateFrontend('/recipes');
-    }
+    }, data.status === 'PUBLISHED' ? ['/recipes', '/search', `/recipes/${recipe.slug}`] : []);
 
     res.status(201).json({ recipe });
 }
@@ -93,14 +86,11 @@ export async function updateRecipe(req: Request, res: Response) {
     }
 
     // P3-3: audit log for updates (was missing)
-    await writeAuditLog({
+    await auditPublicMutation({
         req, event: 'RECIPE_UPDATE',
         targetType: 'Recipe', targetId: id,
         diff: { before: existing, after: recipe },
-    });
-
-    await revalidateFrontend(`/recipes/${recipe.slug}`);
-    await revalidateFrontend('/recipes');
+    }, ['/recipes', '/search', `/recipes/${existing.slug}`, `/recipes/${recipe.slug}`]);
 
     res.json({ recipe });
 }
@@ -113,14 +103,10 @@ export async function deleteRecipe(req: Request, res: Response) {
 
     await prisma.recipe.delete({ where: { id } });
 
-    await writeAuditLog({
+    await auditPublicMutation({
         req, event: 'RECIPE_DELETE',
         targetType: 'Recipe', targetId: id,
-    });
-
-    // P3-4: revalidate on delete
-    await revalidateFrontend(`/recipes/${existing.slug}`);
-    await revalidateFrontend('/recipes');
+    }, ['/recipes', '/search', `/recipes/${existing.slug}`]);
 
     res.json({ ok: true });
 }

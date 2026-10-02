@@ -34,3 +34,13 @@ and design references live here so the application code remains easy to find.
 
 - [Phased implementation plan](PHASED_IMPLEMENTATION_PLAN.md) — repository quality roadmap.
 - [Phase 0 baseline](PHASE_0_BASELINE.md) — baseline recorded before implementation.
+
+## Performance verification
+
+- [Performance implementation plan](performance/PERFORMANCE_IMPLEMENTATION_PLAN.md) — performance phases and remaining acceptance gates.
+- [Performance audit](performance/PERFORMANCE_AUDIT_REPORT.md) — original findings and evidence.
+
+- [Performance checks](../scripts/performance/README.md) — fixture smoke and regression commands.
+- [Phase 8 results](performance/PHASE_8_RESULTS.md) — local performance and release-check evidence.
+- [Search repair verification](performance/PHASE_8_SEARCH_REPAIR.md) — disposable PostgreSQL migration replay and search checks.
+- [Release runbook](performance/RELEASE_RUNBOOK.md) — staging and deployment gates.

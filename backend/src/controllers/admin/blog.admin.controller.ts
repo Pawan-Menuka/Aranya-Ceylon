@@ -1,7 +1,6 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../../lib/prisma.js';
-import { writeAuditLog } from '../../services/audit.service.js';
-import { revalidateFrontend } from '../../lib/revalidate.js';
+import { auditPublicMutation } from '../../lib/audit-public-mutation.js';
 import { z } from 'zod';
 
 const blogFields = z.object({
@@ -76,17 +75,11 @@ export async function createBlog(req: Request, res: Response) {
     }
 
     // P3-6: use BLOG_PUBLISH only when actually publishing; drafts/scheduled get BLOG_CREATE
-    await writeAuditLog({
+    await auditPublicMutation({
         req,
         event: data.status === 'PUBLISHED' ? 'BLOG_PUBLISH' : 'BLOG_CREATE',
         targetType: 'Blog', targetId: blog.id,
-    });
-
-    // P3-4: revalidate listing + detail when a post goes live immediately
-    if (data.status === 'PUBLISHED') {
-        await revalidateFrontend(`/journal/${blog.slug}`);
-        await revalidateFrontend('/journal');
-    }
+    }, data.status === 'PUBLISHED' ? ['/', '/journal', '/search', `/journal/${blog.slug}`] : []);
 
     return res.status(201).json({ blog });
 }
@@ -129,7 +122,7 @@ export async function updateBlog(req: Request, res: Response) {
         field,
         { before: auditValue(beforeRecord[field]), after: auditValue(afterRecord[field]) },
     ]));
-    await writeAuditLog({
+    await auditPublicMutation({
         req,
         event: data.status === 'PUBLISHED' && !before.publishedAt ? 'BLOG_PUBLISH' : 'BLOG_UPDATE',
         targetType: 'Blog', targetId: id,
@@ -139,10 +132,7 @@ export async function updateBlog(req: Request, res: Response) {
                 ? { contentChanged: true }
                 : {}),
         },
-    });
-
-    await revalidateFrontend(`/journal/${blog.slug}`);
-    await revalidateFrontend('/journal');
+    }, ['/', '/journal', '/search', `/journal/${before.slug}`, `/journal/${blog.slug}`]);
 
     return res.json({ blog });
 }
@@ -155,14 +145,10 @@ export async function deleteBlog(req: Request, res: Response) {
 
     await prisma.blog.delete({ where: { id } });
 
-    await writeAuditLog({
+    await auditPublicMutation({
         req, event: 'BLOG_DELETE',
         targetType: 'Blog', targetId: id,
-    });
-
-    // P3-4: revalidate on delete so the listing and detail no longer serve the post
-    await revalidateFrontend(`/journal/${blog.slug}`);
-    await revalidateFrontend('/journal');
+    }, ['/', '/journal', '/search', `/journal/${blog.slug}`]);
 
     return res.json({ message: 'Blog deleted' });
 }

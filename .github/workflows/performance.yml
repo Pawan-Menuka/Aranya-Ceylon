@@ -1,0 +1,127 @@
+name: Performance smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'aranya-next/**'
+      - 'scripts/performance/**'
+      - 'backend/src/lib/revalidate*'
+      - 'backend/src/controllers/cart.controller*'
+      - 'backend/src/services/cart.service*'
+      - 'backend/src/routes/cart.routes.ts'
+      - 'backend/src/services/catalog*'
+      - 'backend/src/services/analytics-query*'
+      - 'backend/src/services/blog.service*'
+      - 'backend/src/controllers/admin/analytics.admin.controller*'
+      - 'backend/src/jobs/**'
+      - 'backend/src/middleware/browserCors*'
+      - 'backend/src/middleware/requestMetrics*'
+      - 'backend/src/middleware/bffClientIdentity*'
+      - 'backend/src/lib/clientIp*'
+      - 'backend/src/lib/listenHost*'
+      - 'backend/src/services/email.service*'
+      - 'backend/src/controllers/order.controller*'
+      - 'backend/src/index.ts'
+      - 'backend/src/services/product.service*'
+      - 'backend/src/controllers/product.controller*'
+      - 'backend/src/controllers/category.controller*'
+      - 'backend/src/controllers/catalog.controller*'
+      - 'backend/prisma/migrations/**'
+      - 'shared/**'
+      - 'package.json'
+      - 'backend/package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/performance.yml'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PERF_NODE_MODULES: ${{ runner.temp }}/perf-runtime/node_modules
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install project dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate backend client and compile shared contracts
+        env:
+          DATABASE_URL: postgresql://fixture:fixture@localhost:5432/fixture
+        run: |
+          (cd backend && node node_modules/prisma/build/index.js generate)
+          node backend/node_modules/typescript/bin/tsc --project shared/tsconfig.json
+      - name: Install isolated browser tooling
+        run: |
+          npm install --prefix "$RUNNER_TEMP/perf-runtime" --no-package-lock --no-save playwright@1.62.1
+          node "$PERF_NODE_MODULES/playwright/cli.js" install chromium --with-deps
+      - name: Request, BFF, hero, media, cache and commerce regressions
+        run: node backend/node_modules/vitest/vitest.mjs run --config scripts/performance/vitest.config.ts
+      - name: Production browser smoke against public fixtures
+        run: node scripts/performance/run.mjs --smoke
+      - name: Controlled timeout and retry browser checks
+        if: ${{ !cancelled() && hashFiles('aranya-next/.performance-build/baseline-source.json') != '' }}
+        run: node scripts/performance/phase-one-browser.mjs
+      - name: Hero scheduling, scroll and lifecycle browser checks
+        if: ${{ !cancelled() && hashFiles('aranya-next/.performance-build/baseline-source.json') != '' }}
+        run: node scripts/performance/phase-two-browser.mjs
+      - name: Initial HTML photography, responsive sizes and media cache checks
+        if: ${{ !cancelled() && hashFiles('aranya-next/.performance-build/baseline-source.json') != '' }}
+        run: node scripts/performance/phase-three-browser.mjs
+      - name: Market cache isolation, invalidation and primary content streaming
+        if: ${{ !cancelled() && hashFiles('aranya-next/.performance-build/baseline-source.json') != '' }}
+        run: node scripts/performance/phase-four-browser.mjs
+      - name: Startup, persistent shell, deferred commerce and payment lifecycle
+        if: ${{ !cancelled() && hashFiles('aranya-next/.performance-build/baseline-source.json') != '' }}
+        run: node scripts/performance/phase-five-browser.mjs
+      - name: Progressive catalog, global facets and cursor recovery
+        if: ${{ !cancelled() && hashFiles('aranya-next/.performance-build/baseline-source.json') != '' }}
+        run: node scripts/performance/phase-six-browser.mjs
+      - name: Catalog SQL and compact service regressions
+        working-directory: backend
+        run: node node_modules/vitest/vitest.mjs run --exclude "**/*.integration.test.ts" src/services/catalog-query.test.ts src/services/catalog.service.test.ts src/controllers/catalog.controller.test.ts
+      - name: Content, complete search, recipe mapping and font scope
+        if: ${{ !cancelled() && hashFiles('aranya-next/.performance-build/baseline-source.json') != '' }}
+        run: node scripts/performance/phase-seven-browser.mjs
+      - name: Production CORS and opt-in telemetry integration
+        if: ${{ !cancelled() && hashFiles('aranya-next/.performance-build/baseline-source.json') != '' }}
+        run: node scripts/performance/phase-eight-browser.mjs
+      - name: Analytics and scheduler ownership regressions
+        working-directory: backend
+        run: node node_modules/vitest/vitest.mjs run --exclude "**/*.integration.test.ts" src/controllers/admin/analytics.admin.controller.test.ts src/jobs
+      - name: Production CORS, signed BFF identity, guest-order projection and API metrics
+        working-directory: backend
+        run: node node_modules/vitest/vitest.mjs run --exclude "**/*.integration.test.ts" src/middleware/browserCors.test.ts src/middleware/bffClientIdentity.test.ts src/lib/clientIp.test.ts src/lib/listenHost.test.ts src/services/email.service.test.ts src/middleware/requestMetrics.test.ts src/controllers/order.controller.test.ts
+      - name: Install disposable PostgreSQL tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql
+          pg_bin="$(dirname "$(find /usr/lib/postgresql -type f -name initdb | sort -V | tail -n 1)")"
+          printf 'PG_BIN=%s\n' "$pg_bin" >> "$GITHUB_ENV"
+      - name: Search repair on an owned disposable PostgreSQL cluster
+        run: node scripts/performance/phase-eight-search-migration.mjs
+      - name: Upload measurements and screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: performance-smoke
+          path: |
+            artifacts/performance/smoke/
+            artifacts/performance/phase-one-checks/
+            artifacts/performance/phase-two-checks/
+            artifacts/performance/phase-three-checks/
+            artifacts/performance/phase-four-checks/
+            artifacts/performance/phase-five-checks/
+            artifacts/performance/phase-six-checks/
+            artifacts/performance/phase-seven-checks/
+            artifacts/performance/phase-eight-checks/
+            artifacts/performance/phase-eight-search-repair/
+            !artifacts/performance/phase-eight-search-repair/**/data/**
+          retention-days: 14

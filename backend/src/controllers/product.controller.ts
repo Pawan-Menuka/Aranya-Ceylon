@@ -1,16 +1,24 @@
 import type { Request, Response } from 'express';
-import { productFilterSchema, createProductSchema, updateProductSchema } from '@aranya/shared';
+import { productFilterSchema, catalogFilterSchema, productNameLookupSchema, createProductSchema, updateProductSchema } from '@aranya/shared';
 import * as productService from '../services/product.service.js';
+import { listProductCards, getPopularProductCards, lookupProductCards } from '../services/catalog.service.js';
 import { uploadImage } from '../services/cloudinary.service.js';
 import { prisma } from '../lib/prisma.js';
-import { writeAuditLog } from '../services/audit.service.js';
 import { withCache } from '../lib/simpleCache.js';
+import { auditPublicMutation } from '../lib/audit-public-mutation.js';
+import { revalidateFrontend } from '../lib/revalidate.js';
 
 // Featured/bestseller lists barely move minute to minute and are read on
 // nearly every storefront page load — worth a short cache (perf audit #6).
 // Keyed by market (the only thing that varies these results) so LOCAL and
 // INTERNATIONAL visitors never share a cached response.
 const CATALOG_HIGHLIGHT_CACHE_TTL_MS = 5 * 60_000;
+
+// Product prices, images and visibility also feed home, category counts,
+// search, recipe ingredients and gift contents in both canonical markets.
+function productPaths(...slugs: string[]) {
+    return ['/', '/products', '/categories', '/search', '/recipes', '/gifts', ...slugs.map(slug => `/products/${slug}`)];
+}
 
 // ----------------------------------------------------------------
 // PUBLIC CONTROLLERS
@@ -21,6 +29,13 @@ const CATALOG_HIGHLIGHT_CACHE_TTL_MS = 5 * 60_000;
 
 // --- List products (public) ---
 export async function listProducts(req: Request, res: Response) {
+    if (req.query.view === 'lookup') {
+        const { names } = productNameLookupSchema.parse(req.query);
+        return res.json({ products: await lookupProductCards(names, req.market!), market: req.market });
+    }
+    if (req.query.view === 'cards') {
+        return res.json(await listProductCards(catalogFilterSchema.parse(req.query), req.market!));
+    }
     const filters = productFilterSchema.parse(req.query);
     const products = await productService.listProducts(filters, req.market!);
 
@@ -52,7 +67,7 @@ export async function searchProducts(req: Request, res: Response) {
 
 // --- Featured products (public) ---
 export async function getFeatured(req: Request, res: Response) {
-    const products = await withCache(
+    const products = req.query.view === 'cards' ? await getPopularProductCards(req.market!, true, 4) : await withCache(
         `products:featured:${req.market}`,
         CATALOG_HIGHLIGHT_CACHE_TTL_MS,
         () => productService.getFeaturedProducts(req.market!),
@@ -62,7 +77,7 @@ export async function getFeatured(req: Request, res: Response) {
 
 // --- Bestsellers (public) ---
 export async function getBestsellers(req: Request, res: Response) {
-    const products = await withCache(
+    const products = req.query.view === 'cards' ? await getPopularProductCards(req.market!, false, 8) : await withCache(
         `products:bestsellers:${req.market}`,
         CATALOG_HIGHLIGHT_CACHE_TTL_MS,
         () => productService.getBestsellers(req.market!),
@@ -90,17 +105,18 @@ const SKU_CONFLICT = 'A variant SKU already exists — SKUs must be unique.';
 // --- Create product (admin) ---
 export async function createProduct(req: Request, res: Response) {
     const data = createProductSchema.parse(req.body);
+    let product;
     try {
-        const product = await productService.createProduct(data);
-        await writeAuditLog({
-            req, event: 'PRODUCT_CREATE', targetType: 'Product', targetId: product!.id,
-            diff: { name: product!.name, slug: product!.slug, status: product!.status, variantCount: product!.variants.length },
-        });
-        return res.status(201).json({ product });
+        product = await productService.createProduct(data);
     } catch (err) {
         if (isDuplicateSku(err)) return res.status(409).json({ error: SKU_CONFLICT });
         throw err;
     }
+    await auditPublicMutation({
+        req, event: 'PRODUCT_CREATE', targetType: 'Product', targetId: product!.id,
+        diff: { name: product!.name, slug: product!.slug, status: product!.status, variantCount: product!.variants.length },
+    }, productPaths(product!.slug));
+    return res.status(201).json({ product });
 }
 
 // --- Update product (admin) ---
@@ -112,21 +128,22 @@ export async function updateProduct(req: Request, res: Response) {
         include: { variants: true },
     });
     if (!before) return res.status(404).json({ error: 'Product not found' });
+    let product;
     try {
-        const product = await productService.updateProduct(id, data);
-        const changedFields = Object.keys(data).filter((field) => field !== 'variants');
-        await writeAuditLog({
-            req, event: 'PRODUCT_UPDATE', targetType: 'Product', targetId: id,
-            diff: {
-                changedFields,
-                ...(data.variants ? { variants: { before: before.variants.length, after: product!.variants.length } } : {}),
-            },
-        });
-        return res.json({ product });
+        product = await productService.updateProduct(id, data);
     } catch (err) {
         if (isDuplicateSku(err)) return res.status(409).json({ error: SKU_CONFLICT });
         throw err;
     }
+    const changedFields = Object.keys(data).filter((field) => field !== 'variants');
+    await auditPublicMutation({
+        req, event: 'PRODUCT_UPDATE', targetType: 'Product', targetId: id,
+        diff: {
+            changedFields,
+            ...(data.variants ? { variants: { before: before.variants.length, after: product!.variants.length } } : {}),
+        },
+    }, productPaths(before.slug, product!.slug));
+    return res.json({ product });
 }
 
 // --- Upload product images (admin) ---
@@ -138,14 +155,14 @@ export async function uploadProductImages(req: Request, res: Response) {
         return res.status(400).json({ error: 'No images provided' });
     }
 
-    const product = await prisma.product.findUnique({ where: { id }, select: { id: true, name: true } });
+    const product = await prisma.product.findUnique({ where: { id }, select: { id: true, name: true, slug: true } });
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
     // Compute the next position after any existing images to avoid collisions.
     const existing = await prisma.productImage.aggregate({ where: { productId: id }, _max: { position: true } });
     const basePosition = (existing._max.position ?? -1) + 1;
 
-    const uploads = await Promise.all(
+    const results = await Promise.allSettled(
         files.map((file, index) =>
             uploadImage(file.buffer, 'aranya-ceylon/products').then((result) =>
                 prisma.productImage.create({
@@ -160,10 +177,19 @@ export async function uploadProductImages(req: Request, res: Response) {
         ),
     );
 
-    await writeAuditLog({
+    const uploads = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
+    // Image writes are independent. Wait for every write, then invalidate any
+    // successes even if another upload failed; the original error still wins.
+    const failure = results.find(result => result.status === 'rejected');
+    if (failure?.status === 'rejected') {
+        if (uploads.length) await revalidateFrontend(productPaths(product.slug));
+        throw failure.reason;
+    }
+
+    await auditPublicMutation({
         req, event: 'PRODUCT_UPDATE', targetType: 'Product', targetId: id,
         diff: { imagesUploaded: uploads.length, imageIds: uploads.map((image) => image.id) },
-    });
+    }, productPaths(product.slug));
 
     return res.status(201).json({ images: uploads });
 }
@@ -171,12 +197,12 @@ export async function uploadProductImages(req: Request, res: Response) {
 // --- Archive product (admin) ---
 export async function archiveProduct(req: Request, res: Response) {
     const id = req.params.id!;
-    const before = await prisma.product.findUnique({ where: { id }, select: { name: true, status: true } });
+    const before = await prisma.product.findUnique({ where: { id }, select: { name: true, status: true, slug: true } });
     if (!before) return res.status(404).json({ error: 'Product not found' });
     const product = await productService.archiveProduct(id);
-    await writeAuditLog({
+    await auditPublicMutation({
         req, event: 'PRODUCT_ARCHIVE', targetType: 'Product', targetId: id,
         diff: { name: product.name, status: { before: before.status, after: 'ARCHIVED' } },
-    });
+    }, productPaths(before.slug, product.slug));
     return res.json({ message: 'Product archived' });
 }

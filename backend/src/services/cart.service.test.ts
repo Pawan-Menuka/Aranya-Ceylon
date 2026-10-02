@@ -12,6 +12,7 @@ interface CartRow {
     id: string;
     userId?: string;
     guestToken?: string;
+    updatedAt?: Date;
     abandonedEmailSentAt?: Date | null;
     couponId?: string | null;
     items?: Array<{ productId?: string; variantId?: string; quantity: number; variant?: { id: string; price: number | string } }>;
@@ -249,9 +250,12 @@ describe('getOrCreateCart — clears abandonedEmailSentAt on every touch (roadma
 
 describe('addToCart — #14 the cart is not a reservation', () => {
     it('allows a quantity greater than current live stock (checkout enforces, not the cart)', async () => {
+        s.carts = [{ id: 'cart_1', abandonedEmailSentAt: new Date() }];
         s.variants.set('v1', { id: 'v1', market: 'BOTH', stock: 2 });
         const item = await addToCart('cart_1', { productId: 'p1', variantId: 'v1', quantity: 5 }, 'INTERNATIONAL');
         expect(item.quantity).toBe(5);
+        expect(s.carts[0]!.abandonedEmailSentAt).toBeNull();
+        expect(s.carts[0]!.updatedAt).toBeInstanceOf(Date);
     });
 
     it('still rejects a variant that does not exist for the shopper\'s market', async () => {
@@ -263,9 +267,12 @@ describe('addToCart — #14 the cart is not a reservation', () => {
 
 describe('updateCartItem — #14 the cart is not a reservation', () => {
     it('allows raising quantity above current live stock', async () => {
+        s.carts = [{ id: 'cart_1', abandonedEmailSentAt: new Date() }];
         s.cartItems.push({ id: 'item_1', cartId: 'cart_1', variantId: 'v1', productId: 'p1', quantity: 1 });
         const item = await updateCartItem('cart_1', 'item_1', { quantity: 50 });
         expect(item?.quantity).toBe(50);
+        expect(s.carts[0]!.abandonedEmailSentAt).toBeNull();
+        expect(s.carts[0]!.updatedAt).toBeInstanceOf(Date);
     });
 
     it('still returns null for a foreign/missing item id (unrelated to stock)', async () => {

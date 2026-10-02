@@ -1,0 +1,35 @@
+{
+  "runs": 5,
+  "observationMs": 6000,
+  "navigationObservationMs": 15000,
+  "profiles": {
+    "desktop": {
+      "viewport": { "width": 1440, "height": 900 },
+      "deviceScaleFactor": 1,
+      "isMobile": false,
+      "hasTouch": false,
+      "cpuRate": 1,
+      "latencyMs": 20,
+      "downloadBytesPerSecond": 1250000,
+      "uploadBytesPerSecond": 625000
+    },
+    "mobile": {
+      "viewport": { "width": 390, "height": 844 },
+      "deviceScaleFactor": 2,
+      "isMobile": true,
+      "hasTouch": true,
+      "cpuRate": 4,
+      "latencyMs": 80,
+      "downloadBytesPerSecond": 500000,
+      "uploadBytesPerSecond": 250000
+    }
+  },
+  "budgets": {
+    "navigationFeedbackMs": 200,
+    "navigationUsefulContentMs": 1000,
+    "labLcpMs": 2500,
+    "cls": 0.1,
+    "heroRequestsAtIdle": 12,
+    "homeFirstLoadGzipJsBytes": 160000
+  }
+}

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import type { CatalogSpice } from "@/lib/types";
+import type { CatalogSpice, Market } from "@/lib/types";
 import type { Post } from "@/lib/journal-data";
 import { Eyebrow } from "../primitives/Motif";
 import { Icon } from "../primitives/Icon";
@@ -11,9 +11,9 @@ import { CardCFinal } from "../cards/Cards";
 import { useMarket } from "../MarketContext";
 import { listProducts } from "@/lib/api/products";
 import { toCatalogSpice } from "@/lib/catalog-data";
+import { readPages } from "@/lib/read-pages";
 
 // Search results (ported from search.jsx). Searches both the catalog (products)
-// and the journal (articles). Query is seeded from ?q= and kept in the URL.
 
 const SEARCH_SUGGESTIONS = ["Cinnamon", "Cardamom", "Curry powder", "Black pepper", "Turmeric", "Whole spices", "Recipes", "Sourcing"];
 
@@ -64,7 +64,7 @@ function PostResult({ post, tokens }: { post: Post; tokens: string[] }) {
   return (
     <Link href={"/journal/" + post.slug} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{ display: "flex", gap: 18, alignItems: "center", textDecoration: "none", padding: "16px 16px", borderRadius: 10, background: h ? "var(--surface)" : "transparent", transition: "background .15s" }}>
       <div style={{ width: 116, height: 80, flex: "0 0 auto", borderRadius: 8, overflow: "hidden", position: "relative" }}>
-        <ImageSlot id={post.slot} shape="rect" fit="cover" placeholder="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
+        <ImageSlot id={post.slot} shape="rect" fit="cover" sizes="(max-width: 720px) calc(100vw - 80px), (max-width: 1024px) calc(50vw - 50px), (max-width: 1280px) calc(25vw - 35px), 284px" placeholder="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
         <div style={{ position: "absolute", inset: 0, background: `linear-gradient(155deg, ${post.accent}33, ${post.accent}aa)`, mixBlendMode: "multiply", pointerEvents: "none" }} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -114,7 +114,7 @@ function SearchEmpty({ query, best, onPick }: { query: string; best: CatalogSpic
   );
 }
 
-export function SearchClient({ products, journal, initialQuery = "" }: { products: CatalogSpice[]; journal: Post[]; initialQuery?: string }) {
+export function SearchClient({ products, journal, indexMarket, initialQuery = "" }: { products: CatalogSpice[]; journal: Post[]; indexMarket: Market; initialQuery?: string }) {
   const { market } = useMarket();
   const [query, setQuery] = React.useState(initialQuery);
   const [tab, setTab] = React.useState<"all" | "products" | "journal">("all");
@@ -124,6 +124,7 @@ export function SearchClient({ products, journal, initialQuery = "" }: { product
   React.useEffect(() => {
     if (inputRef.current && !initialQuery) inputRef.current.focus();
   }, [initialQuery]);
+  React.useEffect(() => { setQuery(initialQuery); }, [initialQuery]);
 
   const tokens = React.useMemo(() => norm(query).split(/\s+/).filter(Boolean), [query]);
 
@@ -134,22 +135,24 @@ export function SearchClient({ products, journal, initialQuery = "" }: { product
   }, [query]);
 
   // Authoritative product results from the backend full-text-search endpoint
-  // (ranked, market-filtered, covers the whole catalogue — not just the ≤100
-  // preloaded products the client scores). Debounced; falls back to null (→
+  // (ranked and market-filtered). Every cursor is followed within a 20-second
+  // total budget. Debounced; falls back to null (→
   // client-side scoring) on error / offline so search still works with the API
   // down (BUG-12). `null` = no backend result yet, `[]` = backend found nothing.
-  const [remoteProducts, setRemoteProducts] = React.useState<CatalogSpice[] | null>(null);
+  const [remoteProducts, setRemoteProducts] = React.useState<{ scope: string; items: CatalogSpice[] } | null>(null);
   React.useEffect(() => {
     const q = query.trim();
+    setRemoteProducts(null);
     if (q.length < 2) { setRemoteProducts(null); return; }
     let alive = true;
+    const controller = new AbortController();
     const t = setTimeout(() => {
-      listProducts({ search: q, limit: 24 })
-        .then((res) => { if (alive) setRemoteProducts((res.items || []).map(toCatalogSpice)); })
+      readPages((cursor, signal) => listProducts({ search: q, limit: 100, cursor }, 300, { signal }), controller.signal)
+        .then((items) => { if (alive) setRemoteProducts({ scope: `${market}:${q}`, items: items.map(toCatalogSpice) }); })
         .catch(() => { if (alive) setRemoteProducts(null); });
     }, 220);
-    return () => { alive = false; clearTimeout(t); };
-  }, [query]);
+    return () => { alive = false; clearTimeout(t); controller.abort(); };
+  }, [query, market]);
 
   const productResults = React.useMemo(() => {
     if (!tokens.length) return [];
@@ -165,14 +168,14 @@ export function SearchClient({ products, journal, initialQuery = "" }: { product
     // Prefer backend FTS ranking when it has hits. Fall back to client-side
     // scoring while the request is in flight, when offline, OR when FTS (which is
     // word-based) returns nothing but a partial/substring match exists locally.
-    if (remoteProducts && remoteProducts.length) return applySort(remoteProducts);
-    const scored = products
+    if (remoteProducts?.scope === `${market}:${query.trim()}` && remoteProducts.items.length) return applySort(remoteProducts.items);
+    const scored = (market === indexMarket ? products : [])
       .map((p) => [p, scoreProduct(p, tokens)] as [CatalogSpice, number])
       .filter(([, s]) => s > 0)
       .sort((a, b) => b[1] - a[1])
       .map(([p]) => p);
     return applySort(scored);
-  }, [remoteProducts, products, tokens, sort, market]);
+  }, [remoteProducts, products, tokens, sort, market, query, indexMarket]);
 
   const postResults = React.useMemo(() => {
     if (!tokens.length) return [];
@@ -183,7 +186,7 @@ export function SearchClient({ products, journal, initialQuery = "" }: { product
   const showProducts = (tab === "all" || tab === "products") && productResults.length > 0;
   const showPosts = (tab === "all" || tab === "journal") && postResults.length > 0;
   const hasQuery = tokens.length > 0;
-  const best = React.useMemo(() => products.filter((p) => p.badge === "Bestseller").slice(0, 4), [products]);
+  const best = React.useMemo(() => market === indexMarket ? products.filter((p) => p.badge === "Bestseller").slice(0, 4) : [], [products, market, indexMarket]);
 
   const tabs: [typeof tab, string, number][] = [["all", "All", total], ["products", "Spices", productResults.length], ["journal", "Journal", postResults.length]];
 

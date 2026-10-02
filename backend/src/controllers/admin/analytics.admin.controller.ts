@@ -1,6 +1,8 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../../lib/prisma.js';
 import { withCache } from '../../lib/simpleCache.js';
+import { buildDailyOrderAggregateQuery, buildTopProductsAggregateQuery } from '../../services/analytics-query.js';
+import type { DailyOrderAggregate, ProductAggregate } from '../../services/analytics-query.js';
 
 const REVENUE_STATUSES = new Set(['PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED']);
 
@@ -50,32 +52,19 @@ async function computeDashboard() {
 
     // Run all aggregations in parallel for speed
     const [
-        recentOrders,
-        topLineItems,
+        dailyOrders,
+        topProducts,
         pendingFulfilment,
         lowStockVariants,
         recentAuditLogs,
         newCustomers,
     ] = await Promise.all([
-        // One bounded order read powers the 90-day chart, exact today metrics,
-        // and current-vs-previous 30-day comparisons.
-        prisma.order.findMany({
-            where: { createdAt: { gte: seriesStart, lt: tomorrowStart } },
-            select: { market: true, currency: true, status: true, total: true, createdAt: true },
-        }),
-        // Top-product line items in the window. We aggregate in JS (below) because
-        // "revenue" must be Σ(quantity × unitPrice) — groupBy can only _sum a single
-        // column, which is why the old query summed unitPrice with no quantity and
-        // also mixed LKR + USD into one meaningless figure (BUG-15).
-        prisma.orderItem.findMany({
-            where: { order: { status: { in: ['PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED'] }, createdAt: { gte: currentStart, lt: tomorrowStart } } },
-            select: {
-                productId: true,
-                quantity: true,
-                unitPrice: true,
-                order: { select: { currency: true } },
-            },
-        }),
+        // Group at the database boundary. The largest response is bounded by
+        // days × markets × currencies × statuses, independent of order volume.
+        prisma.$queryRaw<DailyOrderAggregate[]>(buildDailyOrderAggregateQuery(seriesStart, tomorrowStart)),
+        // Revenue is the sum of quantity × historical unit price, converted
+        // before summing. Refunded/cancelled/pending orders cannot contribute.
+        prisma.$queryRaw<ProductAggregate[]>(buildTopProductsAggregateQuery(currentStart, tomorrowStart, LKR_USD_RATE)),
         // Orders needing action
         prisma.order.count({ where: { status: { in: ['PAID', 'PROCESSING'] } } }),
         // Low stock variants
@@ -111,49 +100,50 @@ async function computeDashboard() {
         daily.set(date.toISOString().slice(0, 10), { localRevenueUsd: 0, internationalRevenueUsd: 0, localOrders: 0, internationalOrders: 0 });
     }
 
-    for (const order of recentOrders) {
+    for (const order of dailyOrders) {
         const marketKey = order.market === 'LOCAL' ? 'local' : 'international';
-        const createdAt = new Date(order.createdAt);
+        const createdAt = new Date(`${order.date}T00:00:00Z`);
         const isCurrent = createdAt >= currentStart;
         const isPrevious = createdAt >= previousStart && createdAt < currentStart;
         const isToday = createdAt >= todayStart;
         const earnsRevenue = REVENUE_STATUSES.has(order.status);
         const amount = Number(order.total);
         const revenueUsd = order.currency === 'LKR' ? amount / LKR_USD_RATE : amount;
+        const count = Number(order.orders);
 
         if (isCurrent) {
-            currentOrders[marketKey] += 1;
-            currentOrders.all += 1;
+            currentOrders[marketKey] += count;
+            currentOrders.all += count;
             if (earnsRevenue) {
                 currentRevenue[marketKey] += revenueUsd;
                 currentRevenue.all += revenueUsd;
-                currentPaidOrders[marketKey] += 1;
-                currentPaidOrders.all += 1;
+                currentPaidOrders[marketKey] += count;
+                currentPaidOrders.all += count;
             }
         } else if (isPrevious) {
-            previousOrders[marketKey] += 1;
-            previousOrders.all += 1;
+            previousOrders[marketKey] += count;
+            previousOrders.all += count;
             if (earnsRevenue) {
                 previousRevenue[marketKey] += revenueUsd;
                 previousRevenue.all += revenueUsd;
-                previousPaidOrders[marketKey] += 1;
-                previousPaidOrders.all += 1;
+                previousPaidOrders[marketKey] += count;
+                previousPaidOrders.all += count;
             }
         }
 
         if (isToday) {
-            todayOrders[marketKey] += 1;
-            todayOrders.all += 1;
+            todayOrders[marketKey] += count;
+            todayOrders.all += count;
             if (earnsRevenue) {
                 todayRevenue[marketKey] += revenueUsd;
                 todayRevenue.all += revenueUsd;
             }
         }
 
-        const day = daily.get(createdAt.toISOString().slice(0, 10));
+        const day = daily.get(order.date);
         if (day) {
-            if (marketKey === 'local') day.localOrders += 1;
-            else day.internationalOrders += 1;
+            if (marketKey === 'local') day.localOrders += count;
+            else day.internationalOrders += count;
             if (earnsRevenue) {
                 if (marketKey === 'local') day.localRevenueUsd += revenueUsd;
                 else day.internationalRevenueUsd += revenueUsd;
@@ -174,24 +164,8 @@ async function computeDashboard() {
         international: Math.round(values.international * 100) / 100,
     });
 
-    // Aggregate per product: units = Σquantity, revenue = Σ(quantity × unitPrice).
-    // LKR revenue is normalised to USD (LKR_USD_RATE, default 300) so the single
-    // USD figure the dashboard renders is comparable rather than a raw LKR+USD sum;
-    // ranking is by units, which is currency-neutral (BUG-15).
-    const perProduct = new Map<string, { units: number; revenueUsd: number }>();
-    for (const li of topLineItems) {
-        const acc = perProduct.get(li.productId) ?? { units: 0, revenueUsd: 0 };
-        const lineTotal = Number(li.unitPrice) * li.quantity;
-        acc.units += li.quantity;
-        acc.revenueUsd += li.order.currency === 'LKR' ? lineTotal / LKR_USD_RATE : lineTotal;
-        perProduct.set(li.productId, acc);
-    }
-    const ranked = [...perProduct.entries()]
-        .sort((a, b) => b[1].units - a[1].units)
-        .slice(0, 5);
-
     // Resolve product names for the top-products list in one extra query.
-    const productIds = ranked.map(([productId]) => productId);
+    const productIds = topProducts.map((product) => product.productId);
     const productNames = productIds.length
         ? await prisma.product.findMany({
             where: { id: { in: productIds } },
@@ -200,12 +174,12 @@ async function computeDashboard() {
         : [];
     const nameById = Object.fromEntries(productNames.map((p) => [p.id, p]));
 
-    const topProductsWithNames = ranked.map(([productId, agg]) => ({
-        productId,
-        name: nameById[productId]?.name ?? productId,
-        slug: nameById[productId]?.slug ?? '',
-        units: agg.units,
-        revenue: Math.round(agg.revenueUsd * 100) / 100,
+    const topProductsWithNames = topProducts.map((product) => ({
+        productId: product.productId,
+        name: nameById[product.productId]?.name ?? product.productId,
+        slug: nameById[product.productId]?.slug ?? '',
+        units: Number(product.units),
+        revenue: Math.round(Number(product.revenueUsd) * 100) / 100,
     }));
 
     return {

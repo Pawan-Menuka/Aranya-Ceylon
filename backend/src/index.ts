@@ -3,7 +3,6 @@ import 'dotenv/config';
 // if a required secret is missing/weak, before any server or DB setup runs.
 import { env } from './config/env.js';
 import express from 'express';
-import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
@@ -24,17 +23,24 @@ import webhookRoutes from './routes/webhook.routes.js';
 import { resolveMarket } from './middleware/market.js';
 import { globalLimiter } from './middleware/rateLimit.js';
 import { requestTimeout } from './middleware/timeout.js';
+import { publicReadPolicy } from './middleware/publicReadPolicy.js';
+import { browserCors } from './middleware/browserCors.js';
+import { requestMetricsFromEnv } from './middleware/requestMetrics.js';
+import { bffClientIdentityFromEnv } from './middleware/bffClientIdentity.js';
+import { apiListenHostFromEnv } from './lib/listenHost.js';
 import adminRoutes from './routes/admin.routes.js';
 import contactRoutes from './routes/contact.routes.js';
 import wholesaleRoutes from './routes/wholesale.routes.js';
 import devSeedRoutes from './routes/dev-seed.routes.js';
 import { startAllJobs } from './jobs/scheduler.js';
-import { isOriginAllowed } from './config/cors.js';
 import { prisma } from './lib/prisma.js';
 
 
 const app = express();
 const PORT = process.env.PORT ?? 4000;
+// Validate the strict BFF rollout before opening the listener or connecting to the database.
+const bffClientIdentity = bffClientIdentityFromEnv(process.env);
+const API_HOST = apiListenHostFromEnv(process.env);
 
 // Behind a reverse proxy (Render/Railway/Fly/Nginx) the client IP arrives in
 // X-Forwarded-For. Trust the first hop so rate limiting keys on the real IP.
@@ -43,6 +49,9 @@ if (process.env.NODE_ENV === 'production') {
     // Cloudflare added = 2. Configurable so adding Cloudflare is a config change.
     app.set('trust proxy', env.TRUST_PROXY);
 }
+
+const requestMetrics = requestMetricsFromEnv(process.env);
+if (requestMetrics) app.use(requestMetrics);
 
 // ⚠ ORDERING IS INTENTIONAL — do not move. Webhook routes are mounted BEFORE
 // express.json() because Stripe signature verification needs the raw request
@@ -59,23 +68,14 @@ app.use(helmet());
 app.use(compression());
 // Fail CLOSED: only NODE_ENV === 'development' relaxes CORS. An unset or
 // misspelled NODE_ENV must behave like production, never like development.
-const isDev = process.env.NODE_ENV === 'development';
-const _allowedOrigins = (process.env.FRONTEND_URL ?? 'http://localhost:3000').split(',').map(s => s.trim());
-app.use(cors({
-    origin: (origin, cb) => {
-        if (isOriginAllowed(origin, _allowedOrigins, isDev)) return cb(null, true);
-        // Tag the error so the global handler returns 403 instead of 500. `expose`
-        // marks the message as safe to relay to the client (see error handler).
-        const err = new Error('CORS: origin not allowed') as Error & { status?: number; expose?: boolean };
-        err.status = 403;
-        err.expose = true;
-        cb(err);
-    },
-    credentials: true,
-}));
+app.use(browserCors());
+// Gateway webhooks above retain their own signature verification. Browser
+// attribution is checked before any rate-limit key or audit IP is resolved.
+if (bffClientIdentity) app.use(bffClientIdentity);
 app.use(express.json({ limit: '512kb' })); // 10kb was too small for admin blog/recipe bodies
 app.use(cookieParser());
 app.use(resolveMarket);
+app.use(publicReadPolicy);
 // 30s per-request inactivity timeout on all browser-facing routes. Mounted
 // AFTER the webhook routes (above) so gateway deliveries are never cut off.
 app.use(requestTimeout(30_000));
@@ -154,7 +154,7 @@ app.use((err: Error & { status?: number; expose?: boolean }, _req: express.Reque
     // Never leak internals (message/stack) outside development
     res.status(500).json({
         error: 'Internal server error',
-        ...(isDev && { details: err.message, stack: err.stack }),
+        ...(process.env.NODE_ENV === 'development' && { details: err.message, stack: err.stack }),
     });
 });
 
@@ -169,13 +169,13 @@ async function connectDB() {
 }
 
 connectDB().then(() => {
-    const server = app.listen(PORT, () => {
-        console.log(`🌿 Aranya Ceylon API running on http://localhost:${PORT}`);
-        // NOTE: cron jobs run in EVERY instance. Safe at one instance; before
-        // scaling horizontally, gate startAllJobs() behind a leader-election
-        // flag (e.g. only run on instance 0) so jobs don't double-fire.
+    const onListening = () => {
+        console.log(`🌿 Aranya Ceylon API running on ${API_HOST ?? 'default interfaces'}:${PORT}`);
+        // Scheduler startup requires the explicit instance-enable flag. Its
+        // noOverlap guard is local to this process, not a distributed lock.
         startAllJobs(); // Start after DB connection confirmed
-    });
+    };
+    const server = API_HOST ? app.listen(Number(PORT), API_HOST, onListening) : app.listen(PORT, onListening);
 
     // Connection-level timeouts (slow-loris / dead-peer protection).
     // keepAliveTimeout is raised above the typical proxy idle timeout so the

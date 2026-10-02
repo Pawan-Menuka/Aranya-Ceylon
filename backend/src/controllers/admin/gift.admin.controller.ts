@@ -1,8 +1,7 @@
 import type { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
-import { writeAuditLog } from '../../services/audit.service.js';
-import { revalidateFrontend } from '../../lib/revalidate.js';
+import { auditPublicMutation } from '../../lib/audit-public-mutation.js';
 import { z } from 'zod';
 
 type Tx = Prisma.TransactionClient;
@@ -144,15 +143,10 @@ export async function createGift(req: Request, res: Response) {
         throw err;
     }
 
-    await writeAuditLog({
+    await auditPublicMutation({
         req, event: 'GIFT_CREATE',
         targetType: 'GiftSet', targetId: gift.id,
-    });
-
-    // P3-4: revalidate when a gift set is published immediately on create
-    if (data.status === 'PUBLISHED') {
-        await revalidateFrontend('/gifts');
-    }
+    }, data.status === 'PUBLISHED' ? ['/gifts', '/search', '/categories'] : []);
 
     res.status(201).json({ gift });
 }
@@ -186,13 +180,11 @@ export async function updateGift(req: Request, res: Response) {
     }
 
     // P3-3: audit log for updates (was missing)
-    await writeAuditLog({
+    await auditPublicMutation({
         req, event: 'GIFT_UPDATE',
         targetType: 'GiftSet', targetId: id,
         diff: { before: existing, after: gift },
-    });
-
-    await revalidateFrontend('/gifts');
+    }, ['/gifts', '/search', '/categories']);
 
     res.json({ gift });
 }
@@ -205,13 +197,10 @@ export async function deleteGift(req: Request, res: Response) {
 
     await prisma.giftSet.delete({ where: { id } });
 
-    await writeAuditLog({
+    await auditPublicMutation({
         req, event: 'GIFT_DELETE',
         targetType: 'GiftSet', targetId: id,
-    });
-
-    // P3-4: revalidate on delete
-    await revalidateFrontend('/gifts');
+    }, ['/gifts', '/search']);
 
     res.json({ ok: true });
 }

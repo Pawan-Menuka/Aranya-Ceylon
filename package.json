@@ -16,7 +16,25 @@
     "test": "pnpm -r --if-present test",
     "test:unit": "pnpm --filter @aranya/backend test:unit",
     "test:integration": "pnpm --filter @aranya/backend test:integration",
-    "test:e2e": "pnpm --filter aranya-ceylon-storefront test:e2e"
+    "test:e2e": "pnpm --filter aranya-ceylon-storefront test:e2e",
+    "perf:baseline": "node scripts/performance/run.mjs",
+    "perf:smoke": "node scripts/performance/run.mjs --smoke",
+    "perf:db-check": "node scripts/performance/snapshot-db.mjs",
+    "perf:test": "node backend/node_modules/vitest/vitest.mjs run --config scripts/performance/vitest.config.ts",
+    "perf:failure-checks": "node scripts/performance/phase-one-browser.mjs",
+    "perf:shop-diagnostic": "node scripts/performance/shop-diagnostic.mjs",
+    "perf:hero-checks": "node scripts/performance/phase-two-browser.mjs",
+    "perf:media-checks": "node scripts/performance/phase-three-browser.mjs",
+    "perf:cache-checks": "node scripts/performance/phase-four-browser.mjs",
+    "perf:startup-checks": "node scripts/performance/phase-five-browser.mjs",
+    "perf:startup-diagnostic": "node scripts/performance/startup-diagnostic.mjs",
+    "perf:catalog-checks": "node scripts/performance/phase-six-browser.mjs",
+    "perf:query-checks": "node scripts/performance/phase-six-db.mjs",
+    "perf:refinement-checks": "node scripts/performance/phase-seven-browser.mjs",
+    "perf:synthetic-sql-checks": "node scripts/performance/phase-seven-sql.mjs",
+    "perf:release-checks": "node scripts/performance/phase-eight-browser.mjs",
+    "perf:search-repair-checks": "node scripts/performance/phase-eight-search-migration.mjs",
+    "perf:staging-reads": "node scripts/performance/staging-readiness.mjs"
   },
   "pnpm": {
     "ignoredBuiltDependencies": [

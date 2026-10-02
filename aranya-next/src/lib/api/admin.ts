@@ -1,4 +1,5 @@
 import { apiFetch, getAccessToken } from "./http";
+import { withRequestDeadline } from "./request-deadline";
 import type { Order, Product } from "../types";
 
 // Admin endpoints (ADMIN / SUPERADMIN role-gated). Mutations return their
@@ -330,15 +331,18 @@ export async function uploadProductImage(
   const formData = new FormData();
   formData.append("images", file);
   const token = getAccessToken();
-  const res = await fetch(
-    `/api/products/${encodeURIComponent(productId)}/images`,
-    {
-      method: "POST",
-      body: formData,
-      credentials: "include",
-      headers: token ? { authorization: `Bearer ${token}` } : undefined,
-    },
-  );
-  if (!res.ok) throw new Error(`Image upload failed (${res.status})`);
-  return res.json();
+  return withRequestDeadline(120000, undefined, async (signal) => {
+    const res = await fetch(
+      `/api/products/${encodeURIComponent(productId)}/images`,
+      {
+        method: "POST",
+        signal,
+        body: formData,
+        credentials: "include",
+        headers: token ? { authorization: `Bearer ${token}` } : undefined,
+      },
+    );
+    if (!res.ok) throw new Error(`Image upload failed (${res.status})`);
+    return res.json();
+  });
 }

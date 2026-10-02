@@ -1,3 +1,6 @@
+import { prepareMedia } from './scripts/prepare-media.mjs';
+import nextConstants from 'next/constants.js';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -14,6 +17,7 @@ const nextConfig = {
     serverComponentsExternalPackages: ["isomorphic-dompurify", "jsdom"],
   },
   images: {
+    imageSizes: [16, 32, 48, 64, 80, 96, 128, 160, 256, 384],
     remotePatterns: [
       // Cloudinary CDN: product images uploaded via the admin panel
       { protocol: 'https', hostname: 'res.cloudinary.com' },
@@ -21,6 +25,10 @@ const nextConfig = {
   },
   async headers() {
     return [
+      {
+        source: '/media/:version([a-f0-9]{16})/:path*',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
+      },
       {
         source: '/(.*)',
         headers: [
@@ -38,4 +46,7 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default function configure(phase) {
+  if (phase === nextConstants.PHASE_DEVELOPMENT_SERVER || phase === nextConstants.PHASE_PRODUCTION_BUILD) prepareMedia();
+  return nextConfig;
+}
