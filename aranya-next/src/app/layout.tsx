@@ -1,33 +1,11 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Plus_Jakarta_Sans, Spectral } from "next/font/google";
+import "./fonts.css";
 import "./globals.css";
 import { resolveMarket } from "@/lib/market";
 import { CommerceProvider } from "@/components/CommerceProvider";
 import PerformanceTelemetry from "@/components/performance/PerformanceTelemetry";
 
-// Three locked brand roles (spec §3). next/font self-hosts the files and
-// exposes each as a CSS variable consumed by globals.css.
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin"],
-  weight: ["500", "600"],
-  style: ["normal", "italic"],
-  variable: "--font-cormorant",
-  display: "swap",
-});
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-jakarta",
-  display: "swap",
-});
-const spectral = Spectral({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  style: ["normal", "italic"],
-  variable: "--font-spectral",
-  display: "swap",
-});
-
+// Locked brand roles use the exact accepted font bytes and fallback metrics.
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
 export const metadata: Metadata = {
@@ -50,7 +28,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const market = resolveMarket();
   return (
-    <html lang="en" className={`${cormorant.variable} ${jakarta.variable} ${spectral.variable}`}>
+    <html lang="en" className="__variable_6adbea __variable_a11773 __variable_cfa357">
       <body className="aranya">
         <PerformanceTelemetry />
         <noscript><style>{`[data-scroll-reveal] { opacity: 1 !important; transform: none !important; }`}</style></noscript>

@@ -210,3 +210,17 @@ export interface FacetVocab {
   origin: string[];
   flavour: string[];
 }
+
+// Search uses the public card/list projections; article bodies and product
+// descriptions/reviews are intentionally absent from result payloads.
+export type SearchSort = "relevance" | "price-asc" | "price-desc" | "rating";
+export type SearchResource = "all" | "products" | "journal";
+export interface SearchResultPage<T> { items: T[]; total: number; nextCursor: string | null; hasNextPage: boolean }
+export interface JournalSearchMetadata {
+  id: string; title: string; slug: string; tags: string[];
+  publishedAt: string | null; seoDesc: string | null; viewCount: number;
+}
+export interface SearchResults {
+  q: string; sort: SearchSort; market: BackendMarket;
+  products: SearchResultPage<ProductCard>; journal: SearchResultPage<JournalSearchMetadata>;
+}

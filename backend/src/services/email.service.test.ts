@@ -86,3 +86,37 @@ describe('verification email uses public BFF entry point', () => {
         expect(fetch).not.toHaveBeenCalled();
     });
 });
+
+
+describe('durable email transport', () => {
+    const payload = { mail: { from: 'orders@shop.example', to: 'customer@fixture.example', subject: 'Frozen subject', html: '<p>Frozen body</p>', replyTo: 'support@shop.example' }, type: 'CONTACT' };
+    it('sends the frozen provider body and stable retry key through an abortable request', async () => {
+        const transport = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'fixture-receipt' }), { status: 200 }));
+        vi.stubGlobal('fetch', transport);
+        const { deliverQueuedEmail } = await import('./email.service.js');
+        await expect(deliverQueuedEmail(payload, 'outbox/fixture-id')).resolves.toBe('fixture-receipt');
+        const [url, request] = transport.mock.calls[0]!;
+        expect(url).toBe('https://api.resend.com/emails');
+        expect(request.method).toBe('POST');
+        expect(request.headers).toEqual({ Authorization: 'Bearer re_fixture_never_sent', 'content-type': 'application/json', 'Idempotency-Key': 'outbox/fixture-id' });
+        expect(request.signal).toBeInstanceOf(AbortSignal);
+        expect(JSON.parse(request.body)).toEqual({ from: payload.mail.from, to: payload.mail.to, subject: payload.mail.subject, html: payload.mail.html, reply_to: payload.mail.replyTo });
+        expect(mocks.send).not.toHaveBeenCalled(); expect(mocks.audit).not.toHaveBeenCalled();
+    });
+    it('rejects provider failures with a generic error without parsing private provider diagnostics', async () => {
+        const json = vi.fn(); vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json }));
+        const { deliverQueuedEmail } = await import('./email.service.js');
+        await expect(deliverQueuedEmail(payload, 'outbox/fixture-id')).rejects.toThrow('EMAIL_PROVIDER_REJECTED');
+        expect(json).not.toHaveBeenCalled(); expect(mocks.audit).not.toHaveBeenCalled();
+    });
+    it.each([{}, { id: '' }])('rejects ambiguous success receipts %j', async result => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(result), { status: 200 })));
+        const { deliverQueuedEmail } = await import('./email.service.js');
+        await expect(deliverQueuedEmail(payload, 'outbox/fixture-id')).rejects.toThrow('EMAIL_PROVIDER_AMBIGUOUS');
+    });
+    it('rejects invalid payloads before any transport call', async () => {
+        const { deliverQueuedEmail } = await import('./email.service.js');
+        await expect(deliverQueuedEmail({ mail: { to: 'customer@fixture.example' } }, 'outbox/fixture-id')).rejects.toThrow('OUTBOX_INVALID_PAYLOAD');
+        expect(fetch).not.toHaveBeenCalled();
+    });
+});

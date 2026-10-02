@@ -1,7 +1,10 @@
+import { adminContentPageSchema } from '@aranya/shared';
+import { listAdminPage } from '../../services/admin-page.service.js';
 import type { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { auditPublicMutation } from '../../lib/audit-public-mutation.js';
+import { enqueueRevalidation, publicMutation } from '../../lib/public-mutation.js';
 import { z } from 'zod';
 
 type Tx = Prisma.TransactionClient;
@@ -107,7 +110,8 @@ async function syncBackingProduct(
     }
 }
 
-export async function listGifts(_req: Request, res: Response) {
+export async function listGifts(req: Request, res: Response) {
+    if (req.query.view === 'page') return res.json(await listAdminPage('gifts', adminContentPageSchema.parse(req.query)));
     const gifts = await prisma.giftSet.findMany({
         orderBy: [{ featured: 'desc' }, { createdAt: 'asc' }],
         take: 500, // bound an otherwise unlimited load (PERF-07)
@@ -134,6 +138,7 @@ export async function createGift(req: Request, res: Response) {
         gift = await prisma.$transaction(async (tx) => {
             const created = await tx.giftSet.create({ data: { ...data, badge: data.badge ?? null } });
             await ensureBackingProduct(tx, created);
+            await enqueueRevalidation(tx, data.status === 'PUBLISHED' ? ['/gifts', '/search', '/categories'] : []);
             return created;
         });
     } catch (err) {
@@ -170,6 +175,7 @@ export async function updateGift(req: Request, res: Response) {
             // request only touched some fields (e.g. contents changed but
             // usd/lkr didn't, or vice versa).
             await syncBackingProduct(tx, existing.slug, updated);
+            await enqueueRevalidation(tx, ['/gifts', '/search', '/categories']);
             return updated;
         });
     } catch (err) {
@@ -195,7 +201,7 @@ export async function deleteGift(req: Request, res: Response) {
     const existing = await prisma.giftSet.findUnique({ where: { id } });
     if (!existing) { res.status(404).json({ error: 'Gift set not found' }); return; }
 
-    await prisma.giftSet.delete({ where: { id } });
+    await publicMutation(tx => tx.giftSet.delete({ where: { id } }), () => ['/gifts', '/search']);
 
     await auditPublicMutation({
         req, event: 'GIFT_DELETE',

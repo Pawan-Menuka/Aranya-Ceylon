@@ -3,6 +3,9 @@ import { prisma } from '../lib/prisma.js';
 import { sendLowStockAlert, sendAbandonedCartEmail } from '../services/email.service.js';
 import { revalidateFrontend } from '../lib/revalidate.js';
 import { cancelOrderAndReleaseStock } from '../controllers/webhook.controller.js';
+import { outboxEnabled } from '../lib/outbox.js';
+import { distributedJobsEnabled } from './jobLease.js';
+import { startLeasedJobs, runBoundedLowStock, runBoundedAbandonedCarts } from './leasedScheduler.js';
 
 // --- Job 1: Publish scheduled blog posts ---
 // Runs every minute. Checks for posts where scheduledAt <= now
@@ -75,6 +78,7 @@ export function startCartExpiryJob() {
 // directly unit-testable without faking node-cron (same reasoning as
 // runAbandonedCartRecovery below).
 export async function runLowStockAlert(): Promise<number> {
+    if (outboxEnabled()) return runBoundedLowStock();
     const threshold = Number(process.env.LOW_STOCK_THRESHOLD ?? 10);
 
     const lowStock = await prisma.variant.findMany({
@@ -177,6 +181,7 @@ const ABANDONED_CART_HOURS = 3;
 // Extracted from the cron callback so the actual targeting/sending logic is
 // directly unit-testable without faking node-cron.
 export async function runAbandonedCartRecovery(): Promise<number> {
+    if (outboxEnabled()) return runBoundedAbandonedCarts();
     const cutoff = new Date(Date.now() - ABANDONED_CART_HOURS * 60 * 60 * 1000);
     const carts = await prisma.cart.findMany({
         where: {
@@ -236,6 +241,10 @@ export function startAllJobs() {
     }
     if (jobsStarted) return;
     jobsStarted = true;
+    if (outboxEnabled() || distributedJobsEnabled()) {
+        startLeasedJobs();
+        return;
+    }
     startScheduledPostsJob();
     startCartExpiryJob();
     startLowStockAlertJob();

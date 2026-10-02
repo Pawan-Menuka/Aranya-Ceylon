@@ -10,6 +10,7 @@ import { SHARED_VERSION } from '@aranya/shared';
 import { ZodError } from 'zod';
 import authRoutes from './routes/auth.routes.js';
 import productRoutes from './routes/product.routes.js';
+import searchRoutes from './routes/search.routes.js';
 import blogRoutes from './routes/blog.routes.js';
 import categoryRoutes from './routes/category.routes.js';
 import marketRoutes from './routes/market.routes.js';
@@ -34,6 +35,10 @@ import wholesaleRoutes from './routes/wholesale.routes.js';
 import devSeedRoutes from './routes/dev-seed.routes.js';
 import { startAllJobs } from './jobs/scheduler.js';
 import { prisma } from './lib/prisma.js';
+import { outboxEnabled } from './lib/outbox.js';
+import { distributedJobsEnabled } from './jobs/jobLease.js';
+import { outboxWorkerEnabled } from './jobs/outboxWorker.js';
+import { dashboardRollupsEnabled } from './services/dashboard-rollups.js';
 
 
 const app = express();
@@ -41,6 +46,11 @@ const PORT = process.env.PORT ?? 4000;
 // Validate the strict BFF rollout before opening the listener or connecting to the database.
 const bffClientIdentity = bffClientIdentityFromEnv(process.env);
 const API_HOST = apiListenHostFromEnv(process.env);
+// Validate optional background features before any listener or database connection.
+const durableOutbox = outboxEnabled();
+if (distributedJobsEnabled() && !durableOutbox) throw new Error('Distributed jobs require OUTBOX_ENABLED');
+if (outboxWorkerEnabled()) throw new Error('Run the outbox worker in its dedicated process; disable OUTBOX_WORKER_ENABLED in the API');
+dashboardRollupsEnabled();
 
 // Behind a reverse proxy (Render/Railway/Fly/Nginx) the client IP arrives in
 // X-Forwarded-For. Trust the first hop so rate limiting keys on the real IP.
@@ -87,6 +97,7 @@ app.use(globalLimiter);
 // --- Routes ---
 app.use('/auth', authRoutes);
 app.use('/products', productRoutes);
+app.use('/search', searchRoutes);
 app.use('/blog', blogRoutes);
 app.use('/categories', categoryRoutes);
 app.use('/market', marketRoutes);

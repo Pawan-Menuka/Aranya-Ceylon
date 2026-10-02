@@ -37,6 +37,7 @@ function invalidate(input: unknown): NextResponse {
   const tags = new Set<string>();
   for (const path of paths) {
     const resource = path.split("/")[1];
+    if (resource === "search") tags.add("blog");
     if (resource === "products" || resource === "categories" || resource === "search") {
       for (const tag of ["products", "categories", "recipes", "gifts"]) tags.add(tag);
     } else if (resource === "journal") tags.add("blog");

@@ -1,9 +1,12 @@
 "use client";
 
 import * as React from "react";
+import { useAdminPage } from "./useAdminPage";
+import { AdminPagination } from "./AdminPagination";
 import { ADMIN, type AuditRow } from "@/lib/admin-data";
 import { AIcon, RoleTag } from "./AdminPrimitives";
 import { listAuditLogs, type AuditEntry } from "@/lib/api/admin";
+import { readPages } from "@/lib/read-pages";
 import { exportCsv } from "@/lib/csv";
 import { DEMO_MODE } from "@/lib/demo";
 import { formatOrderNumber } from "@/lib/order-number";
@@ -88,19 +91,27 @@ export function AdminAudit() {
   // Demo rows only in demo mode (BUG-20).
   const [rows, setRows] = React.useState<AuditRow[]>(DEMO_MODE ? ADMIN.AUDIT : []);
 
-  React.useEffect(() => {
-    listAuditLogs({ limit: 100 }).then(({ logs }) => {
-      setRows(logs?.map(backendAuditToRow) ?? []);
-    }).catch(() => { /* fetch failed — keep whatever's there (demo only in demo mode) */ });
-  }, []);
+  const filters = React.useMemo(() => ({ q: q.trim(), filter }), [q, filter]);
+  const loadPage = React.useCallback(async (cursor: string | undefined, signal: AbortSignal) => {
+    const response = await listAuditLogs({ ...filters, cursor }, { signal });
+    return { ...response, items: response.logs.map(backendAuditToRow) };
+  }, [filters]);
+  const page = useAdminPage(JSON.stringify(filters), loadPage, setRows);
+  const exportAudit = () => { void page.exportAll(
+    signal => readPages(async (cursor, pageSignal) => {
+      const response = await listAuditLogs({ ...filters, cursor, limit: 100 }, { signal: pageSignal });
+      return { items: response.logs.map(backendAuditToRow), nextCursor: response.nextCursor };
+    }, signal),
+    items => exportCsv(`audit-log-${new Date().toISOString().slice(0, 10)}`, ["Timestamp", "Actor", "Role", "Action", "Target", "Detail"], items as unknown as Array<Record<string, unknown>>, ["ts", "actor", "role", "action", "target", "meta"]),
+  ); };
 
-  const filtered = React.useMemo(() => rows.filter((r) => {
+  const filtered = React.useMemo(() => page.hasLiveData ? rows : DEMO_MODE ? rows.filter((r) => {
     if (filter === "admin" && r.role === "JOB") return false;
     if (filter === "warn" && r.level !== "warn") return false;
     if (filter === "job" && r.role !== "JOB") return false;
     if (q) { const s = q.toLowerCase(); if (!(r.actor + r.action + r.target + r.meta).toLowerCase().includes(s)) return false; }
     return true;
-  }), [rows, filter, q]);
+  }) : [], [rows, filter, q, page.hasLiveData]);
 
   const groups = React.useMemo(() => {
     const g: Record<string, typeof rows> = {};
@@ -121,16 +132,16 @@ export function AdminAudit() {
           <h1 className="ad-title" style={{ marginTop: 6 }}>Audit log</h1>
           <p className="ad-sub">Immutable record of every admin action and system job. Retained 24 months.</p>
         </div>
-        <button className="ad-btn ad-btn-ghost ad-btn-sm" onClick={() => exportCsv(`audit-log-${new Date().toISOString().slice(0, 10)}`, ["Timestamp", "Actor", "Role", "Action", "Target", "Detail"], filtered as unknown as Array<Record<string, unknown>>, ["ts", "actor", "role", "action", "target", "meta"])}><AIcon name="download" size={15} stroke="var(--ad-muted)" />Export log</button>
+        <button className="ad-btn ad-btn-ghost ad-btn-sm" disabled={page.exporting} onClick={exportAudit}><AIcon name="download" size={15} stroke="var(--ad-muted)" />Export log</button>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
         <div className="ad-seg">
-          {AUDIT_FILTERS.map((f) => <button key={f.key} className={filter === f.key ? "on" : ""} onClick={() => setFilter(f.key)}>{f.label}</button>)}
+          {AUDIT_FILTERS.map((f) => <button key={f.key} className={filter === f.key ? "on" : ""} onClick={() => setFilter(f.key)}>{f.label}{page.hasLiveData && <span style={{ marginLeft: 6, opacity: 0.55 }}>{page.counts[f.key] ?? 0}</span>}</button>)}
         </div>
         <div className="ad-search" style={{ marginLeft: "auto", width: 260 }}>
           <AIcon name="search" size={15} stroke="var(--ad-faint)" />
-          <input placeholder="Search actor, action, target…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input maxLength={200} placeholder="Search actor, action, target…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
       </div>
 
@@ -167,6 +178,7 @@ export function AdminAudit() {
         ))}
         {filtered.length === 0 && <div style={{ padding: "60px 20px", textAlign: "center", color: "var(--ad-faint)" }}>No matching activity.</div>}
       </div>
+      <AdminPagination page={page} size={filtered.length} label="entries" />
     </div>
   );
 }

@@ -1,5 +1,11 @@
 import { Resend } from 'resend';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { randomUUID } from 'node:crypto';
+import type { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma.js';
+import { enqueueOutbox, outboxEnabled } from '../lib/outbox.js';
 import { writeAuditLog } from './audit.service.js';
+import { z } from 'zod';
 
 // Placeholder fallback so the module imports without a key (mirrors
 // stripe.service). Real sends only happen with a real RESEND_API_KEY; callers
@@ -26,7 +32,40 @@ const FROM = process.env.EMAIL_FROM ?? 'orders@aranyaceylon.com';
 // everywhere, not just uncaught. Checking `result.error` explicitly is the
 // actual fix; the try/catch alone (kept for network-level failures) was not.
 type SendParams = Parameters<typeof resend.emails.send>[0];
+type MailContext = { tx: Prisma.TransactionClient; key: string; expiresAt?: Date; guard?: { cartId: string; updatedAt: string } };
+const queuedMail = new AsyncLocalStorage<MailContext>();
+// Render using the same templates, but persist the frozen provider payload in the caller's transaction.
+export async function enqueueEmail(tx: Prisma.TransactionClient, key: string, render: () => Promise<unknown>, expiresAt?: Date,
+    guard?: MailContext['guard']): Promise<void> {
+    if (!outboxEnabled()) throw new Error('Outbox is disabled');
+    await queuedMail.run({ tx, key, expiresAt, guard }, render);
+}
+export async function deliverQueuedEmail(payload: unknown, idempotencyKey: string): Promise<string> {
+    const parsed = z.object({ mail: z.object({ from: z.string().min(1), to: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]),
+        subject: z.string().min(1), html: z.string().min(1), replyTo: z.string().optional() }).strict() }).passthrough().safeParse(payload);
+    if (!parsed.success) throw new Error('OUTBOX_INVALID_PAYLOAD');
+    const key = process.env.RESEND_API_KEY;
+    if (!key) throw new Error('EMAIL_NOT_CONFIGURED');
+    const { replyTo, ...mail } = parsed.data.mail;
+    // Worker transport is bounded and does not use SDK diagnostic logging, which can include provider text.
+    const response = await fetch('https://api.resend.com/emails', { method: 'POST', signal: AbortSignal.timeout(10_000),
+        headers: { Authorization: `Bearer ${key}`, 'content-type': 'application/json', 'Idempotency-Key': idempotencyKey },
+        body: JSON.stringify({ ...mail, ...(replyTo ? { reply_to: replyTo } : {}) }) });
+    if (!response.ok) throw new Error('EMAIL_PROVIDER_REJECTED');
+    const result: unknown = await response.json();
+    if (!result || typeof result !== 'object' || !('id' in result) || typeof result.id !== 'string' || !result.id) throw new Error('EMAIL_PROVIDER_AMBIGUOUS');
+    return result.id;
+}
 async function sendMail(payload: SendParams, type: string) {
+    const context = queuedMail.getStore();
+    if (context) {
+        await enqueueOutbox(context.tx, { kind: 'EMAIL', dedupeKey: context.key, payload: { mail: payload, type, ...(context.guard ? { guard: context.guard } : {}) }, expiresAt: context.expiresAt });
+        return;
+    }
+    if (outboxEnabled()) {
+        await prisma.$transaction(tx => enqueueEmail(tx, `mail:${randomUUID()}`, () => sendMail(payload, type)));
+        return;
+    }
     const to = Array.isArray(payload.to) ? payload.to.join(', ') : String(payload.to);
     const logFailure = async (message: string) => {
         try {

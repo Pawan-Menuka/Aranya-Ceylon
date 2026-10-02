@@ -7,7 +7,7 @@ const TIME_HEADER = 'x-aranya-bff-client-time';
 const SIGNATURE_HEADER = 'x-aranya-bff-client-signature';
 const IDENTITY_HEADERS = [IP_HEADER, TIME_HEADER, SIGNATURE_HEADER];
 const MAX_AGE_MS = 30_000;
-const PUBLIC_READ = /^\/(?:products(?:\/[a-z0-9-]+)?|categories|blog(?:\/[a-z0-9-]+)?|recipes(?:\/[a-z0-9-]+)?|gifts(?:\/[a-z0-9-]+)?|health)\/?$/;
+const PUBLIC_READ = /^\/(?:products(?:\/[a-z0-9-]+)?|categories|search|blog(?:\/[a-z0-9-]+)?|recipes(?:\/[a-z0-9-]+)?|gifts(?:\/[a-z0-9-]+)?|health)\/?$/;
 const verifiedIps = new WeakMap<Request, string>();
 
 /** Canonical literal IPs only: no ports, zones, comma chains or DNS names. */

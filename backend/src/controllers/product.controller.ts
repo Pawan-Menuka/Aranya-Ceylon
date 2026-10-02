@@ -1,3 +1,5 @@
+import { adminProductPageSchema } from '@aranya/shared';
+import { listAdminPage } from '../services/admin-page.service.js';
 import type { Request, Response } from 'express';
 import { productFilterSchema, catalogFilterSchema, productNameLookupSchema, createProductSchema, updateProductSchema } from '@aranya/shared';
 import * as productService from '../services/product.service.js';
@@ -7,6 +9,7 @@ import { prisma } from '../lib/prisma.js';
 import { withCache } from '../lib/simpleCache.js';
 import { auditPublicMutation } from '../lib/audit-public-mutation.js';
 import { revalidateFrontend } from '../lib/revalidate.js';
+import { publicMutation } from '../lib/public-mutation.js';
 
 // Featured/bestseller lists barely move minute to minute and are read on
 // nearly every storefront page load — worth a short cache (perf audit #6).
@@ -91,7 +94,8 @@ export async function getBestsellers(req: Request, res: Response) {
 // ----------------------------------------------------------------
 
 // --- List all products (admin) ---
-export async function adminListProducts(_req: Request, res: Response) {
+export async function adminListProducts(req: Request, res: Response) {
+    if (req.query.view === 'page') return res.json(await listAdminPage('products', adminProductPageSchema.parse(req.query)));
     const products = await productService.adminListProducts();
     return res.json({ products });
 }
@@ -107,7 +111,7 @@ export async function createProduct(req: Request, res: Response) {
     const data = createProductSchema.parse(req.body);
     let product;
     try {
-        product = await productService.createProduct(data);
+        product = await publicMutation(tx => productService.createProduct(data, tx), result => productPaths(result!.slug), () => productService.createProduct(data));
     } catch (err) {
         if (isDuplicateSku(err)) return res.status(409).json({ error: SKU_CONFLICT });
         throw err;
@@ -130,7 +134,7 @@ export async function updateProduct(req: Request, res: Response) {
     if (!before) return res.status(404).json({ error: 'Product not found' });
     let product;
     try {
-        product = await productService.updateProduct(id, data);
+        product = await publicMutation(tx => productService.updateProduct(id, data, tx), result => productPaths(before.slug, result!.slug), () => productService.updateProduct(id, data));
     } catch (err) {
         if (isDuplicateSku(err)) return res.status(409).json({ error: SKU_CONFLICT });
         throw err;
@@ -165,14 +169,14 @@ export async function uploadProductImages(req: Request, res: Response) {
     const results = await Promise.allSettled(
         files.map((file, index) =>
             uploadImage(file.buffer, 'aranya-ceylon/products').then((result) =>
-                prisma.productImage.create({
+                publicMutation(tx => tx.productImage.create({
                     data: {
                         productId: id,
                         url: result.url,
                         publicId: result.publicId,
                         position: basePosition + index,
                     },
-                }),
+                }), () => productPaths(product.slug)),
             ),
         ),
     );
@@ -199,7 +203,7 @@ export async function archiveProduct(req: Request, res: Response) {
     const id = req.params.id!;
     const before = await prisma.product.findUnique({ where: { id }, select: { name: true, status: true, slug: true } });
     if (!before) return res.status(404).json({ error: 'Product not found' });
-    const product = await productService.archiveProduct(id);
+    const product = await publicMutation(tx => productService.archiveProduct(id, tx), result => productPaths(before.slug, result.slug), () => productService.archiveProduct(id));
     await auditPublicMutation({
         req, event: 'PRODUCT_ARCHIVE', targetType: 'Product', targetId: id,
         diff: { name: product.name, status: { before: before.status, after: 'ARCHIVED' } },

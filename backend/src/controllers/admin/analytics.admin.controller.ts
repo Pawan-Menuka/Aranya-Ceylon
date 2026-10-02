@@ -1,19 +1,14 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../../lib/prisma.js';
-import { withCache } from '../../lib/simpleCache.js';
+import { createDashboardCache } from '../../lib/private-dashboard-cache.js';
+import { dashboardRollupsEnabled, readDashboardRollups } from '../../services/dashboard-rollups.js';
 import { buildDailyOrderAggregateQuery, buildTopProductsAggregateQuery } from '../../services/analytics-query.js';
 import type { DailyOrderAggregate, ProductAggregate } from '../../services/analytics-query.js';
 
 const REVENUE_STATUSES = new Set(['PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED']);
 
-// The dashboard re-runs a 90-day order scan + aggregation from scratch on
-// every load (perf audit #6/#3) — a short TTL means a burst of admin
-// pageviews/refreshes shares one computation instead of each re-scanning.
-// Not keyed by anything: the response has no per-admin personalization, so a
-// single cached value serves every viewer. TTL-only expiry (no active
-// invalidation on writes) mirrors how the storefront's own ISR pages already
-// tolerate a staleness window — acceptable for an internal analytics view.
-const DASHBOARD_CACHE_TTL_MS = 60_000;
+const dashboardCache = createDashboardCache<Awaited<ReturnType<typeof computeDashboard>>>();
+export const clearDashboardCache = () => dashboardCache.clear();
 
 type MarketValues = { all: number; local: number; international: number };
 
@@ -31,12 +26,16 @@ function changes(current: MarketValues, previous: MarketValues): Record<keyof Ma
 }
 
 export async function getDashboard(_req: Request, res: Response) {
-    const payload = await withCache('admin:dashboard', DASHBOARD_CACHE_TTL_MS, () => computeDashboard());
+    const now = new Date();
+    const fxRate = Number(process.env.LKR_USD_RATE ?? 300) || 300;
+    const lowStockThreshold = Number(process.env.LOW_STOCK_THRESHOLD ?? 10);
+    const key = JSON.stringify([now.toISOString().slice(0, 10), fxRate, lowStockThreshold, dashboardRollupsEnabled()]);
+    const payload = await dashboardCache.get(key, () => computeDashboard(now, fxRate, lowStockThreshold));
+    res.setHeader('Cache-Control', 'private, no-store');
     return res.json(payload);
 }
 
-async function computeDashboard() {
-    const now = new Date();
+async function computeDashboard(now: Date, LKR_USD_RATE: number, lowStockThreshold: number) {
     const todayStart = new Date(now);
     todayStart.setUTCHours(0, 0, 0, 0);
     const tomorrowStart = new Date(todayStart);
@@ -48,28 +47,28 @@ async function computeDashboard() {
     const seriesStart = new Date(todayStart);
     seriesStart.setUTCDate(seriesStart.getUTCDate() - 89);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const LKR_USD_RATE = Number(process.env.LKR_USD_RATE ?? 300) || 300;
 
     // Run all aggregations in parallel for speed
     const [
-        dailyOrders,
-        topProducts,
+        aggregates,
         pendingFulfilment,
         lowStockVariants,
         recentAuditLogs,
         newCustomers,
     ] = await Promise.all([
-        // Group at the database boundary. The largest response is bounded by
-        // days × markets × currencies × statuses, independent of order volume.
-        prisma.$queryRaw<DailyOrderAggregate[]>(buildDailyOrderAggregateQuery(seriesStart, tomorrowStart)),
-        // Revenue is the sum of quantity × historical unit price, converted
-        // before summing. Refunded/cancelled/pending orders cannot contribute.
-        prisma.$queryRaw<ProductAggregate[]>(buildTopProductsAggregateQuery(currentStart, tomorrowStart, LKR_USD_RATE)),
+        readDashboardRollups(seriesStart, currentStart, tomorrowStart, LKR_USD_RATE).then(async rollups => {
+            if (rollups) return rollups;
+            const [dailyOrders, topProducts] = await Promise.all([
+                prisma.$queryRaw<DailyOrderAggregate[]>(buildDailyOrderAggregateQuery(seriesStart, tomorrowStart)),
+                prisma.$queryRaw<ProductAggregate[]>(buildTopProductsAggregateQuery(currentStart, tomorrowStart, LKR_USD_RATE)),
+            ]);
+            return { dailyOrders, topProducts };
+        }),
         // Orders needing action
         prisma.order.count({ where: { status: { in: ['PAID', 'PROCESSING'] } } }),
         // Low stock variants
         prisma.variant.findMany({
-            where: { stock: { lte: Number(process.env.LOW_STOCK_THRESHOLD ?? 10) } },
+            where: { stock: { lte: lowStockThreshold } },
             include: { product: { select: { name: true } } },
             orderBy: { stock: 'asc' },
             take: 20,
@@ -83,6 +82,7 @@ async function computeDashboard() {
         prisma.user.count({ where: { role: 'CUSTOMER', createdAt: { gte: sevenDaysAgo } } }),
     ]);
 
+    const { dailyOrders, topProducts } = aggregates;
     const emptyValues = (): MarketValues => ({ all: 0, local: 0, international: 0 });
     const currentRevenue = emptyValues();
     const previousRevenue = emptyValues();

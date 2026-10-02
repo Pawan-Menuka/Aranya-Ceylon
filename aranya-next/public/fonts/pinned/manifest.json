@@ -1,0 +1,1034 @@
+{
+  "version": 1,
+  "provenance": {
+    "acceptedCommit": "9bef7f2",
+    "source": "Google Fonts CSS2 assets downloaded by Next.js 14.2.35 next/font/google for the accepted production build",
+    "sourceCssSha256": "820933fb13e92df31e18290cacee970a1fff72d9fce1aeb258dbb90aec5e281e",
+    "upstream": "https://github.com/google/fonts",
+    "retrieved": "2026-10-02",
+    "request": {
+      "cormorant": {
+        "family": "Cormorant Garamond",
+        "weights": [
+          500,
+          600
+        ],
+        "styles": [
+          "normal",
+          "italic"
+        ]
+      },
+      "jakarta": {
+        "family": "Plus Jakarta Sans",
+        "weights": [
+          400,
+          500,
+          600,
+          700,
+          800
+        ],
+        "styles": [
+          "normal"
+        ]
+      },
+      "spectral": {
+        "family": "Spectral",
+        "weights": [
+          400,
+          500,
+          600
+        ],
+        "styles": [
+          "normal",
+          "italic"
+        ]
+      },
+      "display": "swap",
+      "preloadSubset": "latin"
+    }
+  },
+  "css": {
+    "path": "src/app/fonts.css",
+    "sha256": "e25ecd9060450913b509fdfe19936ac78d580858ff135674969cf2012d3b6933",
+    "faces": 73,
+    "uniqueWoff2": 44,
+    "variables": [
+      ".__variable_6adbea{--font-cormorant:\"__Cormorant_Garamond_6adbea\",\"__Cormorant_Garamond_Fallback_6adbea\"}",
+      ".__variable_a11773{--font-jakarta:\"__Plus_Jakarta_Sans_a11773\",\"__Plus_Jakarta_Sans_Fallback_a11773\"}",
+      ".__variable_cfa357{--font-spectral:\"__Spectral_cfa357\",\"__Spectral_Fallback_cfa357\"}"
+    ]
+  },
+  "preloads": [],
+  "preloadEvidence": {
+    "acceptedNextFontManifest": {
+      "pages": {},
+      "app": {},
+      "appUsingSizeAdjust": false,
+      "pagesUsingSizeAdjust": false
+    },
+    "note": "The accepted rebuilt Next font manifest contains no app/pages preloads. .p filename suffixes identify old loader eligibility, not actual preload links. Preserve CSS-demand loading; root controlled browser validation records actual requested faces."
+  },
+  "licenses": [
+    {
+      "family": "cormorantgaramond",
+      "file": "cormorantgaramond-OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/cormorantgaramond/OFL.txt",
+      "sha256": "60700d351cac4650c51f3f9db318d2a420f8b45052dba2715eb5fec41f0f6956",
+      "copyright": "Copyright 2015 the Cormorant Project Authors (github.com/CatharsisFonts/Cormorant)"
+    },
+    {
+      "family": "plusjakartasans",
+      "file": "plusjakartasans-OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/plusjakartasans/OFL.txt",
+      "sha256": "995c7199cab65954f545996326755daee7b63cc6b42b06c13da1f9502ab08a99",
+      "copyright": "Copyright 2020 The Plus Jakarta Sans Project Authors (https://github.com/tokotype/PlusJakartaSans)"
+    },
+    {
+      "family": "spectral",
+      "file": "spectral-OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/spectral/OFL.txt",
+      "sha256": "501d6ceca8e552630fe3aa9442b9a818565680a1a2f79f3fb8c13d6f309a9e98",
+      "copyright": "Copyright 2017 The Spectral Project Authors (https://github.com/productiontype/Spectral)"
+    }
+  ],
+  "files": [
+    {
+      "file": "024ead497118aa23-s.woff2",
+      "bytes": 11556,
+      "sha256": "3512ad3b4ddd21fa75ab44296867da1f82948350ffba678a04afbb511015cb08",
+      "families": [
+        "__Cormorant_Garamond_6adbea"
+      ]
+    },
+    {
+      "file": "109cd0be88080556-s.woff2",
+      "bytes": 13528,
+      "sha256": "537c651195b85f73d4a434a72af3b328081e1a544395946d374fb9a957494a21",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "130fa9c96dfc2da9-s.woff2",
+      "bytes": 14180,
+      "sha256": "922782e9e17703b9bd3ebbce3538552d5cc0ce849c5ac218bb040dbf215b0d80",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "1392a8708768005c-s.woff2",
+      "bytes": 4188,
+      "sha256": "fce3ac1eb76111781d80bce533013a574802634149190db80cdd181c6a46e57f",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "192b55935f4e8c71-s.woff2",
+      "bytes": 4508,
+      "sha256": "c872407fe7330e14afe9a2b116efc32e7222d6b520bcbb0c94c778074379fc9a",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "1d0267b201e007a0-s.woff2",
+      "bytes": 11840,
+      "sha256": "c6db77bc82fef79bfe9693bdedb78135efd1f7892b97e213ceef8d4c201b7b41",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "1e9fc5e960416d85-s.woff2",
+      "bytes": 12660,
+      "sha256": "a62b9bdf669d8fb395c8685321cbf86c2f2bc324e0b28ecf867a036095383d49",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "1ee996a2e7c8d770-s.woff2",
+      "bytes": 4244,
+      "sha256": "74dc7e33abf296a6a7129a327d7b9c5bc02b11eb9ffb47447a0887997c863102",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "1eedfae966de4e1c-s.p.woff2",
+      "bytes": 15164,
+      "sha256": "1fb6ca29fc243e8bfdfce12d8d6806f322bcc62d38036986812be28fb1f41f0a",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "273b2e150de7c4a9-s.woff2",
+      "bytes": 9404,
+      "sha256": "32457570dd484b9ba601e401e87da25ac826fee759885ed7c29469694db87821",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "393d45a2251e223a-s.woff2",
+      "bytes": 23408,
+      "sha256": "d04439363ec805132dc6c6e6a925f76efe17646f9811af8e10e218ea3dba5335",
+      "families": [
+        "__Cormorant_Garamond_6adbea"
+      ]
+    },
+    {
+      "file": "3e68fbb477d90635-s.p.woff2",
+      "bytes": 15084,
+      "sha256": "79ce505722da87b9a2fa21a16cd0d7f426f1624fd16413e11be377bc9e922a3b",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "48410f3df60da620-s.woff2",
+      "bytes": 33740,
+      "sha256": "9dc38267bdee93a653200ef3c1e8060e3f1399073432c415c683b419d3b50464",
+      "families": [
+        "__Cormorant_Garamond_6adbea"
+      ]
+    },
+    {
+      "file": "52c789a43a83edb4-s.woff2",
+      "bytes": 10776,
+      "sha256": "53d3b4babc90ecbf25370f4e7c3fa45b863c43dc76a09357cb1a199f0ffe167f",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "53a2694769c6fc4b-s.woff2",
+      "bytes": 4408,
+      "sha256": "97d9fae252ec4692152eec59e00e8b33a0580ddd5476cabd7bf6411431faf3d2",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "581701471b17b157-s.woff2",
+      "bytes": 13288,
+      "sha256": "ccb889e04368c402021b9b73196f26fc903d6cb269028138fefb68bd56cc5c19",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "636a5ac981f94f8b-s.p.woff2",
+      "bytes": 27272,
+      "sha256": "cd8db90cd950e26bc8761f65d323588bd5cd112d326d6d322bc7c8ea86771215",
+      "families": [
+        "__Plus_Jakarta_Sans_a11773"
+      ]
+    },
+    {
+      "file": "680964f1bd688e24-s.woff2",
+      "bytes": 13216,
+      "sha256": "38331492f5916e46a39699c66a1d76294b6f7b56f8a702f09cfb35fd9fd3043c",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "692781be160fc9d0-s.woff2",
+      "bytes": 4204,
+      "sha256": "ae7786642b55f76c12636756c694d0ec6d8bc90aca2965a6c1c68e3222307379",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "6a64cc3acf910f14-s.woff2",
+      "bytes": 11900,
+      "sha256": "a91ba9bafdace2dc734f300cf5d4b81a75abe9366a621d1ed6951f78131ae01c",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "6adccebe1b78ad4c-s.woff2",
+      "bytes": 10744,
+      "sha256": "9a6738241702381e65e80d1ee5f172ce12be2049dfedeb33016a5096444bc03b",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "6fe53d21e6e7ebd8-s.woff2",
+      "bytes": 1716,
+      "sha256": "a16f29d7d2a21a4f9b3249a82eb2725ed5bdb91500dfb5c4758977de27477f20",
+      "families": [
+        "__Plus_Jakarta_Sans_a11773"
+      ]
+    },
+    {
+      "file": "7b89a4fd5e90ede0-s.p.woff2",
+      "bytes": 37776,
+      "sha256": "5d618c462b7a5b74f442e1548880086af71764d9cc7d35c16ab45353da934621",
+      "families": [
+        "__Cormorant_Garamond_6adbea"
+      ]
+    },
+    {
+      "file": "84d7006d28fb721d-s.woff2",
+      "bytes": 14176,
+      "sha256": "bec9fa730699d4e46e573c2a10e31173f470209dd8488a94c4b2af290d1cc39d",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "8715d2ed531152f4-s.woff2",
+      "bytes": 21132,
+      "sha256": "d81372bae1f872f1418c0b7eb412f8a92a156a950fda8d2383701c75d38969df",
+      "families": [
+        "__Cormorant_Garamond_6adbea"
+      ]
+    },
+    {
+      "file": "8ebc6e9dde468c4a-s.woff2",
+      "bytes": 8292,
+      "sha256": "5c913fc1b1f86f4b475e5df45a796aa480d1f7f0891ed6f1a5991d6d1be887c3",
+      "families": [
+        "__Plus_Jakarta_Sans_a11773"
+      ]
+    },
+    {
+      "file": "95fbe602f95f5b1d-s.woff2",
+      "bytes": 3584,
+      "sha256": "aff97997277cce4f2798af35dff14fd4b9cb88fac5a8310924b7eb678489e3a4",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "9e7b0a821b9dfcb4-s.woff2",
+      "bytes": 21688,
+      "sha256": "0303e02b53b0298fb26a0193941a2e8754f0f9a9fce50d90b178d8da3424873f",
+      "families": [
+        "__Plus_Jakarta_Sans_a11773"
+      ]
+    },
+    {
+      "file": "9f5251eb979d3d3e-s.p.woff2",
+      "bytes": 14988,
+      "sha256": "7cfafd3583aecfe216f860d7a1c5689e86f7f92681946ca582d042c1c96b37d7",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "a325990d5fec1d3f-s.p.woff2",
+      "bytes": 16212,
+      "sha256": "a0533b33ddd6bedf5dd9fc6762b44cc536cff6f408a115146f5f003c2c7edd96",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "a8803dd9fdd15a53-s.p.woff2",
+      "bytes": 16272,
+      "sha256": "8d4f3594c930ffab6e0c23eb400af6ac1cee5c4e8934cb6a087cbd351b42cbbc",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "a905a6179bab2b08-s.woff2",
+      "bytes": 3340,
+      "sha256": "9d95c480ed17a573649ca7c3dad392239dfd7bec6daf3fa86ef229d5ba2f696a",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "b1c71187c85bb732-s.woff2",
+      "bytes": 4228,
+      "sha256": "2ec1863d6d313501e19713bce88dca2bc563e0c2e552f9b298913416740f3a9b",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "b42be14db559d7fe-s.woff2",
+      "bytes": 4516,
+      "sha256": "7047055032c89bcbf3d629491f62bd1976936009df88bffd80995aa81b5f937a",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "c48b38fe8bb532f3-s.woff2",
+      "bytes": 11264,
+      "sha256": "826f73ca737feec0eb1004808629973d6b611fddc2bd2a689b5fe331f6be6427",
+      "families": [
+        "__Cormorant_Garamond_6adbea"
+      ]
+    },
+    {
+      "file": "d7fd192484976c0a-s.woff2",
+      "bytes": 10612,
+      "sha256": "874d49c9c14d00047a53ddd496de773d56215f85582262a2aeeab2ab41d41ae9",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "de32ab4287127d46-s.woff2",
+      "bytes": 3980,
+      "sha256": "86796a1830a46237415e22447587ea43e18994ec7ed490f5c4b991d6d3103328",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "e18f83c737786aa7-s.p.woff2",
+      "bytes": 39304,
+      "sha256": "e6d6d1d73858aa9b66f3a3539f9dec22faab2276e61ad1d813bc04dd59c9c122",
+      "families": [
+        "__Cormorant_Garamond_6adbea"
+      ]
+    },
+    {
+      "file": "e244d3ca994d3054-s.p.woff2",
+      "bytes": 14028,
+      "sha256": "bcb83e9c56d40c5111a2bdbc3d8bdabf66bd31337e968f1c223b61879b8d3cad",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "e478c40a90656953-s.woff2",
+      "bytes": 4260,
+      "sha256": "217390471a430a687e52e33c3d694d1d814e6c3de0c8e37906dcc2f8a073e175",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "e74f24ed7f0e4323-s.woff2",
+      "bytes": 34444,
+      "sha256": "06bc9a8c179afaf7dd5d3b4987ad2f4a82ca85a542c9e498b18bf32ad0257d8e",
+      "families": [
+        "__Cormorant_Garamond_6adbea"
+      ]
+    },
+    {
+      "file": "ea896c3885e026c1-s.woff2",
+      "bytes": 21264,
+      "sha256": "3170a883f1968a2d1135259e40fd88508da70c20337e491f171f9405d0749053",
+      "families": [
+        "__Cormorant_Garamond_6adbea"
+      ]
+    },
+    {
+      "file": "eba0a4e5bf800560-s.woff2",
+      "bytes": 3608,
+      "sha256": "3f8d833b64a1e7e1b8be07cd73513004cc680a466b84d6459fdcd2f1c1fcf0b3",
+      "families": [
+        "__Spectral_cfa357"
+      ]
+    },
+    {
+      "file": "fd3893c623c32b6d-s.woff2",
+      "bytes": 25196,
+      "sha256": "919a7720ae1671f06ebdd4f65bb9c2f0d619f81f805d85aec025c89139536292",
+      "families": [
+        "__Cormorant_Garamond_6adbea"
+      ]
+    }
+  ],
+  "faces": [
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "italic",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/fd3893c623c32b6d-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0460-052f,u+1c80-1c8a,u+20b4,u+2de0-2dff,u+a640-a69f,u+fe2e-fe2f"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "italic",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/ea896c3885e026c1-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0301,u+0400-045f,u+0490-0491,u+04b0-04b1,u+2116"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "italic",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/024ead497118aa23-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0102-0103,u+0110-0111,u+0128-0129,u+0168-0169,u+01a0-01a1,u+01af-01b0,u+0300-0301,u+0303-0304,u+0308-0309,u+0323,u+0329,u+1ea0-1ef9,u+20ab"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "italic",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/e74f24ed7f0e4323-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0100-02ba,u+02bd-02c5,u+02c7-02cc,u+02ce-02d7,u+02dd-02ff,u+0304,u+0308,u+0329,u+1d00-1dbf,u+1e00-1e9f,u+1ef2-1eff,u+2020,u+20a0-20ab,u+20ad-20c0,u+2113,u+2c60-2c7f,u+a720-a7ff"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "italic",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/e18f83c737786aa7-s.p.woff2) format(\"woff2\")",
+      "unicode-range": "u+00??,u+0131,u+0152-0153,u+02bb-02bc,u+02c6,u+02da,u+02dc,u+0304,u+0308,u+0329,u+2000-206f,u+20ac,u+2122,u+2191,u+2193,u+2212,u+2215,u+feff,u+fffd"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "italic",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/fd3893c623c32b6d-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0460-052f,u+1c80-1c8a,u+20b4,u+2de0-2dff,u+a640-a69f,u+fe2e-fe2f"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "italic",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/ea896c3885e026c1-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0301,u+0400-045f,u+0490-0491,u+04b0-04b1,u+2116"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "italic",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/024ead497118aa23-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0102-0103,u+0110-0111,u+0128-0129,u+0168-0169,u+01a0-01a1,u+01af-01b0,u+0300-0301,u+0303-0304,u+0308-0309,u+0323,u+0329,u+1ea0-1ef9,u+20ab"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "italic",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/e74f24ed7f0e4323-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0100-02ba,u+02bd-02c5,u+02c7-02cc,u+02ce-02d7,u+02dd-02ff,u+0304,u+0308,u+0329,u+1d00-1dbf,u+1e00-1e9f,u+1ef2-1eff,u+2020,u+20a0-20ab,u+20ad-20c0,u+2113,u+2c60-2c7f,u+a720-a7ff"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "italic",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/e18f83c737786aa7-s.p.woff2) format(\"woff2\")",
+      "unicode-range": "u+00??,u+0131,u+0152-0153,u+02bb-02bc,u+02c6,u+02da,u+02dc,u+0304,u+0308,u+0329,u+2000-206f,u+20ac,u+2122,u+2191,u+2193,u+2212,u+2215,u+feff,u+fffd"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "normal",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/393d45a2251e223a-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0460-052f,u+1c80-1c8a,u+20b4,u+2de0-2dff,u+a640-a69f,u+fe2e-fe2f"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "normal",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/8715d2ed531152f4-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0301,u+0400-045f,u+0490-0491,u+04b0-04b1,u+2116"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "normal",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/c48b38fe8bb532f3-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0102-0103,u+0110-0111,u+0128-0129,u+0168-0169,u+01a0-01a1,u+01af-01b0,u+0300-0301,u+0303-0304,u+0308-0309,u+0323,u+0329,u+1ea0-1ef9,u+20ab"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "normal",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/48410f3df60da620-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0100-02ba,u+02bd-02c5,u+02c7-02cc,u+02ce-02d7,u+02dd-02ff,u+0304,u+0308,u+0329,u+1d00-1dbf,u+1e00-1e9f,u+1ef2-1eff,u+2020,u+20a0-20ab,u+20ad-20c0,u+2113,u+2c60-2c7f,u+a720-a7ff"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "normal",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/7b89a4fd5e90ede0-s.p.woff2) format(\"woff2\")",
+      "unicode-range": "u+00??,u+0131,u+0152-0153,u+02bb-02bc,u+02c6,u+02da,u+02dc,u+0304,u+0308,u+0329,u+2000-206f,u+20ac,u+2122,u+2191,u+2193,u+2212,u+2215,u+feff,u+fffd"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "normal",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/393d45a2251e223a-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0460-052f,u+1c80-1c8a,u+20b4,u+2de0-2dff,u+a640-a69f,u+fe2e-fe2f"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "normal",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/8715d2ed531152f4-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0301,u+0400-045f,u+0490-0491,u+04b0-04b1,u+2116"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "normal",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/c48b38fe8bb532f3-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0102-0103,u+0110-0111,u+0128-0129,u+0168-0169,u+01a0-01a1,u+01af-01b0,u+0300-0301,u+0303-0304,u+0308-0309,u+0323,u+0329,u+1ea0-1ef9,u+20ab"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "normal",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/48410f3df60da620-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0100-02ba,u+02bd-02c5,u+02c7-02cc,u+02ce-02d7,u+02dd-02ff,u+0304,u+0308,u+0329,u+1d00-1dbf,u+1e00-1e9f,u+1ef2-1eff,u+2020,u+20a0-20ab,u+20ad-20c0,u+2113,u+2c60-2c7f,u+a720-a7ff"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_6adbea",
+      "font-style": "normal",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/7b89a4fd5e90ede0-s.p.woff2) format(\"woff2\")",
+      "unicode-range": "u+00??,u+0131,u+0152-0153,u+02bb-02bc,u+02c6,u+02da,u+02dc,u+0304,u+0308,u+0329,u+2000-206f,u+20ac,u+2122,u+2191,u+2193,u+2212,u+2215,u+feff,u+fffd"
+    },
+    {
+      "font-family": "__Cormorant_Garamond_Fallback_6adbea",
+      "src": "local(\"Times New Roman\")",
+      "ascent-override": "95.27%",
+      "descent-override": "29.59%",
+      "line-gap-override": "0.00%",
+      "size-adjust": "96.98%"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "400",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/6fe53d21e6e7ebd8-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0460-052f,u+1c80-1c8a,u+20b4,u+2de0-2dff,u+a640-a69f,u+fe2e-fe2f"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "400",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/8ebc6e9dde468c4a-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0102-0103,u+0110-0111,u+0128-0129,u+0168-0169,u+01a0-01a1,u+01af-01b0,u+0300-0301,u+0303-0304,u+0308-0309,u+0323,u+0329,u+1ea0-1ef9,u+20ab"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "400",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/9e7b0a821b9dfcb4-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0100-02ba,u+02bd-02c5,u+02c7-02cc,u+02ce-02d7,u+02dd-02ff,u+0304,u+0308,u+0329,u+1d00-1dbf,u+1e00-1e9f,u+1ef2-1eff,u+2020,u+20a0-20ab,u+20ad-20c0,u+2113,u+2c60-2c7f,u+a720-a7ff"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "400",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/636a5ac981f94f8b-s.p.woff2) format(\"woff2\")",
+      "unicode-range": "u+00??,u+0131,u+0152-0153,u+02bb-02bc,u+02c6,u+02da,u+02dc,u+0304,u+0308,u+0329,u+2000-206f,u+20ac,u+2122,u+2191,u+2193,u+2212,u+2215,u+feff,u+fffd"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/6fe53d21e6e7ebd8-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0460-052f,u+1c80-1c8a,u+20b4,u+2de0-2dff,u+a640-a69f,u+fe2e-fe2f"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/8ebc6e9dde468c4a-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0102-0103,u+0110-0111,u+0128-0129,u+0168-0169,u+01a0-01a1,u+01af-01b0,u+0300-0301,u+0303-0304,u+0308-0309,u+0323,u+0329,u+1ea0-1ef9,u+20ab"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/9e7b0a821b9dfcb4-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0100-02ba,u+02bd-02c5,u+02c7-02cc,u+02ce-02d7,u+02dd-02ff,u+0304,u+0308,u+0329,u+1d00-1dbf,u+1e00-1e9f,u+1ef2-1eff,u+2020,u+20a0-20ab,u+20ad-20c0,u+2113,u+2c60-2c7f,u+a720-a7ff"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/636a5ac981f94f8b-s.p.woff2) format(\"woff2\")",
+      "unicode-range": "u+00??,u+0131,u+0152-0153,u+02bb-02bc,u+02c6,u+02da,u+02dc,u+0304,u+0308,u+0329,u+2000-206f,u+20ac,u+2122,u+2191,u+2193,u+2212,u+2215,u+feff,u+fffd"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/6fe53d21e6e7ebd8-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0460-052f,u+1c80-1c8a,u+20b4,u+2de0-2dff,u+a640-a69f,u+fe2e-fe2f"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/8ebc6e9dde468c4a-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0102-0103,u+0110-0111,u+0128-0129,u+0168-0169,u+01a0-01a1,u+01af-01b0,u+0300-0301,u+0303-0304,u+0308-0309,u+0323,u+0329,u+1ea0-1ef9,u+20ab"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/9e7b0a821b9dfcb4-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0100-02ba,u+02bd-02c5,u+02c7-02cc,u+02ce-02d7,u+02dd-02ff,u+0304,u+0308,u+0329,u+1d00-1dbf,u+1e00-1e9f,u+1ef2-1eff,u+2020,u+20a0-20ab,u+20ad-20c0,u+2113,u+2c60-2c7f,u+a720-a7ff"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/636a5ac981f94f8b-s.p.woff2) format(\"woff2\")",
+      "unicode-range": "u+00??,u+0131,u+0152-0153,u+02bb-02bc,u+02c6,u+02da,u+02dc,u+0304,u+0308,u+0329,u+2000-206f,u+20ac,u+2122,u+2191,u+2193,u+2212,u+2215,u+feff,u+fffd"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "700",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/6fe53d21e6e7ebd8-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0460-052f,u+1c80-1c8a,u+20b4,u+2de0-2dff,u+a640-a69f,u+fe2e-fe2f"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "700",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/8ebc6e9dde468c4a-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0102-0103,u+0110-0111,u+0128-0129,u+0168-0169,u+01a0-01a1,u+01af-01b0,u+0300-0301,u+0303-0304,u+0308-0309,u+0323,u+0329,u+1ea0-1ef9,u+20ab"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "700",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/9e7b0a821b9dfcb4-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0100-02ba,u+02bd-02c5,u+02c7-02cc,u+02ce-02d7,u+02dd-02ff,u+0304,u+0308,u+0329,u+1d00-1dbf,u+1e00-1e9f,u+1ef2-1eff,u+2020,u+20a0-20ab,u+20ad-20c0,u+2113,u+2c60-2c7f,u+a720-a7ff"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "700",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/636a5ac981f94f8b-s.p.woff2) format(\"woff2\")",
+      "unicode-range": "u+00??,u+0131,u+0152-0153,u+02bb-02bc,u+02c6,u+02da,u+02dc,u+0304,u+0308,u+0329,u+2000-206f,u+20ac,u+2122,u+2191,u+2193,u+2212,u+2215,u+feff,u+fffd"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "800",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/6fe53d21e6e7ebd8-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0460-052f,u+1c80-1c8a,u+20b4,u+2de0-2dff,u+a640-a69f,u+fe2e-fe2f"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "800",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/8ebc6e9dde468c4a-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0102-0103,u+0110-0111,u+0128-0129,u+0168-0169,u+01a0-01a1,u+01af-01b0,u+0300-0301,u+0303-0304,u+0308-0309,u+0323,u+0329,u+1ea0-1ef9,u+20ab"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "800",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/9e7b0a821b9dfcb4-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0100-02ba,u+02bd-02c5,u+02c7-02cc,u+02ce-02d7,u+02dd-02ff,u+0304,u+0308,u+0329,u+1d00-1dbf,u+1e00-1e9f,u+1ef2-1eff,u+2020,u+20a0-20ab,u+20ad-20c0,u+2113,u+2c60-2c7f,u+a720-a7ff"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_a11773",
+      "font-style": "normal",
+      "font-weight": "800",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/636a5ac981f94f8b-s.p.woff2) format(\"woff2\")",
+      "unicode-range": "u+00??,u+0131,u+0152-0153,u+02bb-02bc,u+02c6,u+02da,u+02dc,u+0304,u+0308,u+0329,u+2000-206f,u+20ac,u+2122,u+2191,u+2193,u+2212,u+2215,u+feff,u+fffd"
+    },
+    {
+      "font-family": "__Plus_Jakarta_Sans_Fallback_a11773",
+      "src": "local(\"Arial\")",
+      "ascent-override": "98.88%",
+      "descent-override": "21.15%",
+      "line-gap-override": "0.00%",
+      "size-adjust": "104.98%"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "italic",
+      "font-weight": "400",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/de32ab4287127d46-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0460-052f,u+1c80-1c8a,u+20b4,u+2de0-2dff,u+a640-a69f,u+fe2e-fe2f"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "italic",
+      "font-weight": "400",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/52c789a43a83edb4-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0301,u+0400-045f,u+0490-0491,u+04b0-04b1,u+2116"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "italic",
+      "font-weight": "400",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/53a2694769c6fc4b-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0102-0103,u+0110-0111,u+0128-0129,u+0168-0169,u+01a0-01a1,u+01af-01b0,u+0300-0301,u+0303-0304,u+0308-0309,u+0323,u+0329,u+1ea0-1ef9,u+20ab"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "italic",
+      "font-weight": "400",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/109cd0be88080556-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0100-02ba,u+02bd-02c5,u+02c7-02cc,u+02ce-02d7,u+02dd-02ff,u+0304,u+0308,u+0329,u+1d00-1dbf,u+1e00-1e9f,u+1ef2-1eff,u+2020,u+20a0-20ab,u+20ad-20c0,u+2113,u+2c60-2c7f,u+a720-a7ff"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "italic",
+      "font-weight": "400",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/9f5251eb979d3d3e-s.p.woff2) format(\"woff2\")",
+      "unicode-range": "u+00??,u+0131,u+0152-0153,u+02bb-02bc,u+02c6,u+02da,u+02dc,u+0304,u+0308,u+0329,u+2000-206f,u+20ac,u+2122,u+2191,u+2193,u+2212,u+2215,u+feff,u+fffd"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "italic",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/b1c71187c85bb732-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0460-052f,u+1c80-1c8a,u+20b4,u+2de0-2dff,u+a640-a69f,u+fe2e-fe2f"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "italic",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/1d0267b201e007a0-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0301,u+0400-045f,u+0490-0491,u+04b0-04b1,u+2116"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "italic",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/192b55935f4e8c71-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0102-0103,u+0110-0111,u+0128-0129,u+0168-0169,u+01a0-01a1,u+01af-01b0,u+0300-0301,u+0303-0304,u+0308-0309,u+0323,u+0329,u+1ea0-1ef9,u+20ab"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "italic",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/130fa9c96dfc2da9-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0100-02ba,u+02bd-02c5,u+02c7-02cc,u+02ce-02d7,u+02dd-02ff,u+0304,u+0308,u+0329,u+1d00-1dbf,u+1e00-1e9f,u+1ef2-1eff,u+2020,u+20a0-20ab,u+20ad-20c0,u+2113,u+2c60-2c7f,u+a720-a7ff"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "italic",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/a325990d5fec1d3f-s.p.woff2) format(\"woff2\")",
+      "unicode-range": "u+00??,u+0131,u+0152-0153,u+02bb-02bc,u+02c6,u+02da,u+02dc,u+0304,u+0308,u+0329,u+2000-206f,u+20ac,u+2122,u+2191,u+2193,u+2212,u+2215,u+feff,u+fffd"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "italic",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/1392a8708768005c-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0460-052f,u+1c80-1c8a,u+20b4,u+2de0-2dff,u+a640-a69f,u+fe2e-fe2f"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "italic",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/6a64cc3acf910f14-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0301,u+0400-045f,u+0490-0491,u+04b0-04b1,u+2116"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "italic",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/b42be14db559d7fe-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0102-0103,u+0110-0111,u+0128-0129,u+0168-0169,u+01a0-01a1,u+01af-01b0,u+0300-0301,u+0303-0304,u+0308-0309,u+0323,u+0329,u+1ea0-1ef9,u+20ab"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "italic",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/84d7006d28fb721d-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0100-02ba,u+02bd-02c5,u+02c7-02cc,u+02ce-02d7,u+02dd-02ff,u+0304,u+0308,u+0329,u+1d00-1dbf,u+1e00-1e9f,u+1ef2-1eff,u+2020,u+20a0-20ab,u+20ad-20c0,u+2113,u+2c60-2c7f,u+a720-a7ff"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "italic",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/a8803dd9fdd15a53-s.p.woff2) format(\"woff2\")",
+      "unicode-range": "u+00??,u+0131,u+0152-0153,u+02bb-02bc,u+02c6,u+02da,u+02dc,u+0304,u+0308,u+0329,u+2000-206f,u+20ac,u+2122,u+2191,u+2193,u+2212,u+2215,u+feff,u+fffd"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "normal",
+      "font-weight": "400",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/a905a6179bab2b08-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0460-052f,u+1c80-1c8a,u+20b4,u+2de0-2dff,u+a640-a69f,u+fe2e-fe2f"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "normal",
+      "font-weight": "400",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/273b2e150de7c4a9-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0301,u+0400-045f,u+0490-0491,u+04b0-04b1,u+2116"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "normal",
+      "font-weight": "400",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/692781be160fc9d0-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0102-0103,u+0110-0111,u+0128-0129,u+0168-0169,u+01a0-01a1,u+01af-01b0,u+0300-0301,u+0303-0304,u+0308-0309,u+0323,u+0329,u+1ea0-1ef9,u+20ab"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "normal",
+      "font-weight": "400",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/1e9fc5e960416d85-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0100-02ba,u+02bd-02c5,u+02c7-02cc,u+02ce-02d7,u+02dd-02ff,u+0304,u+0308,u+0329,u+1d00-1dbf,u+1e00-1e9f,u+1ef2-1eff,u+2020,u+20a0-20ab,u+20ad-20c0,u+2113,u+2c60-2c7f,u+a720-a7ff"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "normal",
+      "font-weight": "400",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/e244d3ca994d3054-s.p.woff2) format(\"woff2\")",
+      "unicode-range": "u+00??,u+0131,u+0152-0153,u+02bb-02bc,u+02c6,u+02da,u+02dc,u+0304,u+0308,u+0329,u+2000-206f,u+20ac,u+2122,u+2191,u+2193,u+2212,u+2215,u+feff,u+fffd"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "normal",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/95fbe602f95f5b1d-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0460-052f,u+1c80-1c8a,u+20b4,u+2de0-2dff,u+a640-a69f,u+fe2e-fe2f"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "normal",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/d7fd192484976c0a-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0301,u+0400-045f,u+0490-0491,u+04b0-04b1,u+2116"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "normal",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/e478c40a90656953-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0102-0103,u+0110-0111,u+0128-0129,u+0168-0169,u+01a0-01a1,u+01af-01b0,u+0300-0301,u+0303-0304,u+0308-0309,u+0323,u+0329,u+1ea0-1ef9,u+20ab"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "normal",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/680964f1bd688e24-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0100-02ba,u+02bd-02c5,u+02c7-02cc,u+02ce-02d7,u+02dd-02ff,u+0304,u+0308,u+0329,u+1d00-1dbf,u+1e00-1e9f,u+1ef2-1eff,u+2020,u+20a0-20ab,u+20ad-20c0,u+2113,u+2c60-2c7f,u+a720-a7ff"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "normal",
+      "font-weight": "500",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/3e68fbb477d90635-s.p.woff2) format(\"woff2\")",
+      "unicode-range": "u+00??,u+0131,u+0152-0153,u+02bb-02bc,u+02c6,u+02da,u+02dc,u+0304,u+0308,u+0329,u+2000-206f,u+20ac,u+2122,u+2191,u+2193,u+2212,u+2215,u+feff,u+fffd"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "normal",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/eba0a4e5bf800560-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0460-052f,u+1c80-1c8a,u+20b4,u+2de0-2dff,u+a640-a69f,u+fe2e-fe2f"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "normal",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/6adccebe1b78ad4c-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0301,u+0400-045f,u+0490-0491,u+04b0-04b1,u+2116"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "normal",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/1ee996a2e7c8d770-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0102-0103,u+0110-0111,u+0128-0129,u+0168-0169,u+01a0-01a1,u+01af-01b0,u+0300-0301,u+0303-0304,u+0308-0309,u+0323,u+0329,u+1ea0-1ef9,u+20ab"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "normal",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/581701471b17b157-s.woff2) format(\"woff2\")",
+      "unicode-range": "u+0100-02ba,u+02bd-02c5,u+02c7-02cc,u+02ce-02d7,u+02dd-02ff,u+0304,u+0308,u+0329,u+1d00-1dbf,u+1e00-1e9f,u+1ef2-1eff,u+2020,u+20a0-20ab,u+20ad-20c0,u+2113,u+2c60-2c7f,u+a720-a7ff"
+    },
+    {
+      "font-family": "__Spectral_cfa357",
+      "font-style": "normal",
+      "font-weight": "600",
+      "font-display": "swap",
+      "src": "url(/_next/static/media/1eedfae966de4e1c-s.p.woff2) format(\"woff2\")",
+      "unicode-range": "u+00??,u+0131,u+0152-0153,u+02bb-02bc,u+02c6,u+02da,u+02dc,u+0304,u+0308,u+0329,u+2000-206f,u+20ac,u+2122,u+2191,u+2193,u+2212,u+2215,u+feff,u+fffd"
+    },
+    {
+      "font-family": "__Spectral_Fallback_cfa357",
+      "src": "local(\"Times New Roman\")",
+      "ascent-override": "96.46%",
+      "descent-override": "42.17%",
+      "line-gap-override": "0.00%",
+      "size-adjust": "109.78%"
+    }
+  ]
+}

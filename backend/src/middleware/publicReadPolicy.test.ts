@@ -44,7 +44,7 @@ it('preserves cookies and real Express ETag conditional reads without permitting
     expect(await other.json()).toEqual({ market: 'INTERNATIONAL', price: 10 });
 });
 
-it.each(['/products', '/products/featured', '/products/bestsellers', '/products/search', '/products/cinnamon', '/categories', '/blog', '/blog/recent', '/blog/story', '/recipes', '/recipes/curry', '/gifts', '/gifts/classic'])('allows conditional public reads for %s', async path => {
+it.each(['/search', '/products', '/products/featured', '/products/bestsellers', '/products/search', '/products/cinnamon', '/categories', '/blog', '/blog/recent', '/blog/story', '/recipes', '/recipes/curry', '/gifts', '/gifts/classic'])('allows conditional public reads for %s', async path => {
     const res = await fetch(`${base}${path}`, { method: 'HEAD' });
     expect(res.headers.get('cache-control')).toBe('private, no-cache');
     expect(res.headers.get('vary')).toContain('Cookie');

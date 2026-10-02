@@ -14,7 +14,7 @@ export async function loadPlaywright() {
 // Browser-local observations only; records no HTML, headers, cookie or auth values.
 export function installObservers() {
   performance.setResourceTimingBufferSize(2500);
-  const metrics={lcpMs:null,cls:0,longTasks:[],events:[],clicks:[],supported:PerformanceObserver.supportedEntryTypes};
+  const metrics={lcpMs:null,cls:0,longTasks:[],events:[],clicks:[],pendingNavigation:null,supported:PerformanceObserver.supportedEntryTypes};
   window.__perf=metrics;
   let sessionValue=0,sessionFirst=0,sessionLast=0;
   function observe(type,fn,extra={}) {
@@ -34,7 +34,12 @@ export function installObservers() {
     requestAnimationFrame(()=>requestAnimationFrame(()=>{click.inputNextFrameMs=performance.now()-click.atMs}));
   },true);
   new MutationObserver(()=>{
-    const click=metrics.clicks.at(-1),node=document.querySelector('[data-route-loading]');
+    const pending=metrics.pendingNavigation,latest=metrics.clicks.at(-1);
+    if(pending&&latest&&pending.firstDomAtMs===null&&location.pathname===pending.target&&document.querySelector(pending.selector)){
+      pending.firstDomAtMs=performance.now();
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{pending.firstFrameAtMs=performance.now()}));
+    }
+    const click=latest,node=document.querySelector('[data-route-loading]');
     if(!click||click.loadingFeedbackMs!==null||!node)return;
     const b=node.getBoundingClientRect();
     if(b.width&&b.height)click.loadingFeedbackMs=performance.now()-click.atMs;
@@ -84,13 +89,17 @@ async function collect(page,network,stageSince) {
 
 async function navigateByClick(page,locator,target,readySelector,timeout=15000) {
   await locator.waitFor({state:'visible',timeout:15000});
-  const before=await page.evaluate(()=>window.__perf.clicks.length);
+  const before=await page.evaluate(({target,selector})=>{window.__perf.pendingNavigation={target,selector,firstDomAtMs:null,firstFrameAtMs:null};return window.__perf.clicks.length},{target,selector:readySelector});
   const clickWall=Date.now();
   await locator.click({timeout:15000});
   await page.waitForFunction(({target,selector})=>location.pathname===target&&!!document.querySelector(selector),{target,selector:readySelector},{timeout});
   const timing=await page.evaluate(({before})=>{
     const click=window.__perf.clicks[before];
-    return {clickToContentMs:click?performance.now()-click.atMs:null,inputNextFrameMs:click?.inputNextFrameMs??null,loadingFeedbackMs:click?.loadingFeedbackMs??null};
+    const readbackAtMs=performance.now(),pending=window.__perf.pendingNavigation;
+    return {clickToContentMs:click?readbackAtMs-click.atMs:null,inputNextFrameMs:click?.inputNextFrameMs??null,loadingFeedbackMs:click?.loadingFeedbackMs??null,
+      firstTargetDomMs:click&&pending&&pending.firstDomAtMs!==null?pending.firstDomAtMs-click.atMs:null,
+      firstTargetFrameMs:click&&pending&&pending.firstFrameAtMs!==null?pending.firstFrameAtMs-click.atMs:null,
+      observationReadbackMs:pending&&pending.firstDomAtMs!==null?readbackAtMs-pending.firstDomAtMs:null};
   },{before});
   return {...timing,automationElapsedMs:Date.now()-clickWall};
 }

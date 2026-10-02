@@ -1,5 +1,21 @@
 import { invalidateCatalogCache } from './simpleCache.js';
 
+export async function deliverRevalidation(paths: string[]): Promise<void> {
+    if (paths.length < 1 || paths.length > 32 || paths.some(path => !/^\/(?:$|products(?:\/[^/?#]+)?$|categories$|journal(?:\/[^/?#]+)?$|recipes(?:\/[^/?#]+)?$|gifts(?:\/[^/?#]+)?$|search$)/.test(path) || path.length > 512)) {
+        throw new Error('REVALIDATION_INVALID_PAYLOAD');
+    }
+    const secret = process.env.REVALIDATION_SECRET;
+    if (!secret) throw new Error('REVALIDATION_NOT_CONFIGURED');
+    const base = (process.env.FRONTEND_URL ?? '').split(',')[0]!.trim();
+    const url = new URL('/api/revalidate', base);
+    if (!['http:', 'https:'].includes(url.protocol)) throw new Error('REVALIDATION_NOT_CONFIGURED');
+    const response = await fetch(url, { method: 'POST', headers: { 'x-revalidate-secret': secret, 'content-type': 'application/json' },
+        body: JSON.stringify({ paths: [...new Set(paths)] }), signal: AbortSignal.timeout(3000) });
+    await response.arrayBuffer();
+    if (!response.ok) throw new Error('REVALIDATION_REJECTED');
+}
+
+
 // Invalidates public Next.js data/path caches. Single paths retain the legacy
 // GET contract; batches share one request and one three-second budget.
 // Non-fatal: failed invalidation falls back to the public data cache's TTL.

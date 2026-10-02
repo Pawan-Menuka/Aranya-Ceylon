@@ -11,6 +11,10 @@ export interface PublicRequestOptions {
 export function publicResource(path: string): { path: string; tags: string[]; ttl: number } {
   if (!path.startsWith("/") || path.startsWith("//") || path.includes("#")) throw new Error("Invalid public API path.");
   const url = new URL(path, "http://public.invalid");
+  if (url.pathname === "/search") {
+    url.searchParams.sort();
+    return { path: `${url.pathname}${url.search}`, tags: ["products", "blog"], ttl: 300 };
+  }
   const match = /^\/(products|categories|blog|recipes|gifts)(?:\/([^/]+))?$/.exec(url.pathname);
   if (!match || (match[1] === "categories" && match[2])) throw new Error("This API route is not a public cache resource.");
   const [, resource, identity] = match;

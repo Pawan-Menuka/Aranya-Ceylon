@@ -119,10 +119,24 @@ async function until(predicate, message, attempts = 100) {
 }
 const searchInput = page => page.locator('[data-screen-label="Search"] input[placeholder^="Search spices"]');
 const queryCalls = (search, market) => api.calls.filter(call => {
-  if (call.path !== '/products') return false;
+  if (call.path !== '/search') return false;
   const query = new URLSearchParams(call.query);
-  return query.get('search') === search && (!market || call.market === market);
+  return query.get('q') === search && (!market || call.market === market);
 });
+
+async function loadAllMatches(page, resource) {
+  const name = resource === 'products' ? 'Load more spices' : 'Load more stories';
+  const selector = resource === 'products' ? '[data-screen-label="Search"] .sr-grid h3' : '[data-screen-label="Search"] a[href^="/journal/"] h4';
+  let clicks = 0;
+  while (await page.getByRole('button', { name, exact: true }).count()) {
+    assert(clicks < 20, 'Search continuation did not terminate.');
+    const before = await page.locator(selector).count();
+    await page.getByRole('button', { name, exact: true }).click(); clicks++;
+    await page.waitForFunction(({ selector, before }) => document.querySelectorAll(selector).length > before, { selector, before });
+    assert(await page.locator('[data-screen-label="Search"] [role="alert"]').count() === 0, 'Search continuation exposed a failure.');
+  }
+  return clicks;
+}
 
 try {
   let ready = false;
@@ -204,131 +218,107 @@ try {
   await check('Search covers all 130 products across compact and remote pages', async () => {
     const { c, p } = await context();
     try {
-      await invalidate(['/products', '/search', '/journal']);
-      api.calls.length = 0;
+      await invalidate(['/products', '/search', '/journal']); api.calls.length = 0;
       await p.goto(base + '/search?q=Harvest', { waitUntil: 'domcontentloaded' });
-      await p.getByRole('button', { name: /Spices 130/ }).waitFor();
+      await p.getByRole('button', { name: /Spices 131/ }).waitFor();
+      assert(await p.locator('[data-screen-label="Search"] .sr-grid h3').count() === 20, 'First paint downloaded/rendered all product matches.');
+      assert(queryCalls('Harvest').length === 1, 'SSR search requested more than its first matching page.');
+      assert(!api.calls.some(call => call.path === '/products' || call.path === '/blog'), 'Search still downloaded a whole catalog/journal index.');
+      const clicks = await loadAllMatches(p, 'products');
       await p.getByText('Phase Seven Harvest 129', { exact: true }).waitFor();
-      await until(() => queryCalls('Harvest').some(call => new URLSearchParams(call.query).has('cursor')), 'Remote search never requested its second 100-product page.', 160);
-      const cards = api.calls.filter(call => call.path === '/products' && new URLSearchParams(call.query).get('view') === 'cards');
-      assert(cards.some(call => new URLSearchParams(call.query).has('cursor')), 'SSR compact index stopped after first page.');
-      return { products: 130, lastProduct: 129, compactPages: cards.length, remotePages: queryCalls('Harvest').length };
+      assert(await p.locator('[data-screen-label="Search"] .sr-grid h3').filter({ hasText: /^Phase Seven Harvest [0-9]{3}$/ }).count() === 130, 'User paging omitted a generated product.');
+      assert(queryCalls('Harvest').some(call => new URLSearchParams(call.query).has('productCursor')), 'Product Load more did not continue its cursor.');
+      return { generatedProducts: 130, globalMatches: 131, firstPage: 20, lastProduct: 129, loadMoreClicks: clicks, searchPages: queryCalls('Harvest').length, wholeIndexRequests: 0 };
     } finally { await c.close(); }
   });
 
   await check('Journal search covers all 63 articles beyond the first 50', async () => {
     const { c, p } = await context();
     try {
-      await invalidate(['/products', '/search', '/journal']);
-      api.calls.length = 0;
+      await invalidate(['/products', '/search', '/journal']); api.calls.length = 0;
       await p.goto(base + '/search?q=Chronicle', { waitUntil: 'domcontentloaded' });
       await p.getByRole('button', { name: /Journal 63/ }).waitFor();
+      assert(await p.locator('[data-screen-label="Search"] a[href^="/journal/"] h4').count() === 20, 'Journal first paint downloaded/rendered all matches.');
+      assert(queryCalls('Chronicle').length === 1, 'SSR journal search did not stop at its first page.');
+      const clicks = await loadAllMatches(p, 'journal');
       await p.getByText('Phase Seven Chronicle 062', { exact: true }).waitFor();
-      const pages = api.calls.filter(call => call.path === '/blog' && new URLSearchParams(call.query).has('cursor'));
-      assert(pages.length > 0, 'Journal index stopped after first 50 posts.');
-      return { journals: 63, lastArticle: 62, journalCursorPages: pages.length };
+      assert(await p.locator('[data-screen-label="Search"] a[href^="/journal/"] h4').count() === 63, 'Journal paging omitted a matching article.');
+      const pages = queryCalls('Chronicle').filter(call => new URLSearchParams(call.query).has('journalCursor'));
+      assert(pages.length > 0 && !api.calls.some(call => call.path === '/blog'), 'Journal search downloaded its old whole index.');
+      return { journals: 63, firstPage: 20, lastArticle: 62, loadMoreClicks: clicks, journalCursorPages: pages.length };
     } finally { await c.close(); }
   });
 
   await check('Changing search text discards a delayed former remote result', async () => {
-    const { c, p } = await context();
-    let release;
-    const held = new Promise(resolve => { release = resolve; });
-    let intercepted = 0;
+    const { c, p } = await context(); let release;
+    const held = new Promise(resolve => { release = resolve; }); let intercepted = 0;
     try {
-      await p.route('**/api/products?**', async route => {
-        if (new URL(route.request().url()).searchParams.get('search') === 'Harvest') {
-          intercepted++; await held; return route.continue().catch(() => {});
-        }
+      await p.route('**/api/search?**', async route => {
+        if (new URL(route.request().url()).searchParams.get('q') === 'Harvest') { intercepted++; await held; return route.continue().catch(() => {}); }
         return route.continue();
       });
-      await p.goto(base + '/search', { waitUntil: 'domcontentloaded' });
-      await searchInput(p).fill('Harvest');
-      await until(() => intercepted > 0, 'Debounced remote Harvest request did not start.');
-      await searchInput(p).fill('Chronicle');
-      await p.getByRole('button', { name: /Journal 63/ }).waitFor();
+      await p.goto(base + '/search', { waitUntil: 'load' }); await searchInput(p).fill('Harvest');
+      await until(() => intercepted > 0, 'Debounced compact Harvest request did not start.');
+      await searchInput(p).fill('Chronicle'); await p.getByRole('button', { name: /Journal 63/ }).waitFor();
       release(); await sleep(300);
-      assert(await p.getByText('Phase Seven Harvest 129', { exact: true }).count() === 0, 'Late Harvest result replaced Chronicle.');
-      assert(await p.getByText('Phase Seven Chronicle 062', { exact: true }).count() === 1, 'New query result disappeared.');
-      return { delayedOldRequest: true, newQueryRetained: true };
+      assert(await p.locator('[data-screen-label="Search"] .sr-grid h3').count() === 0, 'Late Harvest result replaced Chronicle.');
+      await p.getByText('Phase Seven Chronicle 000', { exact: true }).waitFor();
+      const clicks = await loadAllMatches(p, 'journal');
+      assert(await p.getByText('Phase Seven Chronicle 062', { exact: true }).count() === 1, 'New query lost matching later pages.');
+      return { delayedOldRequest: true, newQueryRetained: true, loadMoreClicks: clicks };
     } finally { release(); await c.close(); }
   });
 
-  await check('Remote failure keeps local results and retry returns complete backend matches', async () => {
-    const { c, p } = await context();
-    let attempts = 0;
+  await check('Remote failure exposes retry and returns complete backend matches', async () => {
+    const { c, p } = await context(); let attempts = 0;
     const diagnostics = [], responses = [];
-    p.on('response', response => {
-      const url = new URL(response.url());
-      if (url.pathname === '/api/products' && url.searchParams.get('search') === 'Harvest') {
-        responses.push({ status: response.status(), query: url.search });
-      }
-    });
+    p.on('response', response => { const url = new URL(response.url()); if (url.pathname === '/api/search' && url.searchParams.get('q') === 'Harvest') responses.push({ status: response.status(), query: url.search }); });
     const snapshot = async label => {
-      const page = await p.evaluate(() => ({
-        inputValue: document.querySelector('[data-screen-label="Search"] input[placeholder^="Search spices"]')?.value,
-        buttons: [...document.querySelectorAll('[data-screen-label="Search"] button')].map(button => button.textContent.trim().replace(/\s+/g, ' ')).filter(Boolean),
-        resultSummary: [...document.querySelectorAll('[data-screen-label="Search"] section p')].map(node => node.textContent.trim()).find(text => /results? for/.test(text)) || null,
+      const page = await p.evaluate(() => ({ inputValue: document.querySelector('[data-screen-label="Search"] input[placeholder^="Search spices"]')?.value,
+        buttons: [...document.querySelectorAll('[data-screen-label="Search"] button')].map(button => button.textContent.trim()),
         productNames: [...document.querySelectorAll('[data-screen-label="Search"] .sr-grid h3')].map(node => node.textContent.trim()),
-        url: location.pathname + location.search,
-      }));
-      diagnostics.push({ label, attempts, responses: [...responses], ...page,
-        apiSearchCalls: queryCalls('Harvest').map(call => ({ query: call.query, market: call.market, cursor: new URLSearchParams(call.query).get('cursor') })) });
-      fs.writeFileSync(path.join(output, 'case-six-diagnostics.json'), JSON.stringify(diagnostics, null, 2));
+        alert: document.querySelector('[data-screen-label="Search"] [role="alert"]')?.textContent || null }));
+      diagnostics.push({ label, attempts, responses: [...responses], ...page }); fs.writeFileSync(path.join(output, 'case-six-diagnostics.json'), JSON.stringify(diagnostics, null, 2));
     };
     try {
       api.calls.length = 0;
-      await p.route('**/api/products?**', route => {
-        if (new URL(route.request().url()).searchParams.get('search') === 'Harvest' && ++attempts === 1) {
-          return route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"Controlled unavailable"}' });
-        }
+      await p.route('**/api/search?**', route => {
+        if (new URL(route.request().url()).searchParams.get('q') === 'Harvest' && ++attempts === 1) return route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"Controlled unavailable"}' });
         return route.continue();
       });
       await p.goto(base + '/search', { waitUntil: 'load' });
-      // A suggestion click verifies that SearchClient's React handlers are
-      // mounted before we drive the controlled input for the retry scenario.
       await p.getByRole('button', { name: 'Cinnamon', exact: true }).click();
       await p.waitForFunction(() => document.querySelector('[data-screen-label="Search"] input[placeholder^="Search spices"]')?.value === 'Cinnamon');
-      await searchInput(p).fill('');
-      await p.getByText('Bestsellers to start with', { exact: true }).waitFor();
-      await searchInput(p).fill('Harvest');
-      await until(() => attempts === 1, 'First remote search did not fail.');
-      await p.getByRole('button', { name: /Spices 130/ }).waitFor();
-      await snapshot('after-failed-remote-local-fallback');
-      await searchInput(p).fill('');
-      await p.getByText('Bestsellers to start with', { exact: true }).waitFor();
-      await snapshot('after-clearing-query');
-      await searchInput(p).fill('Harvest');
-      await until(() => attempts >= 2, 'Changed query did not retry remote search.', 160);
-      await snapshot('after-second-request-started');
-      // The backend searches descriptions as well as names. The fixture's
-      // Malabar Black Pepper description says "harvested", so the complete
-      // remote result has 131 matches while the compact local fallback has 130.
+      await searchInput(p).fill(''); await p.getByText('Bestsellers to start with', { exact: true }).waitFor();
+      await searchInput(p).fill('Harvest'); await until(() => attempts === 1, 'First compact search did not fail.');
+      await p.locator('[data-screen-label="Search"] [role="alert"]').filter({ hasText: 'Controlled unavailable' }).waitFor();
+      assert(await p.locator('[data-screen-label="Search"] .sr-grid h3').count() === 0, 'Failed query substituted a stale/local full index.');
+      await snapshot('explicit-failure'); await p.getByRole('button', { name: 'Try again', exact: true }).click();
       await p.getByRole('button', { name: /Spices 131/ }).waitFor();
+      assert(await p.locator('[data-screen-label="Search"] .sr-grid h3').count() === 20, 'Retry awaited all matches before showing its first page.');
+      await snapshot('retry-first-page'); const clicks = await loadAllMatches(p, 'products');
       await p.getByText('Malabar Black Pepper', { exact: true }).waitFor();
-      assert(await p.locator('[data-screen-label="Search"] .sr-grid h3').filter({ hasText: /^Phase Seven Harvest \d{3}$/ }).count() === 130,
-        'Retry omitted a generated product.');
-      assert(responses.some(row => row.status === 200 && new URLSearchParams(row.query).has('cursor')),
-        'Retry did not complete its remote cursor page.');
-      await snapshot('after-second-request-completed');
-      return { forcedFailures: 1, attempts, localFallbackProducts: 130, completeRemoteProducts: 131, descriptionOnlyMatch: 'Malabar Black Pepper' };
-    } catch (error) {
-      await snapshot('failure').catch(() => {});
-      throw error;
-    } finally { await c.close(); }
+      assert(await p.locator('[data-screen-label="Search"] .sr-grid h3').filter({ hasText: /^Phase Seven Harvest [0-9]{3}$/ }).count() === 130, 'Retry paging omitted a generated product.');
+      assert(responses.some(row => row.status === 200 && new URLSearchParams(row.query).has('productCursor')), 'Retry did not continue through all matching pages.');
+      await snapshot('complete-after-user-paging');
+      return { forcedFailures: 1, attempts, firstPage: 20, completeRemoteProducts: 131, descriptionOnlyMatch: 'Malabar Black Pepper', loadMoreClicks: clicks };
+    } catch (error) { await snapshot('failure').catch(() => {}); throw error; }
+    finally { await c.close(); }
   });
 
   await check('Market switch reruns remote search with the new signed market', async () => {
     const { c, p } = await context();
     try {
-      api.calls.length = 0;
-      await p.goto(base + '/search?q=Harvest', { waitUntil: 'domcontentloaded' });
-      await until(() => queryCalls('Harvest', 'INTERNATIONAL').length > 0, 'Initial remote search missing.', 160);
+      await invalidate(['/search']); api.calls.length = 0;
+      await p.goto(base + '/search?q=Harvest', { waitUntil: 'load' });
+      await until(() => queryCalls('Harvest', 'INTERNATIONAL').length > 0, 'Initial compact search missing.', 160);
       await p.locator('footer').getByRole('button', { name: 'LKR', exact: true }).click();
-      await until(() => queryCalls('Harvest', 'LOCAL').length > 0, 'Market change did not rerun remote search.', 160);
+      await until(() => queryCalls('Harvest', 'LOCAL').length > 0, 'Market change did not rerun compact search.', 160);
       await p.getByRole('button', { name: /Spices 131/ }).waitFor();
-      await until(() => queryCalls('Harvest', 'LOCAL').some(call => new URLSearchParams(call.query).has('cursor')), 'Local search did not complete its cursor page.', 160);
-      return { marketSearches: ['INTERNATIONAL', 'LOCAL'], localRequests: queryCalls('Harvest', 'LOCAL').length };
+      await p.waitForFunction(() => document.querySelector('[data-screen-label="Search"] .sr-grid')?.textContent.includes('Rs '));
+      const clicks = await loadAllMatches(p, 'products');
+      assert(queryCalls('Harvest', 'LOCAL').some(call => new URLSearchParams(call.query).has('productCursor')), 'Local user paging did not continue all matches.');
+      return { marketSearches: ['INTERNATIONAL', 'LOCAL'], localRequests: queryCalls('Harvest', 'LOCAL').length, loadMoreClicks: clicks };
     } finally { await c.close(); }
   });
 

@@ -1,6 +1,9 @@
+import { adminContentPageSchema } from '@aranya/shared';
+import { listAdminPage } from '../../services/admin-page.service.js';
 import type { Request, Response } from 'express';
 import { prisma } from '../../lib/prisma.js';
 import { auditPublicMutation } from '../../lib/audit-public-mutation.js';
+import { publicMutation } from '../../lib/public-mutation.js';
 import { z } from 'zod';
 
 const blogFields = z.object({
@@ -34,7 +37,8 @@ const requireScheduledAt = (
 const createBlogSchema = blogFields.superRefine(requireScheduledAt);
 const updateBlogSchema = blogFields.partial().superRefine(requireScheduledAt);
 
-export async function listBlogs(_req: Request, res: Response) {
+export async function listBlogs(req: Request, res: Response) {
+    if (req.query.view === 'page') return res.json(await listAdminPage('blogs', adminContentPageSchema.parse(req.query)));
     const blogs = await prisma.blog.findMany({
         orderBy: { createdAt: 'desc' },
         take: 500, // bound an otherwise unlimited load (PERF-07) until this list is paginated
@@ -59,14 +63,14 @@ export async function createBlog(req: Request, res: Response) {
 
     let blog;
     try {
-        blog = await prisma.blog.create({
+        blog = await publicMutation(tx => tx.blog.create({
             data: {
                 ...data,
                 authorId: req.user!.userId,
                 publishedAt: data.status === 'PUBLISHED' ? new Date() : undefined,
                 scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : undefined,
             },
-        });
+        }), result => data.status === 'PUBLISHED' ? ['/', '/journal', '/search', `/journal/${result.slug}`] : []);
     } catch (err) {
         if ((err as { code?: string }).code === 'P2002') {
             return res.status(409).json({ error: 'A blog post with that slug already exists' });
@@ -93,7 +97,7 @@ export async function updateBlog(req: Request, res: Response) {
 
     let blog;
     try {
-        blog = await prisma.blog.update({
+        blog = await publicMutation(tx => tx.blog.update({
             where: { id },
             data: {
                 ...data,
@@ -102,7 +106,7 @@ export async function updateBlog(req: Request, res: Response) {
                     ? { publishedAt: new Date() }
                     : {}),
             },
-        });
+        }), result => ['/', '/journal', '/search', `/journal/${before.slug}`, `/journal/${result.slug}`]);
     } catch (err) {
         if ((err as { code?: string }).code === 'P2002') {
             return res.status(409).json({ error: 'A blog post with that slug already exists' });
@@ -143,7 +147,7 @@ export async function deleteBlog(req: Request, res: Response) {
     const blog = await prisma.blog.findUnique({ where: { id } });
     if (!blog) return res.status(404).json({ error: 'Blog not found' });
 
-    await prisma.blog.delete({ where: { id } });
+    await publicMutation(tx => tx.blog.delete({ where: { id } }), () => ['/', '/journal', '/search', `/journal/${blog.slug}`]);
 
     await auditPublicMutation({
         req, event: 'BLOG_DELETE',

@@ -95,6 +95,9 @@ jobs:
       - name: Production CORS and opt-in telemetry integration
         if: ${{ !cancelled() && hashFiles('aranya-next/.performance-build/baseline-source.json') != '' }}
         run: node scripts/performance/phase-eight-browser.mjs
+      - name: Bounded admin pages, complete remote search and pinned fonts
+        if: ${{ !cancelled() && hashFiles('aranya-next/.performance-build/baseline-source.json') != '' }}
+        run: node scripts/performance/phase-nine-browser.mjs
       - name: Analytics and scheduler ownership regressions
         working-directory: backend
         run: node node_modules/vitest/vitest.mjs run --exclude "**/*.integration.test.ts" src/controllers/admin/analytics.admin.controller.test.ts src/jobs
@@ -109,6 +112,8 @@ jobs:
           printf 'PG_BIN=%s\n' "$pg_bin" >> "$GITHUB_ENV"
       - name: Search repair on an owned disposable PostgreSQL cluster
         run: node scripts/performance/phase-eight-search-migration.mjs
+      - name: Complete migrations, bounded admin queries and remote search on owned PostgreSQL
+        run: node scripts/performance/phase-nine-api-pages.mjs
       - name: Upload measurements and screenshots
         if: always()
         uses: actions/upload-artifact@v7
@@ -124,6 +129,9 @@ jobs:
             artifacts/performance/phase-six-checks/
             artifacts/performance/phase-seven-checks/
             artifacts/performance/phase-eight-checks/
+            artifacts/performance/phase-nine-browser/
+            artifacts/performance/phase-nine-api-pages/
+            !artifacts/performance/phase-nine-api-pages/**/data/**
             artifacts/performance/phase-eight-search-repair/
             !artifacts/performance/phase-eight-search-repair/**/data/**
           retention-days: 14

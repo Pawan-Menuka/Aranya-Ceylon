@@ -1,6 +1,6 @@
 # Phase 8 release checklist
 
-Updated 2026-10-02. See [PR integration results](./PR_INTEGRATION_RESULTS.md) for published candidate #170 and its current checks; historical Phase 8 counts below describe their original snapshot. Hosting is unselected. Local preparation does not constitute deployment acceptance. The [release runbook](./RELEASE_RUNBOOK.md) supplies the procedures; [Phase 8 results](./PHASE_8_RESULTS.md) will hold final local evidence and timing limits.
+Updated 2026-10-02. See [PR integration results](./PR_INTEGRATION_RESULTS.md) for published candidate #170 and its current checks; historical Phase 8 counts below describe their original snapshot. [Phase 9 follow-up results](./PHASE_9_RESULTS.md) track the remaining local implementations. Hosting is unselected. Local preparation does not constitute deployment acceptance. The [release runbook](./RELEASE_RUNBOOK.md) supplies the procedures; [Phase 8 results](./PHASE_8_RESULTS.md) will hold final local evidence and timing limits.
 
 | Gate | Status | Remaining evidence |
 | --- | --- | --- |
@@ -12,9 +12,9 @@ Updated 2026-10-02. See [PR integration results](./PR_INTEGRATION_RESULTS.md) fo
 | Provider / region / capacity | Pending; no hosting selected | Sri Lanka→site, API→Singapore Neon, expected load, CPU/memory/connections and network capacity |
 | Authentication / carts / markets / staff roles | Local regression coverage only | Staging users, refresh rotation, ownership/merge/coupons, signed USD/LKR isolation and real visitor limits |
 | Stripe / PayHere / mail / uploads | Mocked or controlled local checks only | Sandbox gateways, duplicate/out-of-order raw webhooks, stock/order authority, sender/domain and media service configuration |
-| Scheduler / process / concurrency | Local controls tested | Exactly one active owner through restart/rollout, representative safe staging concurrency and graceful drain |
+| Scheduler / process / concurrency | Dedicated worker, durable queue, batching and database fences implemented in Phase 9 | Exactly one active owner through restart/rollout, representative safe staging concurrency and graceful drain |
 | Navigation / performance budgets | Open | Slow feedback/tails investigated and measured acceptance under hosted/real-device conditions; no blanket local timing pass |
 | Rollback / compatible rollout | Runbook prepared | Restore rehearsal, previous assets/contracts/configuration retained, coordinated identity/cache secrets, observed rollback duration |
 | Release decision | Pending | Reviewed candidate, all blockers closed, explicit handling of remaining budget exceptions, deployment instruction |
 
-No candidate commit/push, remote CI dispatch, hosting purchase, deployment, real account/payment/email action or connected-database migration is represented by these local checks. The owned-cluster harness writes only to its disposable loopback database and stops it afterward. Original public assets and the existing design remain part of the verified candidate.
+PR #170 has been published against Develop; its exact candidate CI is recorded separately. Hosting purchase, deployment, real account/payment/email actions and connected-database migrations have not occurred. The owned-cluster harness writes only to its disposable loopback database and stops it afterward. Original public assets and the existing design remain part of the verified candidate.

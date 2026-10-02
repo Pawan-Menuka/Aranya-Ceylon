@@ -4,13 +4,13 @@ import * as React from "react";
 import type { Spice, Market, Product } from "@/lib/types";
 import { useMarket } from "../MarketContext";
 import { Breadcrumb, Gallery, BuyBox } from "./BuyBox";
-import { ForestStory, FlavourProfile, Pairings, ReviewsBlock, Related } from "./Sections";
-import type { SanitizedHtml } from "@/lib/sanitized-html";
+import { Related } from "./Sections";
+
 
 // Composes the full product page below the (shared) navbar — ported from the
 // assembly in Product Detail.html. Market comes from context so currency + CTA
 // colour react to the switcher.
-export function ProductDetail({ spice, related, product, storyHtml }: { spice: Spice; related: React.ReactNode; product?: Product; storyHtml: SanitizedHtml[] }) {
+export function ProductDetail({ spice, related, product, editorial }: { spice: Spice; related: React.ReactNode; product?: Product; editorial: React.ReactNode }) {
   const { market } = useMarket();
   return (
     <div data-screen-label="Product detail">
@@ -23,10 +23,7 @@ export function ProductDetail({ spice, related, product, storyHtml }: { spice: S
           </div>
         </div>
       </div>
-      <ForestStory spice={spice} storyHtml={storyHtml} />
-      <FlavourProfile spice={spice} />
-      <Pairings spice={spice} />
-      <ReviewsBlock spice={spice} />
+      {editorial}
       {related}
     </div>
   );

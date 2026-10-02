@@ -26,8 +26,8 @@ vi.mock('../../lib/prisma.js', () => ({
     },
 }));
 
-import { getAuditLogs, getDashboard } from './analytics.admin.controller.js';
-import { _clearSimpleCache } from '../../lib/simpleCache.js';
+import { clearDashboardCache, getAuditLogs, getDashboard } from './analytics.admin.controller.js';
+
 
 function field(value: unknown, ...path: string[]): unknown {
     for (const key of path) {
@@ -49,7 +49,8 @@ beforeEach(() => {
     state.pendingArgs = undefined;
     state.auditArgs = undefined;
     vi.stubEnv('LKR_USD_RATE', '300');
-    _clearSimpleCache(); // getDashboard is now cached (perf audit #6) — start each test cold
+    vi.stubEnv('DASHBOARD_ROLLUPS_ENABLED', 'false');
+    clearDashboardCache();
 });
 
 afterEach(() => {
@@ -144,5 +145,25 @@ describe('admin audit log limit', () => {
         const res = responseDouble();
         await getAuditLogs(requestDouble({ query: { limit } }), res);
         expect(state.auditArgs).toMatchObject({ take: expectedTake });
+    });
+});
+
+describe('dashboard cache boundaries', () => {
+    it('single-flights concurrent admins and sets a private HTTP policy', async () => {
+        const responses = Array.from({ length: 12 }, () => responseDouble());
+        await Promise.all(responses.map(res => getDashboard(requestDouble({}), res)));
+        expect(state.queries).toHaveLength(2);
+        for (const res of responses) expect(res.headers['cache-control']).toBe('private, no-store');
+    });
+    it('does not reuse a previous UTC day or exchange rate response', async () => {
+        const first = responseDouble(); await getDashboard(requestDouble({}), first);
+        vi.stubEnv('LKR_USD_RATE', '325');
+        const changed = responseDouble(); await getDashboard(requestDouble({}), changed);
+        expect(field(changed.body, 'fxRate')).toBe(325);
+        expect(state.queries).toHaveLength(4);
+        vi.setSystemTime(new Date('2026-10-03T00:00:00.000Z'));
+        const nextDay = responseDouble(); await getDashboard(requestDouble({}), nextDay);
+        expect(state.queries).toHaveLength(6);
+        expect(state.queries[4]!.params).toEqual([new Date('2026-07-06T00:00:00.000Z'), new Date('2026-10-04T00:00:00.000Z')]);
     });
 });

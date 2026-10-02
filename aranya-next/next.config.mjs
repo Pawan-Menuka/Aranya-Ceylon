@@ -26,6 +26,10 @@ const nextConfig = {
   async headers() {
     return [
       {
+        source: '/fonts/pinned/:file([a-f0-9]{16}-s(?:[.]p)?[.]woff2)',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
+      },
+      {
         source: '/media/:version([a-f0-9]{16})/:path*',
         headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
       },

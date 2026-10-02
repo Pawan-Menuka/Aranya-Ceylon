@@ -12,6 +12,7 @@ import { pdContent, pdPrice } from "@/lib/pd-content";
 import { currencyForMarket } from "@/lib/money";
 import { SiteChrome } from "@/components/SiteChrome";
 import { ProductDetail, RelatedProducts } from "@/components/product/ProductDetail";
+import { ForestStory, FlavourProfile, Pairings, ReviewsBlock } from "@/components/product/Editorial";
 import type { Spice, Market, Product } from "@/lib/types";
 import { sanitizeHtml } from "@/lib/sanitize";
 
@@ -101,7 +102,7 @@ export default async function ProductPage({ params }: { params: { slug: string }
   return (
     <SiteChrome initialMarket={market}>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />
-      <ProductDetail spice={spice} product={product} storyHtml={pdContent(spice).story.map(sanitizeHtml)} related={
+      <ProductDetail spice={spice} product={product} editorial={<><ForestStory spice={spice} storyHtml={pdContent(spice).story.map(sanitizeHtml)} /><FlavourProfile spice={spice} /><Pairings spice={spice} /><ReviewsBlock spice={spice} /></>} related={
         <Suspense fallback={null}><RelatedContent spice={spice} product={product} /></Suspense>
       } />
     </SiteChrome>

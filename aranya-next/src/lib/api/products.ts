@@ -57,9 +57,10 @@ export function getFeatured(
 }
 
 export function getBestsellers(
-  revalidate: number | false = 300
+  revalidate: number | false = 300,
+  options: PublicRequestOptions = {}
 ): Promise<{ products: ProductCard[]; market: BackendMarket }> {
-  return publicApiFetch(`/products/bestsellers?view=cards`, { revalidate });
+  return publicApiFetch(`/products/bestsellers?view=cards`, { revalidate, ...options });
 }
 
 export function searchProducts(

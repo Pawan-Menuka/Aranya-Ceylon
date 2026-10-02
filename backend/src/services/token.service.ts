@@ -2,8 +2,18 @@ import crypto from 'crypto';
 import { createId } from '@paralleldrive/cuid2';
 import { prisma } from '../lib/prisma.js';
 import { signAccessToken } from '../lib/jwt.js';
-import type { User } from '@prisma/client';
+import type { User, Prisma } from '@prisma/client';
+import { enqueueEmail, sendVerificationEmail, sendPasswordResetEmail } from './email.service.js';
 
+// Caller owns the user/token/mail transaction. Token plaintext exists only in encrypted payload.
+export async function enqueueAuthEmail(tx: Prisma.TransactionClient, user: { id: string; email: string }, type: 'EMAIL_VERIFY' | 'PASSWORD_RESET'): Promise<void> {
+    const plaintext = createId() + createId();
+    const expiresAt = new Date(Date.now() + (type === 'EMAIL_VERIFY' ? 24 : 1) * 3600_000);
+    const record = await tx.token.create({ data: { userId: user.id, tokenHash: hashToken(plaintext), type, expiresAt } });
+    await enqueueEmail(tx, `auth:${record.id}`, () => type === 'EMAIL_VERIFY'
+        ? sendVerificationEmail({ to: user.email, token: plaintext })
+        : sendPasswordResetEmail({ to: user.email, token: plaintext }), new Date(expiresAt.getTime() - 60_000));
+}
 // How long refresh tokens live in the DB
 const REFRESH_TOKEN_EXPIRY_DAYS = 7;
 

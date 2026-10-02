@@ -4,6 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { cardProduct, catalogFixture, categoryFixture } from './catalog-fixture.mjs';
+import { phaseNineData, adminPageFixture, searchFixture } from './page-fixture.mjs';
 export const fixtureSecret = 'performance-fixtures-only-no-production-access';
 export function signedMarket(market, claims={}) {
   const h=Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url');
@@ -22,8 +23,9 @@ function verifiedMarket(token) {
     return claims.market==='local'?'LOCAL':'INTERNATIONAL';
   } catch { return 'INTERNATIONAL'; }
 }
-export async function startFixtureApi({port=4101,delayMs=0,faults=new Map()}={}) {
-  const data=JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)),'fixtures/catalog.json'),'utf8'));
+export async function startFixtureApi({port=4101,delayMs=0,faults=new Map(),phase9Rows=0,admin=false}={}) {
+  const source=JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)),'fixtures/catalog.json'),'utf8'));
+  const data=phase9Rows?phaseNineData(source,phase9Rows):source;
   const carts=new Map();
   const cartStats={created:0,bootstrapReads:0,shoppingWrites:0};
   const calls=[];
@@ -48,7 +50,23 @@ export async function startFixtureApi({port=4101,delayMs=0,faults=new Map()}={})
       if(!['local','international'].includes(input.market))return send({error:'Invalid market'},400);
       res.setHeader('set-cookie',`x-market=${signedMarket(input.market)}; Path=/; HttpOnly; SameSite=Lax`);return send({market:input.market});
     }
+    const adminToken=signedMarket('international',{sub:'fixture-admin',role:'ADMIN'});
+    const fixtureAdmin=admin&&(cookie['phase9-admin']===fixtureSecret||req.headers.authorization===`Bearer ${adminToken}`);
+    if(url.pathname==='/auth/refresh'&&req.method==='POST'&&fixtureAdmin)return send({accessToken:adminToken});
+    if(url.pathname==='/auth/me'&&req.method==='GET'&&fixtureAdmin)return send({user:{id:'fixture-admin',name:'Admin Fixture',email:'admin@example.invalid',role:'ADMIN',verified:true}});
     if(url.pathname.startsWith('/auth/'))return send({error:'Anonymous performance fixture'},401);
+    if(url.pathname==='/search'&&(req.method==='GET'||req.method==='HEAD')){
+      try{return send(searchFixture(data,url.searchParams,market));}catch{return send({error:'Invalid search query/cursor'},400);}
+    }
+    if(url.pathname.startsWith('/admin/')){
+      if(!fixtureAdmin)return send({error:'Protected performance fixture'},401);
+      if(req.method!=='GET')return send({error:'Fixture mutations are disabled'},405);
+      const resource=({'/admin/products':'products','/admin/blogs':'blogs','/admin/recipes':'recipes','/admin/gifts':'gifts','/admin/audit-logs':'audit'})[url.pathname];
+      if(resource){
+        try{return send(adminPageFixture(data,resource,url.searchParams));}catch{return send({error:'Invalid admin page query/cursor'},400);}
+      }
+      return send({error:'Unsupported protected fixture route'},404);
+    }
     if(url.pathname==='/products/featured')return send({products:products.filter(p=>p.featured).slice(0,4).map(p=>url.searchParams.get('view')==='cards'?cardProduct(p):p),market});
     if(url.pathname==='/products/bestsellers')return send({products:products.sort((a,b)=>(b._count?.orderItems||0)-(a._count?.orderItems||0)).slice(0,8).map(p=>url.searchParams.get('view')==='cards'?cardProduct(p):p),market});
     if(url.pathname==='/categories'&&url.searchParams.get('view')==='summary')return send(categoryFixture(products));
@@ -69,15 +87,16 @@ export async function startFixtureApi({port=4101,delayMs=0,faults=new Map()}={})
       return send({items,nextCursor:hasNextPage?items.at(-1)?.id:null,hasNextPage,market});
     }
     if(url.pathname.startsWith('/products/')){const p=products.find(p=>p.slug===decodeURIComponent(url.pathname.split('/')[2]));return p?send({product:p,market}):send({error:'Product not found'},404);}
+    const publishedBlogs=data.blogs.filter(row=>!row.status||row.status==='PUBLISHED');
     if(url.pathname==='/blog'||url.pathname==='/blog/recent'){
-      if(url.pathname.endsWith('/recent'))return send({blogs:data.blogs.slice(0,3)});
-      const limit=Number(url.searchParams.get('limit')||10),cursor=url.searchParams.get('cursor'),start=cursor?data.blogs.findIndex(p=>p.id===cursor)+1:0,items=data.blogs.slice(start,start+limit),hasNextPage=start+limit<data.blogs.length;
+      if(url.pathname.endsWith('/recent'))return send({blogs:publishedBlogs.slice(0,3)});
+      const limit=Number(url.searchParams.get('limit')||10),cursor=url.searchParams.get('cursor'),start=cursor?publishedBlogs.findIndex(p=>p.id===cursor)+1:0,items=publishedBlogs.slice(start,start+limit),hasNextPage=start+limit<publishedBlogs.length;
       return send({items,nextCursor:hasNextPage?items.at(-1)?.id:null,hasNextPage});
     }
-    if(url.pathname.startsWith('/blog/')){const blog=data.blogs.find(b=>b.slug===url.pathname.split('/')[2]);return blog?send({blog}):send({error:'Not found'},404);}
-    if(url.pathname==='/recipes')return send({recipes:data.recipes});
-    if(url.pathname.startsWith('/recipes/'))return send({recipe:data.recipes.find(r=>r.slug===url.pathname.split('/')[2])});
-    if(url.pathname==='/gifts')return send({gifts:data.gifts});
+    if(url.pathname.startsWith('/blog/')){const blog=publishedBlogs.find(b=>b.slug===url.pathname.split('/')[2]);return blog?send({blog}):send({error:'Not found'},404);}
+    if(url.pathname==='/recipes')return send({recipes:data.recipes.filter(row=>!row.status||row.status==='PUBLISHED')});
+    if(url.pathname.startsWith('/recipes/'))return send({recipe:data.recipes.find(r=>(!r.status||r.status==='PUBLISHED')&&r.slug===url.pathname.split('/')[2])});
+    if(url.pathname==='/gifts')return send({gifts:data.gifts.filter(row=>!row.status||row.status==='PUBLISHED')});
     if(url.pathname.startsWith('/cart')){
       if(url.pathname==='/cart/bootstrap'){cartStats.bootstrapReads++;return send({cart:carts.get(cookie.guestCartToken)||null,market});}
       if(url.pathname==='/cart/items'&&req.method==='POST'){

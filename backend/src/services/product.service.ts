@@ -228,11 +228,11 @@ export async function searchAutocomplete(
 // ----------------------------------------------------------------
 
 // --- Create product (admin only) ---
-export async function createProduct(data: CreateProductInput) {
+export async function createProduct(data: CreateProductInput, tx: Prisma.TransactionClient = prisma) {
     const { variants, ...productData } = data;
     const color = productData.color || computeProductColor(productData.name, productData.slug);
 
-    const product = await prisma.product.create({
+    const product = await tx.product.create({
         data: {
             ...productData,
             color,
@@ -248,10 +248,10 @@ export async function createProduct(data: CreateProductInput) {
 // id within a transaction: rows with an `id` are updated, rows without are
 // created, and existing variants missing from the payload are deleted ONLY if
 // no order/cart item references them (kept otherwise to preserve order history).
-export async function updateProduct(id: string, data: UpdateProductInput) {
+export async function updateProduct(id: string, data: UpdateProductInput, tx?: Prisma.TransactionClient) {
     const { variants, ...fields } = data;
 
-    return prisma.$transaction(async (tx) => {
+    const work = async (tx: Prisma.TransactionClient) => {
         await tx.product.update({
             where: { id },
             data: {
@@ -310,7 +310,8 @@ export async function updateProduct(id: string, data: UpdateProductInput) {
 
         const product = await tx.product.findUniqueOrThrow({ where: { id }, include: adminProductIncludes });
         return enrichProductWithRatingAvg(product);
-    });
+    };
+    return tx ? work(tx) : prisma.$transaction(work);
 }
 
 // --- Soft delete (archive) product (admin only) ---
@@ -318,8 +319,8 @@ export async function updateProduct(id: string, data: UpdateProductInput) {
 // product's Cloudinary images — doing so left broken image URLs behind if the
 // product was later un-archived (BUG-24). Images are only removed on a true
 // hard delete or explicit image removal, never here.
-export async function archiveProduct(id: string) {
-    return prisma.product.update({
+export async function archiveProduct(id: string, tx: Prisma.TransactionClient = prisma) {
+    return tx.product.update({
         where: { id },
         data: { status: 'ARCHIVED' },
     });
@@ -333,4 +334,12 @@ export async function adminListProducts() {
         take: 500, // bound an otherwise unlimited load with variants+images (PERF-07)
     });
     return enrichProductsWithRatingAvg(products);
+}
+
+// Bounded admin page hydration preserves the existing inline editor contract.
+export async function getAdminProductsByIds(ids: string[]) {
+    if (!ids.length) return [];
+    return enrichProductsWithRatingAvg(await prisma.product.findMany({
+        where: { id: { in: ids } }, include: adminProductIncludes,
+    }));
 }

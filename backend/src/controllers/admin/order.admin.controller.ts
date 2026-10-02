@@ -1,4 +1,7 @@
 import type { Request, Response } from 'express';
+import { createHash } from 'node:crypto';
+import { outboxEnabled } from '../../lib/outbox.js';
+import { enqueueEmail } from '../../services/email.service.js';
 import { prisma } from '../../lib/prisma.js';
 import { writeAuditLog } from '../../services/audit.service.js';
 import { sendShippingNotification } from '../../services/email.service.js';
@@ -140,12 +143,18 @@ export async function updateOrderStatus(req: Request, res: Response) {
             data: { orderId: id, status, note: note ?? `Status updated to ${status}` },
         });
 
+        const recipient = updated.user?.email ?? updated.guestEmail;
+        if (outboxEnabled() && status === 'SHIPPED' && trackingNumber && recipient) {
+            const episode = createHash('sha256').update(trackingNumber).digest('hex');
+            await enqueueEmail(tx, `shipped:${id}:${episode}`,
+                () => sendShippingNotification({ to: recipient, orderId: id, trackingNumber, market: updated.market }));
+        }
         return updated;
     });
 
     // P3-5: send shipping email — fall back to guestEmail so guest orders are notified
     const shippingRecipient = order.user?.email ?? (order as { guestEmail?: string | null }).guestEmail ?? null;
-    if (status === 'SHIPPED' && trackingNumber && shippingRecipient) {
+    if (!outboxEnabled() && status === 'SHIPPED' && trackingNumber && shippingRecipient) {
         await sendShippingNotification({
             to: shippingRecipient,
             orderId: id,

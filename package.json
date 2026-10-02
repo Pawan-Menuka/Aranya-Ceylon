@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "packageManager": "pnpm@9.15.9",
   "engines": {
-    "node": ">=20.0.0",
+    "node": ">=22.0.0 <23",
     "pnpm": ">=9.0.0"
   },
   "scripts": {
@@ -34,6 +34,8 @@
     "perf:synthetic-sql-checks": "node scripts/performance/phase-seven-sql.mjs",
     "perf:release-checks": "node scripts/performance/phase-eight-browser.mjs",
     "perf:search-repair-checks": "node scripts/performance/phase-eight-search-migration.mjs",
+    "perf:followup-checks": "node scripts/performance/phase-nine-browser.mjs",
+    "perf:page-query-checks": "node scripts/performance/phase-nine-api-pages.mjs",
     "perf:staging-reads": "node scripts/performance/staging-readiness.mjs"
   },
   "pnpm": {

@@ -1,6 +1,10 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { sendSupportNotification } from '../services/email.service.js';
+import { randomUUID } from 'node:crypto';
+import { prisma } from '../lib/prisma.js';
+import { outboxEnabled } from '../lib/outbox.js';
+import { enqueueEmail } from '../services/email.service.js';
 
 const wholesaleSchema = z.object({
     company: z.string().min(1),
@@ -22,11 +26,10 @@ export async function submitWholesale(req: Request, res: Response) {
         return res.status(400).json({ error: 'Consent is required.' });
     }
 
-    const ref = `WS-${Date.now().toString(36).toUpperCase()}`;
+    const ref = `WS-${randomUUID().toUpperCase()}`;
 
     // Notify the wholesale/support inbox so leads aren't silently lost (BUG-10).
-    try {
-        await sendSupportNotification({
+    const notify = () => sendSupportNotification({
             subject: `Wholesale application: ${data.company} (${ref})`,
             replyTo: data.email,
             fields: [
@@ -40,11 +43,12 @@ export async function submitWholesale(req: Request, res: Response) {
                 ['Website', data.website ?? '—'],
                 ['Message', data.message ?? '—'],
             ],
-        });
-    } catch (err) {
-        console.error('[wholesale] notification failed', { ref, err });
+    });
+    if (outboxEnabled()) {
+        await prisma.$transaction(tx => enqueueEmail(tx, `support:${ref}`, notify));
+    } else {
+        try { await notify(); } catch { console.error('[wholesale] notification failed', { ref }); }
     }
-    console.info('[wholesale]', { ref, company: data.company, email: data.email, country: data.country });
 
     return res.status(201).json({ ref, message: 'Your application has been received. We will be in touch within 3 business days.' });
 }

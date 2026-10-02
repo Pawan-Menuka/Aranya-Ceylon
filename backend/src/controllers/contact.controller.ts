@@ -1,6 +1,10 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { sendSupportNotification } from '../services/email.service.js';
+import { randomUUID } from 'node:crypto';
+import { prisma } from '../lib/prisma.js';
+import { outboxEnabled } from '../lib/outbox.js';
+import { enqueueEmail } from '../services/email.service.js';
 
 const contactSchema = z.object({
     name: z.string().min(1),
@@ -19,13 +23,12 @@ export async function submitContact(req: Request, res: Response) {
     }
 
     // Generate a reference number for the user to quote in follow-ups
-    const ref = `AC-${Date.now().toString(36).toUpperCase()}`;
+    const ref = `AC-${randomUUID().toUpperCase()}`;
 
     // Notify the support inbox so enquiries aren't silently lost (BUG-10).
     // Best-effort — a mail failure must not lose the submission or 500 the user;
     // it's logged (and, with no RESEND key, degrades to a logged send).
-    try {
-        await sendSupportNotification({
+    const notify = () => sendSupportNotification({
             subject: `Contact enquiry: ${data.subject} (${ref})`,
             replyTo: data.email,
             fields: [
@@ -35,11 +38,13 @@ export async function submitContact(req: Request, res: Response) {
                 ['Subject', data.subject],
                 ['Message', data.message],
             ],
-        });
-    } catch (err) {
-        console.error('[contact] notification failed', { ref, err });
+    });
+    if (outboxEnabled()) {
+        // Acknowledgement means the encrypted submission is durable, even during a provider outage.
+        await prisma.$transaction(tx => enqueueEmail(tx, `support:${ref}`, notify));
+    } else {
+        try { await notify(); } catch { console.error('[contact] notification failed', { ref }); }
     }
-    console.info('[contact]', { ref, name: data.name, email: data.email, subject: data.subject });
 
     return res.status(201).json({ ref, message: 'Your message has been received.' });
 }
