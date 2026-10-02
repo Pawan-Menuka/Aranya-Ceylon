@@ -1,0 +1,66 @@
+# Single VPS with Caddy directly facing visitors, without a CDN/load balancer.
+# Replace example domains; validate with the chosen Caddy version on staging.
+# Next binds 127.0.0.1:3000; API_HOST=127.0.0.1, PORT=4000.
+# Neither application port may be reachable from the public network.
+# No proxy response cache, request buffering, automatic retries or access logs.
+
+staging.example.com {
+    reverse_proxy 127.0.0.1:3000 {
+        # SET overwrites every incoming assertion; never use an incoming XFF.
+        header_up X-Aranya-Verified-Client-Ip {remote_host}
+        header_up -X-Aranya-Bff-Client-Ip
+        header_up -X-Aranya-Bff-Client-Time
+        header_up -X-Aranya-Bff-Client-Signature
+        header_up -X-Real-Ip
+        header_up -CF-Connecting-Ip
+        # Caddy constructs X-Forwarded-* from its direct peer by default.
+        # The BFF drops forwarded-IP headers before contacting the API.
+        transport http {
+            dial_timeout 5s
+            response_header_timeout 130s
+            keepalive 4s
+        }
+    }
+}
+
+api-staging.example.com {
+    # Gateway payloads/methods/paths pass unchanged to their raw-body verifiers.
+    @gateway path /webhooks/*
+    handle @gateway {
+        reverse_proxy 127.0.0.1:4000 {
+            header_up -X-Aranya-Verified-Client-Ip
+            header_up -X-Aranya-Bff-Client-Ip
+            header_up -X-Aranya-Bff-Client-Time
+            header_up -X-Aranya-Bff-Client-Signature
+            header_up -X-Real-Ip
+            header_up -CF-Connecting-Ip
+            transport http {
+                dial_timeout 5s
+                response_header_timeout 130s
+                keepalive 30s
+            }
+        }
+    }
+    @health {
+        path /health
+        method GET HEAD
+    }
+    handle @health {
+        reverse_proxy 127.0.0.1:4000 {
+            header_up -X-Aranya-Verified-Client-Ip
+            header_up -X-Aranya-Bff-Client-Ip
+            header_up -X-Aranya-Bff-Client-Time
+            header_up -X-Aranya-Bff-Client-Signature
+            header_up -X-Real-Ip
+            header_up -CF-Connecting-Ip
+            transport http {
+                dial_timeout 5s
+                response_header_timeout 40s
+                keepalive 30s
+            }
+        }
+    }
+    handle {
+        respond "Not found" 404
+    }
+}

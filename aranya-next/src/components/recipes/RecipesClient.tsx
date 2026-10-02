@@ -24,7 +24,7 @@ export function RIcon({ name, size = 18, stroke = "currentColor", w = 1.7 }: { n
 function RecipeImage({ recipe, ratio = "3 / 2", radius = 9 }: { recipe: Recipe; ratio?: string; radius?: number }) {
   return (
     <div style={{ position: "relative", borderRadius: radius, overflow: "hidden", aspectRatio: ratio }}>
-      <ImageSlot id={recipe.slot} shape="rect" fit="cover" placeholder={`Drop a photo of ${recipe.title}`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
+      <ImageSlot id={recipe.slot} shape="rect" fit="cover" sizes="(max-width: 720px) calc(100vw - 80px), (max-width: 1024px) calc(50vw - 50px), (max-width: 1280px) calc(33vw - 43px), 380px" placeholder={`Drop a photo of ${recipe.title}`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
       <div style={{ position: "absolute", inset: 0, background: `linear-gradient(155deg, ${recipe.accent}33, ${recipe.accent}aa)`, mixBlendMode: "multiply", pointerEvents: "none" }} />
     </div>
   );

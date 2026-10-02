@@ -37,7 +37,7 @@ function WholesaleHero({ market, scrollToForm }: { market: Market; scrollToForm:
   const stats: [string, string][] = [["5 kg", "Lowest MOQ per spice"], ["48 hrs", "Application review"], ["40+", "Countries shipped"], ["GI", "Certified single-origin"]];
   return (
     <header data-hero style={{ position: "relative", minHeight: "92vh", background: "#161412", color: "#FDFAF5", overflow: "hidden", display: "flex", alignItems: "flex-end" }}>
-      <ImageSlot id="wholesale-hero" shape="rect" fit="cover" placeholder="Drop a hero photo — sacks of spice / warehouse / hands with bulk cinnamon" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
+      <ImageSlot id="wholesale-hero" shape="rect" fit="cover" priority sizes="100vw" placeholder="Drop a hero photo — sacks of spice / warehouse / hands with bulk cinnamon" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(150deg, rgba(15,110,86,.36), rgba(11,16,13,.62))", mixBlendMode: "multiply", pointerEvents: "none" }} />
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(10,8,6,.55) 0%, transparent 30%, transparent 44%, rgba(10,8,6,.86) 100%)", pointerEvents: "none" }} />
       <div className="home-section-pad" style={{ position: "relative", maxWidth: 1280, margin: "0 auto", padding: "0 40px 76px", width: "100%" }}>

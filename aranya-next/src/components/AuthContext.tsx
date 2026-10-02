@@ -3,9 +3,10 @@
 import * as React from "react";
 import type { AuthUser } from "@/lib/api/auth";
 import { login as apiLogin, register as apiRegister, refresh as apiRefresh, me as apiMe, logout as apiLogout } from "@/lib/api/auth";
-import { mergeCart } from "@/lib/api/cart";
+import { mergeCart, waitForCartMutations } from "@/lib/api/cart";
 import { ACCOUNT } from "@/lib/account-data";
 import { DEMO_MODE } from "@/lib/demo";
+import { withRequestDeadline } from "@/lib/api/request-deadline";
 
 // Auth context (spec §6/§7.3). Access token lives in memory (lib/api/http.ts);
 // the refresh token is an HttpOnly cookie via the BFF. On mount we try a silent
@@ -23,6 +24,9 @@ interface AuthCtx {
   user: AuthUser | null;
   loading: boolean;
   demo: boolean;
+  sessionError: string | null;
+  sessionRevision: number;
+  retrySession: () => void;
   signIn: (email: string, password: string) => Promise<SignInResult>;
   signUp: (name: string, email: string, password: string) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
@@ -46,23 +50,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<AuthUser | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [demo, setDemo] = React.useState(false);
+  const [sessionError, setSessionError] = React.useState<string | null>(null);
+  const [restoreRevision, setRestoreRevision] = React.useState(0);
+  const [sessionRevision, setSessionRevision] = React.useState(0);
+  const operationRef = React.useRef(0);
+  const restoreAbortRef = React.useRef<AbortController | null>(null);
+  const restoreRefreshRef = React.useRef<Promise<boolean> | null>(null);
+  const restoreWorkRef = React.useRef<Promise<void> | null>(null);
+  const retrySession = React.useCallback(() => setRestoreRevision(n => n + 1), []);
 
   React.useEffect(() => {
     let alive = true;
-    (async () => {
+    const controller = new AbortController();
+    const operation = ++operationRef.current;
+    restoreAbortRef.current = controller;
+    const current = () => alive && operationRef.current === operation;
+    setLoading(true);
+    setSessionError(null);
+    restoreWorkRef.current = (async () => {
       try {
-        if (await apiRefresh()) {
-          const u = await apiMe();
-          if (alive && u) setUser(u);
-        }
+        await withRequestDeadline(10000, controller.signal, async (signal) => {
+          const refresh = apiRefresh();
+          restoreRefreshRef.current = refresh;
+          if (await refresh) {
+            if (signal.aborted) throw signal.reason;
+            const u = await apiMe({ signal });
+            if (current()) setUser(u);
+          } else if (current()) {
+            setUser(null);
+          }
+        });
       } catch {
-        /* not signed in */
+        if (current()) setSessionError("We couldn't check your session. Please try again.");
       } finally {
-        if (alive) setLoading(false);
+        if (current()) setLoading(false);
       }
     })();
-    return () => { alive = false; };
-  }, []);
+    return () => { alive = false; controller.abort(); };
+  }, [restoreRevision]);
 
   const afterAuth = React.useCallback(async () => {
     // Merge the guest cart into the user cart on login (spec §7.4). Best-effort.
@@ -74,20 +99,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = React.useCallback(async (email: string, password: string): Promise<SignInResult> => {
+    await restoreWorkRef.current;
+    await waitForCartMutations();
+    const operation = ++operationRef.current;
+    restoreAbortRef.current?.abort();
+    setLoading(true);
     try {
+      // Await the already-started refresh; never launch another refresh for login.
+      // Its token result must settle before login installs the new access token.
+      await restoreRefreshRef.current?.catch(() => false);
+      // Queued guest writes drained before loading was set; do not deadlock the
+      // provider's auth-ready gate by trying to drain after pausing its session.
       const u = await apiLogin(email, password);
-      setUser(u);
-      setDemo(false);
       await afterAuth();
+      if (operationRef.current === operation) {
+        setUser(u);
+        setDemo(false);
+        setSessionError(null);
+        setSessionRevision(n => n + 1);
+      }
       return { user: u, demo: false };
     } catch (e) {
-      if (isOffline(e)) {
+      if (isOffline(e) && operationRef.current === operation) {
         const demoUser = { ...DEMO_USER, email: email || DEMO_USER.email };
         setUser(demoUser);
         setDemo(true);
+        setSessionError(null);
+        setSessionRevision(n => n + 1);
         return { user: demoUser, demo: true };
       }
       throw e;
+    } finally {
+      if (operationRef.current === operation) setLoading(false);
     }
   }, [afterAuth]);
 
@@ -99,8 +142,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { pending: true, demo: false, message: res.message };
     } catch (e) {
       if (isOffline(e)) {
+        operationRef.current += 1;
+        restoreAbortRef.current?.abort();
         setUser({ ...DEMO_USER, name: name || DEMO_USER.name, email: email || DEMO_USER.email });
         setDemo(true);
+        setSessionError(null);
+        setSessionRevision(n => n + 1);
+        setLoading(false);
         return { pending: false, demo: true };
       }
       throw e;
@@ -108,16 +156,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = React.useCallback(async () => {
+    await restoreWorkRef.current;
+    await waitForCartMutations();
+    const operation = ++operationRef.current;
+    restoreAbortRef.current?.abort();
+    setLoading(true);
+    let failed = false;
     try {
+      await restoreRefreshRef.current?.catch(() => false);
       if (!demo) await apiLogout();
+    } catch (error) {
+      failed = true;
+      throw error;
     } finally {
-      setUser(null);
-      setDemo(false);
+      if (operationRef.current === operation) {
+        setUser(null);
+        setDemo(false);
+        setSessionError(failed ? "We couldn't finish signing out. Please try again." : null);
+        setSessionRevision(n => n + 1);
+        setLoading(false);
+      }
     }
   }, [demo]);
 
-  const value = React.useMemo<AuthCtx>(() => ({ user, loading, demo, signIn, signUp, signOut }), [user, loading, demo, signIn, signUp, signOut]);
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  const value = React.useMemo<AuthCtx>(() => ({ user, loading, demo, sessionError, sessionRevision, retrySession, signIn, signUp, signOut }), [user, loading, demo, sessionError, sessionRevision, retrySession, signIn, signUp, signOut]);
+  return React.createElement(Ctx.Provider, { value }, children);
 }
 
 export function useAuth(): AuthCtx {

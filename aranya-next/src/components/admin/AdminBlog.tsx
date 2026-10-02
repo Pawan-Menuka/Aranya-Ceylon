@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { useAdminPage } from "./useAdminPage";
+import { AdminPagination } from "./AdminPagination";
 import { ADMIN, type AdminBlogPost } from "@/lib/admin-data";
 import { AIcon, Pill, FlagRow } from "./AdminPrimitives";
 import { createBlog, updateBlog, deleteBlog, getAdminBlog, listAdminBlogs, type BlogPublishMode, type AdminBlogPost as ApiBlogPost } from "@/lib/api/admin";
@@ -222,23 +224,25 @@ export function AdminBlog() {
   const [edit, setEdit] = React.useState<BlogDraft | null>(null);
   const [saveError, setSaveError] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    listAdminBlogs().then(({ blogs }) => {
-      setRows(blogs?.map(backendBlogToAdmin) ?? []);
-    }).catch(() => { /* fetch failed — keep whatever's there (demo only in demo mode) */ });
-  }, []);
+  const filters = React.useMemo(() => ({ q: q.trim(), status: tab === "all" ? undefined : tab.toUpperCase() }), [q, tab]);
+  const loadPage = React.useCallback(async (cursor: string | undefined, signal: AbortSignal) => {
+    const response = await listAdminBlogs({ ...filters, cursor }, { signal });
+    return { ...response, items: response.blogs.map(backendBlogToAdmin) };
+  }, [filters]);
+  const page = useAdminPage(JSON.stringify(filters), loadPage, setRows);
 
-  const filtered = React.useMemo(() => rows.filter((p) => {
+  const filtered = React.useMemo(() => page.hasLiveData ? rows : DEMO_MODE ? rows.filter((p) => {
     if (tab !== "all" && p.status !== tab) return false;
     if (q && !p.title.toLowerCase().includes(q.toLowerCase())) return false;
     return true;
-  }), [rows, tab, q]);
+  }) : [], [rows, tab, q, page.hasLiveData]);
 
   const counts = React.useMemo(() => {
     const c: Record<string, number> = {};
     BLOG_TABS.forEach((t) => { c[t.key] = t.key === "all" ? rows.length : rows.filter((p) => p.status === t.key).length; });
+    if (page.hasLiveData || !DEMO_MODE) for (const key of Object.keys(c)) c[key] = page.counts[key === "all" ? "all" : key.toUpperCase()] ?? 0;
     return c;
-  }, [rows]);
+  }, [rows, page.hasLiveData, page.counts]);
 
   const save = async (p: BlogSavePayload) => {
     const statusMap: Record<string, "DRAFT" | "SCHEDULED" | "PUBLISHED"> = { Draft: "DRAFT", Scheduled: "SCHEDULED", Published: "PUBLISHED" };
@@ -270,6 +274,7 @@ export function AdminBlog() {
         setRows((prev) => [backendBlogToAdmin(blog), ...prev.filter((x) => x.slug !== slug)]);
       }
       setEdit(null);
+      page.refresh(!backendId);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "The post could not be saved. No local success state was applied.");
       throw error;
@@ -311,10 +316,11 @@ export function AdminBlog() {
         </div>
         <div className="ad-search" style={{ marginLeft: "auto", width: 240 }}>
           <AIcon name="search" size={15} stroke="var(--ad-faint)" />
-          <input placeholder="Search posts…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input maxLength={200} placeholder="Search posts…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
       </div>
       <BlogTable rows={filtered} onOpen={setEdit} />
+      <AdminPagination page={page} size={filtered.length} label="blogs" />
       {edit && <BlogEditor post={edit} onClose={() => setEdit(null)} onSave={save} onDelete={remove} />}
     </div>
   );

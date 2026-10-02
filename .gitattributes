@@ -1,0 +1,4 @@
+# Hash-pinned font CSS and upstream licenses must retain exact bytes across OSes.
+aranya-next/src/app/fonts.css -text
+aranya-next/public/fonts/pinned/*.woff2 binary
+aranya-next/public/fonts/pinned/*-OFL.txt -text whitespace=-blank-at-eol

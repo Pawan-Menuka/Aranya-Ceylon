@@ -1,3 +1,4 @@
+import { listAuditLogs } from '../controllers/admin/audit-page.controller.js';
 import { Router } from 'express';
 import { requireAuth, requireRole } from '../middleware/authenticate.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
@@ -16,7 +17,7 @@ router.use(asyncHandler(requireAuth), requireRole('ADMIN', 'SUPERADMIN'), adminL
 
 // --- Analytics ---
 router.get('/dashboard', asyncHandler(analyticsAdmin.getDashboard));
-router.get('/audit-logs', asyncHandler(analyticsAdmin.getAuditLogs));
+router.get('/audit-logs', asyncHandler(listAuditLogs));
 
 // --- Orders ---
 router.get('/orders', asyncHandler(orderAdmin.listOrders));

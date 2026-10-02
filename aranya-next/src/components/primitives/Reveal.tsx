@@ -49,6 +49,7 @@ export function Reveal({
     Tag as string,
     {
       ref,
+      "data-scroll-reveal": "",
       style: {
         ...style,
         opacity: shown ? 1 : 0,

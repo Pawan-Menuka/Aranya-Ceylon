@@ -1,4 +1,4 @@
-import { apiFetch, setAccessToken } from "./http";
+import { apiFetch, refreshSession, setAccessToken } from "./http";
 
 // Spec §6 — /auth. The refresh token is an HttpOnly cookie (handled by the BFF);
 // the access token comes back in the body and is held in memory only (never
@@ -59,23 +59,15 @@ export async function resetPassword(token: string, password: string): Promise<{ 
 }
 
 export async function refresh(): Promise<boolean> {
-  try {
-    const data = await apiFetch<{ accessToken: string }>("/auth/refresh", { method: "POST" });
-    if (data.accessToken) {
-      setAccessToken(data.accessToken);
-      return true;
-    }
-  } catch {
-    /* no valid refresh cookie */
-  }
-  return false;
+  return refreshSession();
 }
 
-export async function me(): Promise<AuthUser | null> {
+export async function me(options: { signal?: AbortSignal } = {}): Promise<AuthUser | null> {
   try {
-    const data = await apiFetch<{ user: AuthUser }>("/auth/me", { auth: true });
+    const data = await apiFetch<{ user: AuthUser }>("/auth/me", { auth: true, ...options });
     return data.user;
-  } catch {
+  } catch (error) {
+    if ((error as { status?: number }).status !== 401) throw error;
     return null;
   }
 }

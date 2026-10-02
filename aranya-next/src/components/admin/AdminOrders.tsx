@@ -4,6 +4,7 @@ import * as React from "react";
 import { ADMIN, type AdminOrder, type AdminMarket } from "@/lib/admin-data";
 import { AIcon, Pill, MarketTag, Avatar } from "./AdminPrimitives";
 import { updateOrderStatus, refundOrder, listAdminOrders, getAdminOrder } from "@/lib/api/admin";
+import { readPages } from "@/lib/read-pages";
 import { exportCsv } from "@/lib/csv";
 import { LKR_PER_USD } from "@/lib/fx";
 import { DEMO_MODE } from "@/lib/demo";
@@ -337,9 +338,13 @@ export function AdminOrders() {
   const [nextCursor, setNextCursor] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [refreshKey, setRefreshKey] = React.useState(0);
+  const [exporting, setExporting] = React.useState(false);
+  const exportController = React.useRef<AbortController | null>(null);
+  React.useEffect(() => () => exportController.current?.abort(), []);
 
   React.useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setLoading(true);
       listAdminOrders({
@@ -348,7 +353,7 @@ export function AdminOrders() {
         q: q.trim() || undefined,
         cursor,
         limit: 20,
-      }).then(({ items, nextCursor: next, total: matchingTotal, counts: responseCounts }) => {
+      }, { signal: controller.signal }).then(({ items, nextCursor: next, total: matchingTotal, counts: responseCounts }) => {
         if (!active) return;
         setOrders(items?.map(backendOrderToAdmin) ?? []);
         setNextCursor(next);
@@ -358,7 +363,7 @@ export function AdminOrders() {
         if (active) setActionError((error as Error)?.message || "Could not load orders.");
       }).finally(() => { if (active) setLoading(false); });
     }, q ? 300 : 0);
-    return () => { active = false; window.clearTimeout(timer); };
+    return () => { active = false; window.clearTimeout(timer); controller.abort(); };
   }, [tab, market, q, cursor, refreshKey]);
 
   const counts = React.useMemo(() => {
@@ -425,13 +430,23 @@ export function AdminOrders() {
     }
   };
 
-  const exportOrders = () => {
+  const exportOrders = async () => {
+    exportController.current?.abort();
+    const controller = new AbortController(); exportController.current = controller;
+    setExporting(true); setActionError(null);
+    try {
+    const rows = DEMO_MODE ? filtered : await readPages(async (cursor, signal) => {
+      const page = await listAdminOrders({ status: tab === "all" ? undefined : tab.toUpperCase(),
+        market: market === "all" ? undefined : market === "local" ? "LOCAL" : "INTERNATIONAL", q: q.trim(), cursor, limit: 100 }, { signal });
+      return { items: page.items.map(backendOrderToAdmin), nextCursor: page.nextCursor };
+    }, controller.signal);
+    if (controller.signal.aborted) return;
     // Map explicitly — AdminOrder rows carry `totalUsd` (a number), not `total`,
     // so passing the "total" key emitted an empty column for every row (REGRESSION-01).
     exportCsv(
       `orders-${new Date().toISOString().slice(0, 10)}`,
       ["Order", "Customer", "Email", "Market", "Status", "Total (USD)"],
-      filtered.map((o) => ({
+      rows.map((o) => ({
         id: formatOrderNumber(o.id),
         customer: o.customer,
         email: o.email,
@@ -441,6 +456,8 @@ export function AdminOrders() {
       })),
       ["id", "customer", "email", "market", "status", "total"],
     );
+    } catch (error) { if (!controller.signal.aborted) setActionError(error instanceof Error ? error.message : "The export could not be completed."); }
+    finally { if (!controller.signal.aborted) setExporting(false); }
   };
 
   const pendingCount = (counts.paid || 0) + (counts.processing || 0);
@@ -454,7 +471,7 @@ export function AdminOrders() {
           <p className="ad-sub">{total} matching orders · <b style={{ color: "var(--warn)" }}>{pendingCount} awaiting fulfillment</b></p>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <button className="ad-btn ad-btn-ghost ad-btn-sm" onClick={exportOrders}><AIcon name="download" size={15} stroke="var(--ad-muted)" />Export CSV</button>
+          <button className="ad-btn ad-btn-ghost ad-btn-sm" disabled={exporting} onClick={() => { void exportOrders(); }}><AIcon name="download" size={15} stroke="var(--ad-muted)" />Export CSV</button>
         </div>
       </div>
       {actionError && (

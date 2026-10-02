@@ -13,23 +13,30 @@ export function SuccessContent() {
   const orderId = searchParams.get("orderId") ?? "";
   const cart = useCart();
   const [status, setStatus] = React.useState<Status>("polling");
-  const cleared = React.useRef(false);
+  const clearedOrder = React.useRef<string | null>(null);
+  const clearCart = React.useRef(cart.clear);
+  clearCart.current = cart.clear;
 
   React.useEffect(() => {
+    const controller = new AbortController();
+    setStatus("polling");
     if (!orderId) {
       setStatus("still-processing");
-      return;
+      return () => controller.abort();
     }
-    pollOrderPaid(orderId).then((paid) => {
-      if (paid && !cleared.current) {
-        cleared.current = true;
-        cart.clear();
+    pollOrderPaid(orderId, 12, 1500, { signal: controller.signal }).then((paid) => {
+      if (controller.signal.aborted) return;
+      if (paid) {
+        if (clearedOrder.current !== orderId) {
+          clearedOrder.current = orderId;
+          clearCart.current();
+        }
         setStatus("confirmed");
-      } else if (!paid) {
+      } else {
         setStatus("still-processing");
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => controller.abort();
   }, [orderId]);
 
   if (status === "polling") {

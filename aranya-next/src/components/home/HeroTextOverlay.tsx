@@ -22,8 +22,9 @@
    ========================================================================== */
 
 import * as React from "react";
-import Link from "next/link";
+import { IntentLink as Link } from "../IntentLink";
 import { Seal } from "../primitives/Seal";
+import type { HeroMotion } from "./hero-motion";
 
 const FONT_DISPLAY = "var(--font-display, 'Cormorant Garamond', Georgia, serif)";
 const FONT_UI = "var(--font-ui, 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif)";
@@ -40,6 +41,7 @@ function smooth(a: number, b: number, x: number) {
 export type HeroTextOverlayProps = {
   /** 0→1 scroll/frame progress (1 = last frame). Omit to self-measure from [data-hero]. */
   progress?: number | null;
+  progressSource?: HeroMotion;
   wrapSelector?: string;
   /** share of scroll held AFTER the text is fully in */
   holdTail?: number;
@@ -56,6 +58,7 @@ export type HeroTextOverlayProps = {
 
 export default function HeroTextOverlay({
   progress = null,
+  progressSource,
   wrapSelector = "[data-hero]",
   holdTail = 0.38,
   ctaHref = "#",
@@ -69,10 +72,30 @@ export default function HeroTextOverlay({
   rightText = "Cured & sealed in Ceylon — never blended, never rushed.",
 }: HeroTextOverlayProps) {
   const [selfP, setSelfP] = React.useState(0);
+  const rootRef = React.useRef<HTMLDivElement>(null);
+  const brandRef = React.useRef<HTMLDivElement>(null);
+  const titleRef = React.useRef<HTMLDivElement>(null);
+  const ctaRef = React.useRef<HTMLAnchorElement>(null);
+
+  React.useEffect(() => {
+    if (!progressSource) return;
+    const root = rootRef.current!;
+    const sides = root.querySelectorAll<HTMLElement>(".hto-side");
+    const brand = brandRef.current!, top = titleRef.current!, cta = ctaRef.current!;
+    return progressSource.subscribe(({ progress: p }) => {
+      const appear = smooth(0.3, 1, Math.min(1, p / Math.max(0.0001, 1 - holdTail)));
+      sides.forEach(side => { side.style.opacity = String(1 - appear); side.style.pointerEvents = 1 - appear > 0.5 ? "auto" : "none"; });
+      brand.style.opacity = String(appear);
+      brand.style.transform = `translateY(calc(-50% + ${((1 - appear) * 22).toFixed(1)}px))`;
+      const track = (0.14 + appear * 0.16).toFixed(3) + "em";
+      top.style.letterSpacing = track; top.style.textIndent = track;
+      cta.style.pointerEvents = appear > 0.4 ? "auto" : "none";
+    });
+  }, [progressSource, holdTail]);
 
   // Self-measure scroll progress from the pinned wrapper (only if no prop given).
   React.useEffect(() => {
-    if (progress != null) return;
+    if (progressSource || progress != null) return;
     let raf = 0;
     const onScroll = () => {
       if (raf) return;
@@ -87,8 +110,8 @@ export default function HeroTextOverlay({
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
-  }, [progress, wrapSelector]);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("scroll", onScroll); };
+  }, [progress, progressSource, wrapSelector]);
 
   const p = progress != null ? progress : selfP;
 
@@ -102,17 +125,7 @@ export default function HeroTextOverlay({
   const interactive = sideFade > 0.5; // captions clickable only while clearly visible
 
   return (
-    <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
-      <style>{`
-        .hto-cta{display:inline-flex;align-items:center;gap:10px;font-family:${FONT_UI};font-weight:700;
-          font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:${ACCENT};
-          border:0;border-radius:var(--radius,10px);padding:14px 32px;text-decoration:none;
-          transition:filter .15s, transform .15s;}
-        .hto-cta:hover{filter:brightness(1.06);}
-        .hto-cta:active{transform:translateY(1px);}
-        @media (max-width:900px){ .hto-side{display:none !important;} }
-      `}</style>
-
+    <div ref={rootRef} style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
       {/* editorial side captions — fill the empty frame, crossfade out as the brand reveals */}
       <div className="hto-side" style={{ position: "absolute", left: "clamp(24px,5vw,80px)", top: "50%", transform: "translateY(-50%)", maxWidth: 300, width: 300, textAlign: "left", opacity: sideFade, pointerEvents: interactive ? "auto" : "none" }}>
         <div style={{ width: 44, height: 1.5, background: ACCENT, marginBottom: 20 }}></div>
@@ -126,14 +139,14 @@ export default function HeroTextOverlay({
       </div>
 
       {/* brand stack — eases in, full at the last frame, then holds */}
-      <div style={{ position: "absolute", left: 0, right: 0, top: "50%", transform: `translateY(calc(-50% + ${enterY}px))`, display: "flex", flexDirection: "column", alignItems: "center", opacity: brandFade, pointerEvents: "none" }}>
+      <div ref={brandRef} style={{ position: "absolute", left: 0, right: 0, top: "50%", transform: `translateY(calc(-50% + ${enterY}px))`, display: "flex", flexDirection: "column", alignItems: "center", opacity: brandFade, pointerEvents: "none" }}>
         <Seal size={62} tone="light" />
         <div style={{ width: 44, height: 1.5, background: ACCENT, margin: "26px 0 22px" }}></div>
-        <div style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(48px,7vw,92px)", fontWeight: 600, color: CREAM, letterSpacing: track + "em", lineHeight: 1, textIndent: track + "em", whiteSpace: "nowrap" }}>{brandTop}</div>
+        <div ref={titleRef} style={{ fontFamily: FONT_DISPLAY, fontSize: "clamp(48px,7vw,92px)", fontWeight: 600, color: CREAM, letterSpacing: track + "em", lineHeight: 1, textIndent: track + "em", whiteSpace: "nowrap" }}>{brandTop}</div>
         <div style={{ fontFamily: FONT_DISPLAY, fontStyle: "italic", fontSize: "clamp(16px,2.2vw,24px)", color: ACCENT, letterSpacing: ".34em", marginTop: 16, textIndent: ".34em" }}>{brandBottom}</div>
         <div style={{ width: 44, height: 1.5, background: ACCENT, margin: "22px 0 0" }}></div>
         <p style={{ fontFamily: FONT_UI, fontSize: 13, letterSpacing: ".04em", color: "rgba(253,250,245,.7)", marginTop: 22 }}>{tagline}</p>
-        <Link href={ctaHref} className="hto-cta" style={{ marginTop: 28, pointerEvents: brandFade > 0.4 ? "auto" : "none" }}>
+        <Link ref={ctaRef} href={ctaHref} className="hto-cta" style={{ marginTop: 28, pointerEvents: brandFade > 0.4 ? "auto" : "none" }}>
           {ctaLabel}
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
         </Link>

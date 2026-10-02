@@ -1,6 +1,8 @@
+import { versionedImage } from "./media";
+
 // Generated editorial photography in public/images. Keep these paths explicit so
 // a missing asset never turns an unrelated dynamic slot into a broken image.
-export const SLOT_IMAGES: Record<string, string> = {
+const SLOT_SOURCES: Record<string, string> = {
   "story-sourcing": "/images/home/story-sourcing.webp",
   "cat-cinnamon": "/images/categories/cat-cinnamon.webp",
   "cat-whole": "/images/categories/cat-whole.webp",
@@ -44,6 +46,8 @@ export const SLOT_IMAGES: Record<string, string> = {
   "post-heritage-body": "/images/journal/aranya-means-the-forest/mixed-spice-garden.webp",
 };
 
+export const SLOT_IMAGES: Record<string, string> = Object.fromEntries(Object.entries(SLOT_SOURCES).map(([id, src]) => [id, versionedImage(src)]));
+
 const PRODUCT_FILES: Record<string, readonly string[]> = {
   "ceylon-cinnamon-quills": ["01-primary", "02-detail", "03-milled", "04-packaging"],
   "ceylon-cinnamon-ground": ["01-primary", "02-detail", "03-process", "04-packaging"],
@@ -71,7 +75,7 @@ export function productImage(slug: string | undefined, index = 0): string | unde
   if (!slug) return undefined;
   const key = PRODUCT_ALIASES[slug] || slug;
   const file = PRODUCT_FILES[key]?.[index];
-  return file ? `/images/products/${key}/${file}.webp` : undefined;
+  return file ? versionedImage(`/images/products/${key}/${file}.webp`) : undefined;
 }
 
 const GIFT_IMAGES: Record<string, string> = {
@@ -86,7 +90,7 @@ const GIFT_IMAGES: Record<string, string> = {
 
 export function giftImage(id: string): string | undefined {
   const file = GIFT_IMAGES[id];
-  return file ? `/images/gifts/sets/${file}.webp` : undefined;
+  return file ? versionedImage(`/images/gifts/sets/${file}.webp`) : undefined;
 }
 
 // Older saved cart lines have a name but no slug. Resolve their photo without

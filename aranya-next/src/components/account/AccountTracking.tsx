@@ -166,7 +166,7 @@ export function OrderLine({ item, market, compact }: { item: OrderLineItem; mark
     <div style={{ display: "flex", gap: 14, alignItems: "center", padding: compact ? "10px 0" : "14px 0" }}>
       <div style={{ position: "relative", flex: "0 0 auto" }}>
         <div style={{ width: compact ? 46 : 56, height: compact ? 46 : 56, borderRadius: 8, overflow: "hidden", boxShadow: "inset 0 0 0 1px rgba(0,0,0,.06)" }}>
-          <SpicePhoto spice={item} ratio="1 / 1" label={false} />
+          <SpicePhoto spice={item} ratio="1 / 1" label={false} sizes={compact ? "46px" : "56px"} />
         </div>
         <span style={{ position: "absolute", top: -7, right: -7, minWidth: 19, height: 19, padding: "0 5px", background: "var(--ink)", color: "#fff", borderRadius: 999, fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 700, display: "grid", placeItems: "center" }}>{item.qty}</span>
       </div>

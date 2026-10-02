@@ -41,17 +41,38 @@ function couponDiscountCents(coupon: Coupon, subtotalCents: number): number {
     return Math.min(raw, subtotalCents); // never discount below zero
 }
 
-// --- Get or create cart ---
+// Passive storefront reads must not create a cart or restart recovery activity.
+// A signed-in cart always takes precedence over any guest cookie.
+export async function findExistingCart(userId?: string, guestToken?: string) {
+    if (!userId && !guestToken) return null;
+    return prisma.cart.findUnique({
+        where: userId ? { userId } : { guestToken: guestToken! },
+        include: cartIncludes,
+    });
+}
+
+export async function recordCartActivity(cartId: string) {
+    try {
+        await prisma.cart.update({
+            where: { id: cartId },
+            data: { updatedAt: new Date(), abandonedEmailSentAt: null },
+        });
+    } catch {
+        // Item writes have already committed. Recovery tracking must not turn
+        // a successful add into an error before its new guest cookie is issued,
+        // or make quantity/removal clients roll back a committed basket change.
+        // Keep diagnostics free of cart/user IDs and database error contents.
+        console.warn('[cart] Could not record cart activity after an item mutation.');
+    }
+}
+
+// --- Get or create cart (legacy GET /cart contract) ---
 export async function getOrCreateCart(userId?: string, guestToken?: string) {
     if (userId) {
         return prisma.cart.upsert({
             where: { userId },
-            // Every cart-touching controller action calls this first, so
-            // clearing abandonedEmailSentAt here means any activity — not
-            // just adding an item — makes the cart eligible for a future
-            // recovery email again once it goes quiet (roadmap: abandoned-
-            // cart recovery). update:{} would otherwise leave a user who
-            // came back and looked, but didn't buy, permanently unreachable.
+            // Preserve legacy GET /cart's recovery reset. The storefront uses
+            // findExistingCart instead; shopping mutations record activity.
             update: { abandonedEmailSentAt: null },
             create: { userId },
             include: cartIncludes,
@@ -91,16 +112,38 @@ export async function addToCart(
     data: AddToCartInput,
     market: Market,
 ) {
+    await validateCartVariant(data, market);
+    return insertCartItem(cartId, data);
+}
+
+// Validate before minting a cart/token for a shopper's first add.
+export async function addToShopperCart(
+    userId: string | undefined,
+    guestToken: string | undefined,
+    data: AddToCartInput,
+    market: Market,
+) {
+    await validateCartVariant(data, market);
+    const cart = await findExistingCart(userId, guestToken)
+        ?? await getOrCreateCart(userId, guestToken);
+    const item = await insertCartItem(cart.id, data);
+    return { item, newGuestToken: 'newGuestToken' in cart ? cart.newGuestToken : undefined };
+}
+
+async function validateCartVariant(data: AddToCartInput, market: Market) {
     // Verify variant exists AND belongs to the current market
     const variant = await prisma.variant.findFirst({
         where: {
             id: data.variantId,
+            productId: data.productId,
             market: { in: [market, 'BOTH'] },
         },
     });
 
     if (!variant) throw new Error('VARIANT_NOT_FOUND_FOR_MARKET');
+}
 
+async function insertCartItem(cartId: string, data: AddToCartInput) {
     // Not checked against live stock: the cart is not a reservation, so a
     // quantity here is only ever "hopeful." The AUTHORITATIVE, atomic guard is
     // the stock reservation at checkout (checkout.controller createIntent),
@@ -109,7 +152,7 @@ export async function addToCart(
     // mean a shopper can't add an item back in stock by the time they check out.
 
     // Upsert: if same variant already in cart, increment quantity
-    return prisma.cartItem.upsert({
+    const item = await prisma.cartItem.upsert({
         where: {
             cartId_variantId: { cartId, variantId: data.variantId },
         },
@@ -125,6 +168,8 @@ export async function addToCart(
             variant: true,
         },
     });
+    await recordCartActivity(cartId);
+    return item;
 }
 
 // --- Update cart item quantity (0 = remove) ---
@@ -135,18 +180,22 @@ export async function updateCartItem(
 ) {
     if (data.quantity === 0) {
         // P1-4: treat "already gone" as success (idempotent remove)
+        let item;
         try {
-            return await prisma.cartItem.delete({ where: { id: itemId, cartId } });
+            item = await prisma.cartItem.delete({ where: { id: itemId, cartId } });
         } catch (err) {
             if ((err as { code?: string }).code === 'P2025') return null;
             throw err;
         }
+        await recordCartActivity(cartId);
+        return item;
     }
 
     // Not checked against live stock — same reasoning as addToCart above;
     // checkout is the sole atomic, authoritative enforcement point.
+    let item;
     try {
-        return await prisma.cartItem.update({
+        item = await prisma.cartItem.update({
             where: { id: itemId, cartId },
             data: { quantity: data.quantity },
         });
@@ -155,16 +204,16 @@ export async function updateCartItem(
         if ((err as { code?: string }).code === 'P2025') return null;
         throw err;
     }
+    await recordCartActivity(cartId);
+    return item;
 }
 
 // --- Clear cart ---
 export async function clearCart(cartId: string) {
-    // Also clears abandonedEmailSentAt (roadmap: abandoned-cart recovery) —
-    // this bypasses getOrCreateCart, which is the usual place that reset
-    // happens, so it needs doing explicitly here too.
+    // Explicit basket changes renew recovery activity alongside the deletion.
     const [deleted] = await prisma.$transaction([
         prisma.cartItem.deleteMany({ where: { cartId } }),
-        prisma.cart.update({ where: { id: cartId }, data: { abandonedEmailSentAt: null } }),
+        prisma.cart.update({ where: { id: cartId }, data: { updatedAt: new Date(), abandonedEmailSentAt: null } }),
     ]);
     return deleted;
 }
@@ -178,11 +227,10 @@ export async function mergeGuestCart(guestToken: string, userId: string) {
 
     if (!guestCart || guestCart.items.length === 0) return;
 
-    // update: clear abandonedEmailSentAt too — this upsert bypasses
-    // getOrCreateCart (the usual reset point) on the login-merge path.
+    // A merge with real items renews the target cart's shopping activity.
     const userCart = await prisma.cart.upsert({
         where: { userId },
-        update: { abandonedEmailSentAt: null },
+        update: { updatedAt: new Date(), abandonedEmailSentAt: null },
         create: { userId },
     });
 
@@ -212,12 +260,12 @@ export async function mergeGuestCart(guestToken: string, userId: string) {
 // numbers (for display / Decimal storage). If the cart's stored coupon is no
 // longer valid, it's silently dropped (discount 0) rather than failing.
 export async function calculateCartTotal(
-    cartId: string,
+    cartId: string | null,
     market: Market,
     shippingMethod: 'STANDARD' | 'EXPRESS' = 'STANDARD',
     giftWrap: boolean = false,
 ) {
-    const cart = await prisma.cart.findUnique({
+    const cart = cartId === null ? { items: [], couponId: null } : await prisma.cart.findUnique({
         where: { id: cartId },
         include: { items: { include: { variant: true } } },
     });

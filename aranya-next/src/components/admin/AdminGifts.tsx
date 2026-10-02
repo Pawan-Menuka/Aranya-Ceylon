@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { useAdminPage } from "./useAdminPage";
+import { AdminPagination } from "./AdminPagination";
 import { GIFTS } from "@/lib/gifts-data";
 import { parsePrice } from "@/lib/catalog-data";
 import { formatMoney } from "@/lib/money";
@@ -254,23 +256,25 @@ export function AdminGifts() {
   const [edit, setEdit] = React.useState<Draft | null>(null);
   const [message, setMessage] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    listAdminGifts().then(({ gifts }) => {
-      setRows(gifts ?? []); setLiveLoaded(true); // live responded — real data authoritative
-    }).catch(() => { /* fetch failed — keep whatever's there (demo only in demo mode) */ });
-  }, []);
+  const filters = React.useMemo(() => ({ q: q.trim(), status: tab === "all" ? undefined : tab.toUpperCase() }), [q, tab]);
+  const loadPage = React.useCallback(async (cursor: string | undefined, signal: AbortSignal) => {
+    const response = await listAdminGifts({ ...filters, cursor }, { signal });
+    return { ...response, items: response.gifts };
+  }, [filters]);
+  const page = useAdminPage(JSON.stringify(filters), loadPage, setRows);
+  React.useEffect(() => { if (page.hasLiveData) setLiveLoaded(true); }, [page.hasLiveData]);
 
-  const filtered = React.useMemo(() => rows.filter((g) => {
+  const filtered = React.useMemo(() => page.hasLiveData ? rows : DEMO_MODE ? rows.filter((g) => {
     if (tab !== "all" && g.status !== tab) return false;
     if (q && !g.name.toLowerCase().includes(q.toLowerCase())) return false;
     return true;
-  }), [rows, tab, q]);
+  }) : [], [rows, tab, q, page.hasLiveData]);
 
   const counts = React.useMemo(() => ({
-    all: rows.length,
-    PUBLISHED: rows.filter((g) => g.status === "PUBLISHED").length,
-    DRAFT: rows.filter((g) => g.status === "DRAFT").length,
-  }), [rows]);
+    all: page.hasLiveData || !DEMO_MODE ? (page.counts.all ?? 0) : rows.length,
+    PUBLISHED: page.hasLiveData || !DEMO_MODE ? (page.counts.PUBLISHED ?? 0) : rows.filter((g) => g.status === "PUBLISHED").length,
+    DRAFT: page.hasLiveData || !DEMO_MODE ? (page.counts.DRAFT ?? 0) : rows.filter((g) => g.status === "DRAFT").length,
+  }), [rows, page.hasLiveData, page.counts]);
 
   const openGift = async (gift: AdminGiftSet) => {
     setMessage(null);
@@ -314,6 +318,7 @@ export function AdminGifts() {
         return;
       }
       setEdit(null);
+      page.refresh(!id);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The gift set could not be saved. No local success state was applied.");
     }
@@ -355,11 +360,12 @@ export function AdminGifts() {
         </div>
         <div className="ad-search" style={{ marginLeft: "auto", width: 240 }}>
           <AIcon name="search" size={15} stroke="var(--ad-faint)" />
-          <input placeholder="Search gift sets…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input maxLength={200} placeholder="Search gift sets…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
       </div>
 
       <GiftTable rows={filtered} onOpen={(g) => { void openGift(g); }} />
+      <AdminPagination page={page} size={filtered.length} label="gifts" />
       {edit && (
         <GiftEditor
           gift={edit}

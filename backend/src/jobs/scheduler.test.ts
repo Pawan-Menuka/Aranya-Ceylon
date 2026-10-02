@@ -151,6 +151,23 @@ describe('runAbandonedCartRecovery', () => {
         expect(sent).toBe(0);
         expect(sendAbandonedCartEmail).not.toHaveBeenCalled();
     });
+
+    it('leaves a failed send eligible for the next run and counts only delivered reminders', async () => {
+        store.carts = [cart({ id: 'failed' }), cart({ id: 'sent', userId: 'user_2' })];
+        vi.mocked(sendAbandonedCartEmail).mockRejectedValueOnce(new Error('provider unavailable'));
+        const report = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        expect(await runAbandonedCartRecovery()).toBe(1);
+        expect(store.updatedCarts).toEqual([
+            { id: 'sent', data: { abandonedEmailSentAt: expect.any(Date) } },
+        ]);
+        expect(store.carts[0]!.abandonedEmailSentAt).toBeNull();
+        expect(report).toHaveBeenCalledWith(
+            '[CRON] Abandoned-cart email failed for cart failed:',
+            expect.any(Error),
+        );
+        report.mockRestore();
+    });
 });
 
 describe('runLowStockAlert — #62', () => {

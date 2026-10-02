@@ -71,8 +71,24 @@ export async function mockCheckoutApi(
     const { pathname } = new URL(request.url());
     const method = request.method();
 
-    if (pathname === "/api/auth/refresh" && method === "POST") {
+    if ((pathname === "/api/auth/me" && method === "GET") || (pathname === "/api/auth/refresh" && method === "POST")) {
       await route.fulfill({ status: 401, json: { error: "Unauthorized" } });
+      return;
+    }
+
+    if (pathname === "/api/cart/bootstrap" && method === "GET") {
+      const hasCart = await page.evaluate((key) => {
+        const value = localStorage.getItem(key);
+        return value !== null && JSON.parse(value).length > 0;
+      }, CART_KEY);
+      await route.fulfill({ json: {
+        market: "INTERNATIONAL",
+        cart: hasCart ? { id: "cart-e2e", items: [{
+          id: cartItem.backendItemId, quantity: cartItem.qty,
+          product: { id: cartItem.productId, slug: "ceylon-cinnamon-quills", name: cartItem.name, color: cartItem.color },
+          variant: { id: cartItem.variantId, weight: 100, price: "14.50", currency: "USD" },
+        }] } : null,
+      } });
       return;
     }
 

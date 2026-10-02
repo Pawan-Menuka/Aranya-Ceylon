@@ -40,7 +40,7 @@ function GiftBox({ set, ratio = "4 / 3" }: { set: GiftSet; ratio?: string }) {
   const src = giftImage(set.id);
   if (src) {
     return <div style={{ position: "relative", width: "100%", aspectRatio: ratio, overflow: "hidden" }}>
-      <Image src={src} alt="" fill sizes="(max-width: 768px) 100vw, 600px" style={{ objectFit: "cover" }} />
+      <Image src={src} alt="" fill sizes="(max-width: 720px) calc(100vw - 80px), (max-width: 1024px) calc(50vw - 50px), (max-width: 1280px) calc(33vw - 43px), 380px" style={{ objectFit: "cover" }} />
     </div>;
   }
   const dots = set.contents.map((nm) => (giftCatalog(nm) || ({} as { color?: string })).color || set.color);
@@ -106,7 +106,7 @@ function GiftHero({ market, onShop }: { market: Market; onShop: () => void }) {
   const btn = market === "local" ? "btn btn-local" : "btn btn-intl";
   return (
     <header data-hero style={{ position: "relative", minHeight: "90vh", background: "#161412", color: "#FDFAF5", overflow: "hidden", display: "flex", alignItems: "flex-end" }}>
-      <ImageSlot id="gift-hero" shape="rect" fit="cover" placeholder="Drop a gifting photo — ribboned spice boxes, a wrapped gift being handed over" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
+      <ImageSlot id="gift-hero" shape="rect" fit="cover" priority sizes="100vw" placeholder="Drop a gifting photo — ribboned spice boxes, a wrapped gift being handed over" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(150deg, rgba(15,110,86,.34), rgba(11,16,13,.6))", mixBlendMode: "multiply", pointerEvents: "none" }} />
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(10,8,6,.5) 0%, transparent 28%, transparent 46%, rgba(10,8,6,.84) 100%)", pointerEvents: "none" }} />
       <div className="home-section-pad" style={{ position: "relative", maxWidth: 1280, margin: "0 auto", padding: "0 40px 84px", width: "100%" }}>

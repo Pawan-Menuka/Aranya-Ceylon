@@ -1,6 +1,7 @@
 import { cookies, headers } from "next/headers";
 import type { Market } from "./types";
 import { fromBackendMarket } from "./money";
+import { marketCookieSecret, verifiedCookieMarket } from "./market-cookie.server";
 
 // Spec §7.1/§7.2 — the active market lives in a signed HttpOnly `x-market`
 // cookie set by the backend (POST /market/override). Because it's HttpOnly the
@@ -9,10 +10,10 @@ import { fromBackendMarket } from "./money";
 //
 // The backend signs the cookie as a JWT with an { market: "local" | "international" }
 // payload (see backend market.routes.ts), so the raw cookie string is NOT the bare
-// market token — we must read it out of the JWT payload. We only *decode* here (no
-// signature check): this drives first-paint currency/CTA only, and every write path
-// (checkout, /cart) re-resolves the market from the signature-verified cookie on the
-// backend, so a tampered cookie can at worst mis-colour the SSR shell, never mis-charge.
+// market token. With MARKET_COOKIE_SECRET configured, verify it so the shell and
+// shared public cache use the same market. Without that optional secret retain
+// the legacy shell decoding; public reads remain uncached and the API verifies
+// the original cookie. Every write path still resolves market on the backend.
 // Default market is International (USD / amber CTA).
 function marketFromCookieValue(value: string): Market {
   // JWTs are "header.payload.signature"; a bare legacy value has no dots.
@@ -41,6 +42,8 @@ function decodeJwtPayload(jwt: string): { market?: unknown } | null {
 export function resolveMarket(): Market {
   try {
     const c = cookies().get("x-market");
+    const secret = marketCookieSecret();
+    if (secret) return verifiedCookieMarket(c?.value, secret);
     if (c?.value) return marketFromCookieValue(c.value);
   } catch {
     // cookies() throws outside a request scope (e.g. during static prerender

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { SiteChrome } from "@/components/SiteChrome";
 import { Reveal } from "@/components/primitives/Reveal";
 import { Liyawel } from "@/components/primitives/Motif";
@@ -30,17 +31,42 @@ export default function Error({
   reset: () => void;
 }) {
   const { market } = useMarket();
+  const [hydrated, setHydrated] = React.useState(false);
+  const pathname = usePathname();
+  const router = useRouter();
+  const [retryPending, startRetry] = React.useTransition();
+  const retryRequested = React.useRef(false);
+  const refreshStarted = React.useRef(false);
+  const retry = () => {
+    retryRequested.current = true;
+    startRetry(() => router.refresh());
+  };
+
+  React.useEffect(() => {
+    if (retryPending) {
+      refreshStarted.current = retryRequested.current;
+    } else if (retryRequested.current && refreshStarted.current) {
+      // Reset only after fresh RSC data commits. An immediate reset can read
+      // the old failed tree and leave this same-path boundary stuck in error.
+      retryRequested.current = false;
+      refreshStarted.current = false;
+      reset();
+    }
+  }, [retryPending, reset]);
   const btn = market === "local" ? "btn btn-local" : "btn btn-intl";
 
   React.useEffect(() => {
+    // The fallback HTML can appear before this chunk hydrates. Do not accept
+    // an explicit retry until its event handler is attached.
+    setHydrated(true);
     // Server-side visibility until Phase 8.3 (error tracking) lands — this is
     // the only place a rendering failure surfaces today.
     console.error("[error boundary]", error);
   }, [error]);
 
-  return (
-    <SiteChrome>
+  const content = (
       <main
+        role="alert" data-route-error
         data-screen-label="error"
         style={{
           flex: 1,
@@ -91,7 +117,7 @@ export default function Error({
 
           <Reveal delay={220}>
             <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 30, flexWrap: "wrap" }}>
-              <button type="button" className={btn} style={{ width: "auto", padding: "12px 26px" }} onClick={() => reset()}>
+              <button type="button" className={btn} style={{ width: "auto", padding: "12px 26px" }} onClick={retry} disabled={!hydrated || retryPending}>
                 Try again
               </button>
               <Link
@@ -142,6 +168,6 @@ export default function Error({
           )}
         </div>
       </main>
-    </SiteChrome>
   );
+  return pathname.startsWith("/admin") || pathname.startsWith("/checkout") ? content : <SiteChrome>{content}</SiteChrome>;
 }

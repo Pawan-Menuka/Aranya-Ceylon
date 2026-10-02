@@ -29,7 +29,9 @@ jobs:
         run: pnpm --filter @aranya/shared build
 
       - name: Generate Prisma client
-        run: pnpm --filter @aranya/backend exec prisma generate
+        env:
+          DATABASE_URL: postgresql://fixture:fixture@localhost:5432/fixture
+        run: node backend/node_modules/prisma/build/index.js generate --config backend/prisma.config.ts
 
       - name: Type check
         run: pnpm typecheck
@@ -44,7 +46,9 @@ jobs:
         run: pnpm build
 
       - name: Validate Prisma schema
-        run: pnpm --filter @aranya/backend exec prisma validate
+        env:
+          DATABASE_URL: postgresql://fixture:fixture@localhost:5432/fixture
+        run: node backend/node_modules/prisma/build/index.js validate --config backend/prisma.config.ts
 
       - name: Security audit
         # Report-only: remaining high/critical findings include transitive

@@ -12,6 +12,12 @@ const guestCookieOptions = {
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
 };
 
+// --- Read-only storefront bootstrap ---
+export async function bootstrapCart(req: Request, res: Response) {
+    const cart = await cartService.findExistingCart(req.user?.userId, req.cookies?.[GUEST_TOKEN_COOKIE]);
+    return res.json({ cart, market: req.market });
+}
+
 // --- Get cart ---
 export async function getCart(req: Request, res: Response) {
     const userId = req.user?.userId;
@@ -32,11 +38,11 @@ export async function addItem(req: Request, res: Response) {
     const guestToken = req.cookies?.[GUEST_TOKEN_COOKIE];
     const market = req.market!;
 
-    const cart = await cartService.getOrCreateCart(userId, guestToken);
     const data = addToCartSchema.parse(req.body);
 
     try {
-        const item = await cartService.addToCart(cart.id, data, market);
+        const { item, newGuestToken } = await cartService.addToShopperCart(userId, guestToken, data, market);
+        if (newGuestToken) res.cookie(GUEST_TOKEN_COOKIE, newGuestToken, guestCookieOptions);
         return res.status(201).json({ item });
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : '';
@@ -85,8 +91,9 @@ export async function updateItem(req: Request, res: Response) {
     const userId = req.user?.userId;
     const guestToken = req.cookies?.[GUEST_TOKEN_COOKIE];
 
-    const cart = await cartService.getOrCreateCart(userId, guestToken);
     const data = updateCartItemSchema.parse(req.body);
+    const cart = await cartService.findExistingCart(userId, guestToken);
+    if (!cart) return res.status(404).json({ error: 'Cart item not found' });
     const item = await cartService.updateCartItem(cart.id, req.params.itemId!, data);
 
     if (item === null) return res.status(404).json({ error: 'Cart item not found' });
@@ -98,8 +105,8 @@ export async function removeItem(req: Request, res: Response) {
     const userId = req.user?.userId;
     const guestToken = req.cookies?.[GUEST_TOKEN_COOKIE];
 
-    const cart = await cartService.getOrCreateCart(userId, guestToken);
-    await cartService.updateCartItem(cart.id, req.params.itemId!, { quantity: 0 });
+    const cart = await cartService.findExistingCart(userId, guestToken);
+    if (cart) await cartService.updateCartItem(cart.id, req.params.itemId!, { quantity: 0 });
 
     return res.status(204).send();
 }
@@ -114,13 +121,8 @@ export async function getCartTotals(req: Request, res: Response) {
         : 'STANDARD');
     const giftWrap = req.query.giftWrap === 'true';
 
-    const result = await cartService.getOrCreateCart(userId, guestToken);
-
-    if ('newGuestToken' in result && result.newGuestToken) {
-        res.cookie(GUEST_TOKEN_COOKIE, result.newGuestToken, guestCookieOptions);
-    }
-
-    const totals = await cartService.calculateCartTotal(result.id, market, shippingMethod, giftWrap);
+    const cart = await cartService.findExistingCart(userId, guestToken);
+    const totals = await cartService.calculateCartTotal(cart?.id ?? null, market, shippingMethod, giftWrap);
     return res.json({ totals });
 }
 
@@ -135,8 +137,9 @@ export async function applyCoupon(req: Request, res: Response) {
     const userId = req.user?.userId;
     const guestToken = req.cookies?.[GUEST_TOKEN_COOKIE];
 
-    const cart = await cartService.getOrCreateCart(userId, guestToken);
     const { code } = applyCouponSchema.parse(req.body);
+    const cart = await cartService.findExistingCart(userId, guestToken);
+    if (!cart) return res.status(400).json({ error: 'Add an item to your cart before applying a coupon.' });
     const { subtotalCents } = await cartService.calculateCartTotal(cart.id, req.market!);
 
     try {
@@ -144,7 +147,7 @@ export async function applyCoupon(req: Request, res: Response) {
 
         await prisma.cart.update({
             where: { id: cart.id },
-            data: { couponId: couponResult.couponId },
+            data: { couponId: couponResult.couponId, updatedAt: new Date(), abandonedEmailSentAt: null },
         });
 
         return res.json({ discount: couponResult });
@@ -165,10 +168,11 @@ export async function removeCoupon(req: Request, res: Response) {
     const userId = req.user?.userId;
     const guestToken = req.cookies?.[GUEST_TOKEN_COOKIE];
 
-    const cart = await cartService.getOrCreateCart(userId, guestToken);
+    const cart = await cartService.findExistingCart(userId, guestToken);
+    if (!cart || !cart.couponId) return res.status(204).send();
     await prisma.cart.update({
         where: { id: cart.id },
-        data: { couponId: null },
+        data: { couponId: null, updatedAt: new Date(), abandonedEmailSentAt: null },
     });
 
     return res.status(204).send();

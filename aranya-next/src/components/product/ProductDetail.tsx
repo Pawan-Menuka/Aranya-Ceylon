@@ -4,12 +4,13 @@ import * as React from "react";
 import type { Spice, Market, Product } from "@/lib/types";
 import { useMarket } from "../MarketContext";
 import { Breadcrumb, Gallery, BuyBox } from "./BuyBox";
-import { ForestStory, FlavourProfile, Pairings, ReviewsBlock, Related } from "./Sections";
+import { Related } from "./Sections";
+
 
 // Composes the full product page below the (shared) navbar — ported from the
 // assembly in Product Detail.html. Market comes from context so currency + CTA
 // colour react to the switcher.
-export function ProductDetail({ spice, related, product, sanitizedStory }: { spice: Spice; related: Spice[]; product?: Product; sanitizedStory: string[] }) {
+export function ProductDetail({ spice, related, product, editorial }: { spice: Spice; related: React.ReactNode; product?: Product; editorial: React.ReactNode }) {
   const { market } = useMarket();
   return (
     <div data-screen-label="Product detail">
@@ -22,11 +23,14 @@ export function ProductDetail({ spice, related, product, sanitizedStory }: { spi
           </div>
         </div>
       </div>
-      <ForestStory spice={spice} sanitizedStory={sanitizedStory} />
-      <FlavourProfile spice={spice} />
-      <Pairings spice={spice} />
-      <ReviewsBlock spice={spice} />
-      <Related spices={related} market={market} />
+      {editorial}
+      {related}
     </div>
   );
+}
+
+// Keep related-card currency reactive while the server streams this optional slot.
+export function RelatedProducts({ spices }: { spices: Spice[] }) {
+  const { market } = useMarket();
+  return <Related spices={spices} market={market} />;
 }

@@ -1,11 +1,14 @@
 "use client";
 
 import * as React from "react";
+import { useAdminPage } from "./useAdminPage";
+import { AdminPagination } from "./AdminPagination";
 import Image from "next/image";
 import { ADMIN, type AdminProduct } from "@/lib/admin-data";
 import { AIcon, Pill, StockMeter, FlagRow } from "./AdminPrimitives";
 import { ShareBar } from "./AdminCharts";
 import { listAdminProducts, createAdminProduct, updateAdminProduct, archiveAdminProduct, listCategories, uploadProductImage, type Category, type AdminProductInput } from "@/lib/api/admin";
+import { readPages } from "@/lib/read-pages";
 import { exportCsv } from "@/lib/csv";
 import { DEMO_MODE } from "@/lib/demo";
 import { LOW_STOCK_THRESHOLD } from "@/lib/inventory";
@@ -387,19 +390,24 @@ export function AdminProducts() {
   const [categories, setCategories] = React.useState<Category[]>([]);
   const [message, setMessage] = React.useState<string | null>(null);
 
+  const filters = React.useMemo(() => ({ q: q.trim(), ...(tab === "low" ? { lowStock: true } : tab !== "all" ? { category: tab } : {}) }), [q, tab]);
+  const loadPage = React.useCallback(async (cursor: string | undefined, signal: AbortSignal) => {
+    const response = await listAdminProducts({ ...filters, cursor }, { signal });
+    return { ...response, items: response.products.map(backendProductToAdmin) };
+  }, [filters]);
+  const page = useAdminPage(JSON.stringify(filters), loadPage, setRows);
   React.useEffect(() => {
-    listAdminProducts().then(({ products }) => {
-      setRows(products?.map(backendProductToAdmin) ?? []);
-    }).catch(() => { /* fetch failed — keep whatever's there (demo only in demo mode) */ });
-    listCategories().then(({ categories: cats }) => setCategories(cats)).catch(() => {});
+    const controller = new AbortController();
+    listCategories({ signal: controller.signal }).then(({ categories: cats }) => { if (!controller.signal.aborted) setCategories(cats); }).catch(() => {});
+    return () => controller.abort();
   }, []);
 
-  const filtered = React.useMemo(() => rows.filter((p) => {
+  const filtered = React.useMemo(() => page.hasLiveData ? rows : DEMO_MODE ? rows.filter((p) => {
     if (tab === "low") { if (!isLowStock(p)) return false; }
     else if (tab !== "all" && p.category !== tab) return false;
     if (q && !p.name.toLowerCase().includes(q.toLowerCase()) && !p.sku.toLowerCase().includes(q.toLowerCase())) return false;
     return true;
-  }), [rows, tab, q]);
+  }) : [], [rows, tab, q, page.hasLiveData]);
 
   const toggle = async (p: AdminProduct) => {
     const next = !p.visible;
@@ -413,6 +421,7 @@ export function AdminProducts() {
     try {
       const { product } = await updateAdminProduct(backendId, { status: next ? "ACTIVE" : "ARCHIVED" });
       setRows((prev) => prev.map((x) => productIdentity(x) === identity ? backendProductToAdmin(product) : x));
+      page.refresh();
     } catch {
       setMessage("The product visibility change failed. No local success state was applied.");
     }
@@ -445,6 +454,7 @@ export function AdminProducts() {
         setRows((prev) => [backendProductToAdmin(product), ...prev.filter((row) => productIdentity(row) !== `local:${slug}`)]);
       }
       setEdit(null);
+      page.refresh(!backendId);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The product could not be saved. No local success state was applied.");
       throw error;
@@ -464,15 +474,19 @@ export function AdminProducts() {
     }
   };
 
-  const lowCount = rows.filter(isLowStock).length;
+  const lowCount = page.hasLiveData ? (page.counts.low ?? 0) : DEMO_MODE ? rows.filter(isLowStock).length : 0;
 
-  const exportProducts = () => {
-    exportCsv(
+  const exportProducts = () => { void page.exportAll(
+    signal => readPages(async (cursor, pageSignal) => {
+      const response = await listAdminProducts({ ...filters, cursor, limit: 100 }, { signal: pageSignal });
+      return { items: response.products.map(backendProductToAdmin), nextCursor: response.nextCursor };
+    }, signal),
+    products => exportCsv(
       `products-${new Date().toISOString().slice(0, 10)}`,
       ["Name", "SKU", "Category", "Stock", "Visible"],
-      filtered.map((p) => ({ name: p.name, sku: p.sku, category: p.category, stock: p.stock, visible: p.visible ? "Yes" : "No" })),
+      products.map((p) => ({ name: p.name, sku: p.sku, category: p.category, stock: p.stock, visible: p.visible ? "Yes" : "No" })),
       ["name", "sku", "category", "stock", "visible"],
-    );
+    ));
   };
 
   return (
@@ -481,10 +495,10 @@ export function AdminProducts() {
         <div>
           <div className="ad-eyebrow">Catalog</div>
           <h1 className="ad-title" style={{ marginTop: 6 }}>Products</h1>
-          <p className="ad-sub">{rows.length} products · <b style={{ color: "var(--neg)" }}>{lowCount} need restocking</b></p>
+          <p className="ad-sub">{page.hasLiveData ? page.counts.all : DEMO_MODE ? rows.length : 0} products · <b style={{ color: "var(--neg)" }}>{lowCount} need restocking</b></p>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <button className="ad-btn ad-btn-ghost ad-btn-sm" onClick={exportProducts}><AIcon name="download" size={15} stroke="var(--ad-muted)" />Export</button>
+          <button className="ad-btn ad-btn-ghost ad-btn-sm" disabled={page.exporting} onClick={exportProducts}><AIcon name="download" size={15} stroke="var(--ad-muted)" />Export</button>
           <button className="ad-btn ad-btn-amber" onClick={() => setEdit({})}><AIcon name="plus" size={16} stroke="#fff" />New product</button>
         </div>
       </div>
@@ -495,10 +509,11 @@ export function AdminProducts() {
         </div>
         <div className="ad-search" style={{ marginLeft: "auto", width: 240 }}>
           <AIcon name="search" size={15} stroke="var(--ad-faint)" />
-          <input placeholder="Search products…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input maxLength={200} placeholder="Search products…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
       </div>
       <ProductsTable rows={filtered} onOpen={setEdit} onToggle={(product) => { void toggle(product); }} />
+      <AdminPagination page={page} size={filtered.length} label="products" />
       {edit && <ProductEditor product={edit} onClose={() => setEdit(null)} onSave={save} onDelete={archive} categories={categories} />}
     </div>
   );

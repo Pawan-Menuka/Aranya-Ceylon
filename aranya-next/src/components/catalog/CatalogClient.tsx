@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import type { CatalogSpice, Market } from "@/lib/types";
-import { parsePrice } from "@/lib/catalog-data";
+import type { CatalogPage, CatalogSpice, Market } from "@/lib/types";
+import { listProductCards } from "@/lib/api/products";
+import { adaptCatalogPage, cardQuery, catalogParams, catalogQuery, catalogScope, CatalogPager, type CatalogQuery } from "@/lib/catalog-pagination";
 import { Eyebrow } from "../primitives/Motif";
 import { CardB, CardCFinal } from "../cards/Cards";
 import { useMarket } from "../MarketContext";
@@ -23,17 +24,7 @@ interface Filters {
   flavour: string[];
 }
 
-function deriveFacets(products: CatalogSpice[]) {
-  const uniq = (arr: (string | undefined)[]) => [...new Set(arr.filter(Boolean) as string[])];
-  return {
-    category: uniq(products.map((p) => p.category)),
-    form: uniq(products.map((p) => p.form)),
-    origin: uniq(products.map((p) => p.origin)),
-    flavour: uniq(products.flatMap((p) => p.flavour || [])),
-  };
-}
-
-// Featured row (CardB) — shown only on the unfiltered default view.
+// Featured row (CardB) â€” shown only on the unfiltered default view.
 function FeaturedRow({ products, market }: { products: CatalogSpice[]; market: Market }) {
   const feat = products.filter((p) => p.featured).slice(0, 3);
   if (!feat.length) return null;
@@ -47,7 +38,7 @@ function FeaturedRow({ products, market }: { products: CatalogSpice[]; market: M
           </div>
         </div>
         <div className="feat-row">
-          {feat.map((p) => <CardB key={p.name} spice={p} market={market} />)}
+          {feat.map((p) => <CardB key={p.productId || p.slug || p.name} spice={p} market={market} />)}
         </div>
       </div>
     </section>
@@ -55,67 +46,66 @@ function FeaturedRow({ products, market }: { products: CatalogSpice[]; market: M
 }
 
 export function CatalogClient({
-  products,
+  initialPage,
   initial,
+  initialMarket,
 }: {
-  products: CatalogSpice[];
-  initial?: { category?: string; sort?: string; form?: string[]; flavour?: string[]; origin?: string[] };
+  initialPage: CatalogPage;
+  initial: CatalogQuery;
+  initialMarket: Market;
 }) {
   const { market } = useMarket();
-  const [category, setCategory] = React.useState(initial?.category || "All");
-  const [filters, setFilters] = React.useState<Filters>({ form: initial?.form || [], origin: initial?.origin || [], flavour: initial?.flavour || [] });
-  const [sort, setSort] = React.useState(initial?.sort || "featured");
-  const [visible, setVisible] = React.useState(8);
-
-  const facets = React.useMemo(() => deriveFacets(products), [products]);
-
-  const toggleFacet = (key: keyof Filters) => (val: string) => {
-    setFilters((f) => ({ ...f, [key]: f[key].includes(val) ? f[key].filter((x) => x !== val) : [...f[key], val] }));
-    setVisible(8);
-  };
-  const clearAll = () => {
-    setCategory("All");
-    setFilters({ form: [], origin: [], flavour: [] });
-    setVisible(8);
-  };
-
-  const anyFilter = category !== "All" || filters.form.length > 0 || filters.origin.length > 0 || filters.flavour.length > 0;
-
-  // Reflect state in the URL (shareable filtered views) without a navigation.
+  const [query, setQuery] = React.useState(initial);
+  const { category, sort, form, origin, flavour } = query;
+  const filters = { form, origin, flavour };
+  const scope = catalogScope(query, market);
+  const serverScope = catalogScope(initial, initialMarket);
+  const previousServerScope = React.useRef(serverScope);
   React.useEffect(() => {
-    const q = new URLSearchParams();
-    if (category !== "All") q.set("cat", category);
-    if (filters.form.length) q.set("form", filters.form.join(","));
-    if (filters.flavour.length) q.set("flavour", filters.flavour.join(","));
-    if (filters.origin.length) q.set("origin", filters.origin.join(","));
-    if (sort !== "featured") q.set("sort", sort);
-    const str = q.toString();
-    window.history.replaceState(null, "", str ? `?${str}` : window.location.pathname);
-  }, [category, filters, sort]);
+    if (previousServerScope.current !== serverScope) {
+      previousServerScope.current = serverScope;
+      setQuery(initial);
+    }
+  }, [serverScope, initial]);
+  const [pager] = React.useState(() => new CatalogPager(async (key, cursor, signal) => {
+    const split = key.indexOf(":");
+    const requestMarket = key.slice(0, split) as Market;
+    const requestQuery = catalogQuery(Object.fromEntries(new URLSearchParams(key.slice(split + 1))));
+    if (initialPage.demo) {
+      const { demoCatalogPage } = await import("@/lib/catalog-demo");
+      return demoCatalogPage(requestQuery, requestMarket, cursor);
+    }
+    return adaptCatalogPage(await listProductCards(cardQuery(requestQuery, cursor), { signal }), requestMarket);
+  }, serverScope, initialPage));
+  const [snapshot, setSnapshot] = React.useState(pager.snapshot);
+  React.useEffect(() => pager.subscribe(setSnapshot), [pager]);
+  React.useEffect(() => {
+    pager.reset(scope, scope === serverScope ? initialPage : undefined);
+    return () => pager.cancel();
+  }, [pager, scope, serverScope, initialPage]);
+  React.useEffect(() => {
+    const restore = () => setQuery(catalogQuery(Object.fromEntries(new URLSearchParams(window.location.search))));
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, []);
 
-  const filtered = React.useMemo(() => {
-    const list = products.filter((p) => {
-      if (category !== "All" && p.category !== category) return false;
-      if (filters.form.length && !filters.form.includes(p.form)) return false;
-      if (filters.origin.length && !filters.origin.includes(p.origin)) return false;
-      if (filters.flavour.length && !filters.flavour.some((f) => (p.flavour || []).includes(f))) return false;
-      return true;
-    });
-    // Sort by the price the shopper is actually seeing, not always USD
-    // (remaining-surfaces audit #9).
-    const priceOf = (p: CatalogSpice) => parsePrice(market === "local" ? p.lkr : p.usd);
-    const by: Record<string, (a: CatalogSpice, b: CatalogSpice) => number> = {
-      featured: (a, b) => Number(b.featured) - Number(a.featured) || b.popularity - a.popularity,
-      best: (a, b) => b.popularity - a.popularity,
-      "price-asc": (a, b) => priceOf(a) - priceOf(b),
-      "price-desc": (a, b) => priceOf(b) - priceOf(a),
-      rating: (a, b) => b.rating - a.rating || b.reviews - a.reviews,
-      new: (a, b) => b.added.localeCompare(a.added),
-    };
-    return [...list].sort(by[sort] || by.featured);
-  }, [products, category, filters, sort, market]);
+  const current = snapshot.scope === scope ? snapshot : { ...snapshot, page: null, error: null, loading: true };
+  const page = current.page;
+  const shown = page?.items ?? [];
+  const total = page?.total ?? 0;
+  // Keep the global controls available during the next first-page request.
+  const facets = page?.facets ?? initialPage.facets;
+  const toggleFacet = (key: keyof Filters) => (val: string) => {
+    setQuery(q => ({ ...q, [key]: q[key].includes(val) ? q[key].filter(x => x !== val) : [...q[key], val] }));
+  };
+  const clearAll = () => setQuery(q => ({ ...q, category: "All", form: [], origin: [], flavour: [], search: "" }));
+  const anyFilter = category !== "All" || form.length > 0 || origin.length > 0 || flavour.length > 0 || !!query.search;
 
-  const shown = filtered.slice(0, visible);
+  React.useEffect(() => {
+    const params = catalogParams(query);
+    window.history.replaceState(null, "", params ? `?${params}` : window.location.pathname);
+  }, [query]);
+
   const activePills: [keyof Filters, string][] = [
     ...filters.form.map((v) => ["form", v] as [keyof Filters, string]),
     ...filters.origin.map((v) => ["origin", v] as [keyof Filters, string]),
@@ -126,24 +116,24 @@ export function CatalogClient({
   return (
     <>
       <CatalogBanner />
-      {!anyFilter && <FeaturedRow products={products} market={market} />}
+      {!anyFilter && <FeaturedRow products={page?.featured ?? []} market={market} />}
 
       {/* sticky filter bar */}
       <div style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(253,250,245,.9)", backdropFilter: "blur(10px)", borderBottom: "1px solid var(--line)" }}>
         <div style={{ maxWidth: 1280, margin: "0 auto", padding: "18px 40px 16px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
-            <CategoryChips value={category} onChange={(c) => { setCategory(c); setVisible(8); }} categories={facets.category} />
+            <CategoryChips value={category} onChange={(c) => setQuery(q => ({ ...q, category: c }))} categories={facets.category} />
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               {facets.form.length > 0 && <Dropdown label="Form" options={facets.form} selected={filters.form} onToggle={toggleFacet("form")} />}
               {facets.origin.length > 0 && <Dropdown label="Origin" options={facets.origin} selected={filters.origin} onToggle={toggleFacet("origin")} />}
               {facets.flavour.length > 0 && <Dropdown label="Flavour" options={facets.flavour} selected={filters.flavour} onToggle={toggleFacet("flavour")} />}
               <span style={{ width: 1, height: 26, background: "var(--line)", margin: "0 2px" }} />
-              <Dropdown label={"Sort: " + sortLabel} options={SORTS} selected={sort} onToggle={setSort} single align="right" />
+              <Dropdown label={"Sort: " + sortLabel} options={SORTS} selected={sort} onToggle={(value) => setQuery(q => ({ ...q, sort: value as CatalogQuery["sort"] }))} single align="right" />
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14, flexWrap: "wrap" }}>
             <span style={{ fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 600, color: "var(--muted)" }}>
-              {filtered.length} {filtered.length === 1 ? "spice" : "spices"}
+              {page ? `${total} ${total === 1 ? "spice" : "spices"}` : "Loading spices…"}
             </span>
             {activePills.length > 0 && <span style={{ width: 1, height: 16, background: "var(--line)" }} />}
             {activePills.map(([key, val]) => (
@@ -164,7 +154,15 @@ export function CatalogClient({
       {/* grid */}
       <section style={{ background: "var(--bg)", padding: "40px 0 90px", minHeight: "60vh" }}>
         <div style={{ maxWidth: 1280, margin: "0 auto", padding: "0 40px" }}>
-          {shown.length === 0 ? (
+          {current.error && (
+            <div role="alert" style={{ textAlign: "center", marginBottom: 22 }}>
+              <p style={{ fontFamily: "var(--font-ui)", color: "var(--muted)" }}>{current.error}</p>
+              <button className="btn btn-intl" style={{ width: "auto", padding: "12px 28px" }} onClick={() => pager.retry()}>Try again</button>
+            </div>
+          )}
+          {!page ? (
+            current.loading ? <p role="status" style={{ textAlign: "center", fontFamily: "var(--font-ui)", color: "var(--muted)" }}>Loading spices…</p> : null
+          ) : shown.length === 0 ? (
             <div style={{ textAlign: "center", padding: "90px 0" }}>
               <h3 className="disp" style={{ fontSize: 30, color: "var(--ink)", margin: "0 0 10px" }}>Nothing matches those filters</h3>
               <p style={{ fontFamily: "var(--font-ui)", fontSize: 15, color: "var(--muted)", margin: "0 0 22px" }}>Try loosening a facet or two.</p>
@@ -173,14 +171,14 @@ export function CatalogClient({
           ) : (
             <>
               <div className="cat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 22 }}>
-                {shown.map((p) => <CardCFinal key={p.name} spice={p} market={market} />)}
+                {shown.map((p) => <CardCFinal key={p.productId || p.slug || p.name} spice={p} market={market} />)}
               </div>
-              {visible < filtered.length && (
+              {page.hasNextPage && (
                 <div style={{ textAlign: "center", marginTop: 48 }}>
-                  <button onClick={() => setVisible((v) => v + 8)} className="btn btn-intl" style={{ width: "auto", padding: "14px 34px", background: "transparent", color: "var(--brand)", border: "1.5px solid var(--brand)" }}
+                  <button disabled={current.loading} onClick={() => pager.loadMore()} className="btn btn-intl" style={{ width: "auto", padding: "14px 34px", background: "transparent", color: "var(--brand)", border: "1.5px solid var(--brand)" }}
                     onMouseEnter={(e) => { e.currentTarget.style.background = "var(--brand)"; e.currentTarget.style.color = "#fff"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--brand)"; }}>
-                    Load more — {filtered.length - visible} remaining
+                    {current.loading ? "Loading..." : `Load more — ${Math.max(0, total - shown.length)} remaining`}
                   </button>
                 </div>
               )}

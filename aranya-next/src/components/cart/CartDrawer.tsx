@@ -7,6 +7,7 @@ import { Seal } from "../primitives/Seal";
 import type { CartLine } from "@/lib/cart";
 import { useCart } from "../CartContext";
 import { useMarket } from "../MarketContext";
+import { useDialogFocus } from "./use-dialog-focus";
 
 // Slide-in cart drawer (ported from cart-ui.jsx CartDrawer). Reads the cart +
 // market from context; the bag icon / add-to-cart open it.
@@ -14,7 +15,7 @@ import { useMarket } from "../MarketContext";
 function LineThumb({ item, size = 62 }: { item: CartLine; size?: number }) {
   return (
     <div style={{ width: size, height: size, flex: "0 0 auto", borderRadius: 7, overflow: "hidden", boxShadow: "inset 0 0 0 1px rgba(0,0,0,.06)" }}>
-      <SpicePhoto spice={item} ratio="1 / 1" label={false} />
+      <SpicePhoto spice={item} ratio="1 / 1" label={false} sizes={`${size}px`} />
     </div>
   );
 }
@@ -53,12 +54,17 @@ export function CartDrawer() {
   const [promoInput, setPromoInput] = React.useState("");
   const [promoErr, setPromoErr] = React.useState(false);
   const [showNote, setShowNote] = React.useState(false);
+  const dialog = React.useRef<HTMLElement>(null);
+  const [presented, setPresented] = React.useState(false);
+  useDialogFocus(dialog, open, onClose);
 
   React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    if (open) document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+    if (!open) { setPresented(false); return; }
+    // A first deferred mount begins offscreen, preserving the existing slide.
+    let second = 0;
+    const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => setPresented(true)); });
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
+  }, [open]);
 
   const pct = t.freeShip ? 100 : Math.min(100, (1 - t.remainingToFree / t.freeShipThreshold) * 100);
   const cfg = cart.config();
@@ -66,7 +72,7 @@ export function CartDrawer() {
   return (
     <>
       <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 120, background: "rgba(20,16,12,.46)", backdropFilter: "blur(2px)", opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none", transition: "opacity .3s" }} />
-      <aside className="aranya" style={{ position: "fixed", top: 0, right: 0, bottom: 0, zIndex: 121, width: "min(440px, 100vw)", background: "var(--bg)", boxShadow: "-18px 0 50px rgba(0,0,0,.25)", transform: `translateX(${open ? 0 : 100}%)`, transition: "transform .36s cubic-bezier(.4,0,.2,1)", display: "flex", flexDirection: "column" }}>
+      <aside ref={dialog} role="dialog" aria-label="Your Basket" aria-modal={open || undefined} aria-hidden={!open} tabIndex={-1} className="aranya" style={{ position: "fixed", top: 0, right: 0, bottom: 0, zIndex: 121, width: "min(440px, 100vw)", background: "var(--bg)", boxShadow: "-18px 0 50px rgba(0,0,0,.25)", transform: `translateX(${presented && open ? 0 : 100}%)`, transition: "transform .36s cubic-bezier(.4,0,.2,1)", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid var(--line)" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
             <h2 className="disp" style={{ fontSize: 26, color: "var(--ink)", margin: 0 }}>Your Basket</h2>

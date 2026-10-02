@@ -3,6 +3,9 @@ import { constructWebhookEvent } from '../services/stripe.service.js';
 import { verifyPayHereNotification } from '../services/payhere.service.js';
 import { sendOrderConfirmation, sendNewOrderAdminNotification } from '../services/email.service.js';
 import { prisma } from '../lib/prisma.js';
+import { outboxEnabled } from '../lib/outbox.js';
+import { enqueueEmail } from '../services/email.service.js';
+import type { JobLeaseHandle } from '../jobs/jobLease.js';
 
 // ── Webhook event log (roadmap: replay/dispute debugging) ───────────
 // Best-effort and outside any order transaction: a logging failure must never
@@ -137,6 +140,13 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
             await tx.cartItem.deleteMany({ where: { cartId: order.cartId } });
         }
 
+        if (outboxEnabled()) {
+            const common = { orderId, total: Number(order.total), currency: order.currency, market: order.market };
+            const recipient = order.user?.email ?? order.guestEmail;
+            if (recipient) await enqueueEmail(tx, `paid:${orderId}:customer`, () => sendOrderConfirmation({ ...common, to: recipient }));
+            await enqueueEmail(tx, `paid:${orderId}:merchant`, () => sendNewOrderAdminNotification({ ...common, itemCount: order.items.length }));
+        }
+
         // 6. Hand back what the confirmation email needs. Recipient is the
         //    account email, or the guest email for guest checkout (#17).
         return {
@@ -151,7 +161,7 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
     // Only log the transition on the FIRST flip — the transaction returns null
     // for an already-processed (or unknown) order, so logging unconditionally
     // claimed "marked PAID" on every duplicate webhook delivery (BUG-25).
-    if (confirmation) {
+    if (confirmation && !outboxEnabled()) {
         console.log(`✅ Order ${orderId} marked PAID via ${gateway}`);
 
         // Merchant-facing "you made a sale" alert — sent once (first PAID flip
@@ -170,7 +180,7 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
 
     // Order confirmation — sent once (first PAID flip only) and after commit,
     // so a slow/failed send never blocks the webhook ack or rolls back payment.
-    if (confirmation?.to) {
+    if (confirmation?.to && !outboxEnabled()) {
         await sendOrderConfirmation({
             to: confirmation.to,
             orderId,
@@ -192,8 +202,9 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
 // confirmOrderPaid is: the PENDING→CANCELLED flip is a conditional
 // updateMany, so calling this twice (or racing a late successful payment)
 // can never release stock twice or cancel an order that just got paid.
-export async function cancelOrderAndReleaseStock(orderId: string, note: string) {
+export async function cancelOrderAndReleaseStock(orderId: string, note: string, lease?: JobLeaseHandle) {
     await prisma.$transaction(async (tx) => {
+        await lease?.assertOwned(tx);
         const claimed = await tx.order.updateMany({
             where: { id: orderId, status: 'PENDING' },
             data: { status: 'CANCELLED' },

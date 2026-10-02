@@ -1,4 +1,6 @@
 import type { Request, Response } from 'express';
+import { outboxEnabled } from '../lib/outbox.js';
+import { enqueueAuthEmail } from '../services/token.service.js';
 import { hash, verify } from '@node-rs/bcrypt';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
@@ -49,7 +51,7 @@ export async function register(req: Request, res: Response) {
     const passwordHash = await hash(password, BCRYPT_ROUNDS);
 
     try {
-        const user = await prisma.user.create({
+        const createUser = (tx: Prisma.TransactionClient) => tx.user.create({
             data: {
                 name,
                 email,
@@ -59,12 +61,19 @@ export async function register(req: Request, res: Response) {
             },
         });
 
+        const durable = outboxEnabled();
+        const user = durable ? await prisma.$transaction(async tx => {
+            const created = await createUser(tx);
+            if (!created.verified) await enqueueAuthEmail(tx, created, 'EMAIL_VERIFY');
+            return created;
+        }) : await createUser(prisma);
+
         // Send the verification email for accounts that aren't auto-verified.
         // Fire-and-forget: keeping it OUT of the awaited path preserves both the
         // response latency and the neutral, timing-flat anti-enumeration profile
         // (a slow mail send must not make "new email" distinguishable). Failures
         // are logged, never surfaced — registration still succeeds.
-        if (user && !user.verified) {
+        if (!durable && user && !user.verified) {
             void (async () => {
                 try {
                     const token = await issueEmailVerificationToken(user.id);
@@ -112,6 +121,13 @@ const NEUTRAL_RESEND_MESSAGE = 'If that account exists and still needs verifying
 export async function resendVerification(req: Request, res: Response) {
     const { email } = resendVerificationSchema.parse(req.body); // ZodError → 400
 
+    if (outboxEnabled()) {
+        await prisma.$transaction(async tx => {
+            const user = await tx.user.findUnique({ where: { email } });
+            if (user && !user.verified) await enqueueAuthEmail(tx, user, 'EMAIL_VERIFY');
+        });
+        return res.status(200).json({ message: NEUTRAL_RESEND_MESSAGE });
+    }
     const user = await prisma.user.findUnique({ where: { email } });
     if (user && !user.verified) {
         // Fire-and-forget, mirroring register(): keep the response fast + timing-flat.
@@ -138,6 +154,13 @@ const NEUTRAL_FORGOT_PASSWORD_MESSAGE = 'If that email is registered, a password
 export async function forgotPassword(req: Request, res: Response) {
     const { email } = req.body as ForgotPasswordInput;
 
+    if (outboxEnabled()) {
+        await prisma.$transaction(async tx => {
+            const user = await tx.user.findUnique({ where: { email } });
+            if (user) await enqueueAuthEmail(tx, user, 'PASSWORD_RESET');
+        });
+        return res.status(200).json({ message: NEUTRAL_FORGOT_PASSWORD_MESSAGE });
+    }
     const user = await prisma.user.findUnique({ where: { email } });
     if (user) {
         void (async () => {

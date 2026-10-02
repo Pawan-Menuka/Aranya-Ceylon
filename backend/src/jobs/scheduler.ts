@@ -3,6 +3,9 @@ import { prisma } from '../lib/prisma.js';
 import { sendLowStockAlert, sendAbandonedCartEmail } from '../services/email.service.js';
 import { revalidateFrontend } from '../lib/revalidate.js';
 import { cancelOrderAndReleaseStock } from '../controllers/webhook.controller.js';
+import { outboxEnabled } from '../lib/outbox.js';
+import { distributedJobsEnabled } from './jobLease.js';
+import { startLeasedJobs, runBoundedLowStock, runBoundedAbandonedCarts } from './leasedScheduler.js';
 
 // --- Job 1: Publish scheduled blog posts ---
 // Runs every minute. Checks for posts where scheduledAt <= now
@@ -19,7 +22,7 @@ export function startScheduledPostsJob() {
 
             if (due.length === 0) return;
 
-            await Promise.all(
+            const publications = await Promise.allSettled(
                 due.map((blog) =>
                     prisma.blog.update({
                         where: { id: blog.id },
@@ -28,19 +31,23 @@ export function startScheduledPostsJob() {
                 ),
             );
 
+            const published = due.filter((_blog, index) => publications[index]!.status === 'fulfilled');
+
             // P3-4: revalidate each newly published post so it appears immediately
-            await Promise.all(
-                due.flatMap((blog) => [
-                    revalidateFrontend(`/journal/${blog.slug}`),
-                    revalidateFrontend('/journal'),
-                ]),
-            );
+            // Match the endpoint's 32-path batch bound, leaving room for the
+            // shared home/list/search dependencies in every batch.
+            for (let offset = 0; offset < published.length; offset += 29) {
+                await revalidateFrontend(['/', '/journal', '/search', ...published.slice(offset, offset + 29).map(blog => `/journal/${blog.slug}`)]);
+            }
+
+            const failure = publications.find(result => result.status === 'rejected');
+            if (failure?.status === 'rejected') throw failure.reason;
 
             console.log(`📝 Published ${due.length} scheduled blog post(s)`);
         } catch (err) {
             console.error('[CRON] Scheduled posts job failed:', err);
         }
-    });
+    }, { noOverlap: true });
 }
 
 // --- Job 2: Expire guest carts ---
@@ -60,7 +67,7 @@ export function startCartExpiryJob() {
         } catch (err) {
             console.error('[CRON] Cart expiry job failed:', err);
         }
-    });
+    }, { noOverlap: true });
 }
 
 // --- Job 3: Low stock alert ---
@@ -71,6 +78,7 @@ export function startCartExpiryJob() {
 // directly unit-testable without faking node-cron (same reasoning as
 // runAbandonedCartRecovery below).
 export async function runLowStockAlert(): Promise<number> {
+    if (outboxEnabled()) return runBoundedLowStock();
     const threshold = Number(process.env.LOW_STOCK_THRESHOLD ?? 10);
 
     const lowStock = await prisma.variant.findMany({
@@ -99,7 +107,7 @@ export function startLowStockAlertJob() {
         } catch (err) {
             console.error('[CRON] Low stock alert job failed:', err);
         }
-    });
+    }, { noOverlap: true });
 }
 
 // --- Job 4: Cancel stale unpaid orders ---
@@ -141,7 +149,7 @@ export function startStaleOrderCancellationJob() {
         } catch (err) {
             console.error('[CRON] Stale order cancellation job failed:', err);
         }
-    });
+    }, { noOverlap: true });
 }
 
 // --- Job 5: Prune expired / used refresh tokens ---
@@ -157,7 +165,7 @@ export function startTokenPruningJob() {
         } catch (err) {
             console.error('[CRON] Token pruning job failed:', err);
         }
-    });
+    }, { noOverlap: true });
 }
 
 // --- Job 6: Abandoned-cart recovery ---
@@ -173,6 +181,7 @@ const ABANDONED_CART_HOURS = 3;
 // Extracted from the cron callback so the actual targeting/sending logic is
 // directly unit-testable without faking node-cron.
 export async function runAbandonedCartRecovery(): Promise<number> {
+    if (outboxEnabled()) return runBoundedAbandonedCarts();
     const cutoff = new Date(Date.now() - ABANDONED_CART_HOURS * 60 * 60 * 1000);
     const carts = await prisma.cart.findMany({
         where: {
@@ -187,16 +196,23 @@ export async function runAbandonedCartRecovery(): Promise<number> {
         },
     });
 
+    let sent = 0;
     for (const cart of carts) {
         if (!cart.user?.email) continue;
-        await sendAbandonedCartEmail({
-            to: cart.user.email,
-            items: cart.items.map((item) => ({ name: item.product.name, quantity: item.quantity })),
-        }).catch((err) => console.error(`[CRON] Abandoned-cart email failed for cart ${cart.id}:`, err));
+        try {
+            await sendAbandonedCartEmail({
+                to: cart.user.email,
+                items: cart.items.map((item) => ({ name: item.product.name, quantity: item.quantity })),
+            });
+        } catch (err) {
+            console.error(`[CRON] Abandoned-cart email failed for cart ${cart.id}:`, err);
+            continue;
+        }
         await prisma.cart.update({ where: { id: cart.id }, data: { abandonedEmailSentAt: new Date() } });
+        sent++;
     }
 
-    return carts.length;
+    return sent;
 }
 
 export function startAbandonedCartRecoveryJob() {
@@ -207,11 +223,28 @@ export function startAbandonedCartRecoveryJob() {
         } catch (err) {
             console.error('[CRON] Abandoned-cart recovery job failed:', err);
         }
-    });
+    }, { noOverlap: true });
 }
 
-// Start all jobs
+// Set to false on every API replica except the designated scheduler runner.
+// This is a deployment control, not distributed leader election: the deployment
+// must ensure exactly one enabled runner before adding another API replica.
+let jobsStarted = false;
 export function startAllJobs() {
+    const setting = process.env.SCHEDULED_JOBS_ENABLED?.trim().toLowerCase();
+    if (setting !== undefined && setting !== 'true' && setting !== 'false') {
+        throw new Error('SCHEDULED_JOBS_ENABLED must be true or false');
+    }
+    if (setting === 'false') {
+        console.log('⏰ Cron jobs disabled on this API instance');
+        return;
+    }
+    if (jobsStarted) return;
+    jobsStarted = true;
+    if (outboxEnabled() || distributedJobsEnabled()) {
+        startLeasedJobs();
+        return;
+    }
     startScheduledPostsJob();
     startCartExpiryJob();
     startLowStockAlertJob();

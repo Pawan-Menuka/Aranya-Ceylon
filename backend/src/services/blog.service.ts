@@ -5,7 +5,7 @@ export async function listPublishedBlogs(limit = 10, cursor?: string) {
     try {
         return await prisma.blog.findMany({
             where: { status: 'PUBLISHED' },
-            orderBy: { publishedAt: 'desc' },
+            orderBy: [{ publishedAt: 'desc' }, { id: 'asc' }],
             take: limit + 1,
             ...(cursor && { cursor: { id: cursor }, skip: 1 }),
             select: {

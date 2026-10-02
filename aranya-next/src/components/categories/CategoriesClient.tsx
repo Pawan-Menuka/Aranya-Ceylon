@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import type { CatalogSpice } from "@/lib/types";
+import type { CatalogCategoryGroup } from "@/lib/types";
 import { Reveal } from "../primitives/Reveal";
 import { Liyawel, Eyebrow } from "../primitives/Motif";
 import { Icon } from "../primitives/Icon";
@@ -45,12 +45,11 @@ function ArrowBtn({ hovered, size = 44 }: { hovered: boolean; size?: number }) {
   );
 }
 
-function PrepFeature({ p, flip, products }: { p: (typeof PREP)[number]; flip: boolean; products: CatalogSpice[] }) {
+function PrepFeature({ p, flip, group }: { p: (typeof PREP)[number]; flip: boolean; group?: CatalogCategoryGroup }) {
   const { market } = useMarket();
   const title = p.title || p.cat;
-  const inCat = products.filter((s) => s.category === p.cat);
-  const count = inCat.length;
-  const preview = inCat.slice(0, 3);
+  const count = group?.count ?? 0;
+  const preview = group?.spices ?? [];
   const href = "/products?cat=" + encodeURIComponent(p.cat);
   const [h, setH] = React.useState(false);
   const bg = flip ? "var(--surface)" : "var(--bg)";
@@ -164,7 +163,7 @@ function Collections() {
   );
 }
 
-export function CategoriesClient({ products }: { products: CatalogSpice[] }) {
+export function CategoriesClient({ groups }: { groups: CatalogCategoryGroup[] }) {
   return (
     <div data-screen-label="Categories">
       <header style={{ background: "var(--brand)", color: "#FDFAF5", position: "relative", overflow: "hidden" }}>
@@ -177,7 +176,7 @@ export function CategoriesClient({ products }: { products: CatalogSpice[] }) {
         </div>
       </header>
 
-      {PREP.map((p, i) => <PrepFeature key={p.cat} p={p} flip={i % 2 === 1} products={products} />)}
+      {PREP.map((p, i) => <PrepFeature key={p.cat} p={p} flip={i % 2 === 1} group={groups.find(group => group.name === p.cat)} />)}
       <FlavourBand />
       <Collections />
 

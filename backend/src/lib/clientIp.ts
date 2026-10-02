@@ -1,7 +1,10 @@
 import type { Request } from 'express';
 import { env } from '../config/env.js';
+import { getVerifiedBffClientIp } from '../middleware/bffClientIdentity.js';
 
 // Resolves the real client IP for rate limiting and audit logging.
+// Signed BFF attribution takes precedence; only the identity middleware can
+// install it. Its metadata headers are never trusted directly here.
 //
 // Behind Cloudflare (TRUST_CLOUDFLARE=true) the canonical client IP is the
 // CF-Connecting-IP header. Cloudflare sets it on every request and it can't be
@@ -13,6 +16,8 @@ import { env } from '../config/env.js';
 // what "the client" is, and switching to Cloudflare is a config change, not a
 // code change.
 export function getClientIp(req: Request): string {
+    const bffIp = getVerifiedBffClientIp(req);
+    if (bffIp) return bffIp;
     if (env.TRUST_CLOUDFLARE) {
         const cf = req.headers['cf-connecting-ip'];
         if (typeof cf === 'string' && cf.length > 0) return cf;

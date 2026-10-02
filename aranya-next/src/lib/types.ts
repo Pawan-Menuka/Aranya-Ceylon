@@ -54,6 +54,33 @@ export interface Product {
   createdAt: string;
 }
 
+/** Public catalog cards omit detail text and review bodies. */
+export type ProductCard = Omit<Product, "description" | "status" | "reviews">;
+
+export interface ProductCardPage extends Paginated<ProductCard> {
+  total: number;
+  facets: FacetVocab;
+  featured: ProductCard[];
+  market: BackendMarket;
+}
+
+export interface CategorySummary {
+  groups: { name: string; count: number; spices: ProductCard[] }[];
+  facets: { flavour: { name: string; count: number; sample: ProductCard | null }[] };
+}
+
+export interface CatalogPage extends Omit<ProductCardPage, "items" | "featured"> {
+  items: CatalogSpice[];
+  featured: CatalogSpice[];
+  demo?: boolean;
+}
+
+export interface CatalogCategoryGroup {
+  name: string;
+  count: number;
+  spices: CatalogSpice[];
+}
+
 export interface Category {
   id: string;
   name: string;
@@ -182,4 +209,18 @@ export interface FacetVocab {
   form: string[];
   origin: string[];
   flavour: string[];
+}
+
+// Search uses the public card/list projections; article bodies and product
+// descriptions/reviews are intentionally absent from result payloads.
+export type SearchSort = "relevance" | "price-asc" | "price-desc" | "rating";
+export type SearchResource = "all" | "products" | "journal";
+export interface SearchResultPage<T> { items: T[]; total: number; nextCursor: string | null; hasNextPage: boolean }
+export interface JournalSearchMetadata {
+  id: string; title: string; slug: string; tags: string[];
+  publishedAt: string | null; seoDesc: string | null; viewCount: number;
+}
+export interface SearchResults {
+  q: string; sort: SearchSort; market: BackendMarket;
+  products: SearchResultPage<ProductCard>; journal: SearchResultPage<JournalSearchMetadata>;
 }
