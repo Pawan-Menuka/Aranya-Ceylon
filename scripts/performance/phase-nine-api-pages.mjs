@@ -17,7 +17,9 @@ const migrationPath = path.join(root, 'backend/prisma/migrations/20261002000000_
 const migration = fs.readFileSync(migrationPath, 'utf8');
 const req = createRequire(path.join(root, 'backend/package.json'));
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^PG/i.test(key) && !/^(DATABASE_URL|DIRECT_URL|DIRECT_DATABASE_URL|PRISMA_DATABASE_URL)$/i.test(key)));
-const binary = name => process.env.PG_BIN ? path.join(process.env.PG_BIN, name + (process.platform === 'win32' ? '.exe' : '')) : name;
+// Preserve the verified tool directory before stripping ambient PG connection variables.
+const pgBin = process.env.PG_BIN;
+const binary = name => pgBin ? path.join(pgBin, name + (process.platform === 'win32' ? '.exe' : '')) : name;
 const report = { capturedAt: new Date().toISOString(), runId, databaseAccess: 'WRITE: owned disposable loopback cluster only',
   fixture: 'Full chronological SQL migrations plus 625 synthetic rows per resource; actual PrismaPg binding/hydration; no real database, .env, seed or API server',
   migrationSha256: createHash('sha256').update(migration).digest('hex'),
