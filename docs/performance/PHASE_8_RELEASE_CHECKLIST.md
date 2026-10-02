@@ -1,6 +1,6 @@
 # Phase 8 release checklist
 
-Updated 2026-10-02. Hosting is unselected. Local preparation does not constitute deployment acceptance. The [release runbook](./RELEASE_RUNBOOK.md) supplies the procedures; [Phase 8 results](./PHASE_8_RESULTS.md) will hold final local evidence and timing limits.
+Updated 2026-10-02. See [PR integration results](./PR_INTEGRATION_RESULTS.md) for published candidate #170 and its current checks; historical Phase 8 counts below describe their original snapshot. Hosting is unselected. Local preparation does not constitute deployment acceptance. The [release runbook](./RELEASE_RUNBOOK.md) supplies the procedures; [Phase 8 results](./PHASE_8_RESULTS.md) will hold final local evidence and timing limits.
 
 | Gate | Status | Remaining evidence |
 | --- | --- | --- |

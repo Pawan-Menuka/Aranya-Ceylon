@@ -309,4 +309,3 @@ select.sp-input, select.wh-input {
 @keyframes skeletonPulse{0%,100%{opacity:.5}50%{opacity:1}}
 .skeleton-pulse{animation:skeletonPulse 1.4s ease-in-out infinite;}
 @media (prefers-reduced-motion: reduce){.skeleton-pulse{animation:none; opacity:.75;}}
-

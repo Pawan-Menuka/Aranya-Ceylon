@@ -114,7 +114,7 @@ export function JournalClient({ posts: initialPosts, initialCursor }: { posts: P
     return ["All", ...seen];
   }, [posts]);
   const grid = React.useMemo(() => {
-    if (cat === "All") return posts.filter((p) => p.slug !== featured.slug);
+    if (cat === "All") return posts.filter((p) => p.slug !== featured?.slug);
     return posts.filter((p) => p.category === cat);
   }, [cat, posts, featured]);
 
@@ -145,7 +145,7 @@ export function JournalClient({ posts: initialPosts, initialCursor }: { posts: P
           <Reveal delay={150}><p className="prose" style={{ fontSize: 18, color: "rgba(253,250,245,.8)", margin: "0 auto", maxWidth: 540 }}>Sourcing stories, spice notes and recipes from the hill country — the people, the plants, and how to get the most from both.</p></Reveal>
         </div>
       </header>
-      {cat === "All" && <FeaturedPost post={featured} />}
+      {cat === "All" && featured && <FeaturedPost post={featured} />}
       <section style={{ background: "var(--bg)", padding: "48px 0 96px" }}>
         <div style={{ maxWidth: 1280, margin: "0 auto", padding: "0 40px" }}>
           <div style={{ marginBottom: 44 }}><JournalChips value={cat} onChange={setCat} categories={categories} /></div>

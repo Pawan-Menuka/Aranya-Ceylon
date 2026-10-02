@@ -34,12 +34,16 @@ async function resolveShopSpices(recipe: Recipe): Promise<CatalogSpice[]> {
   return DEMO_MODE ? recipeSpices(recipe) : [];
 }
 
-// generateStaticParams — try backend first, fall back to static list so
-// the build never fails even when the DB is not reachable at build time.
+// Build-time enumeration is optional: unavailable API data must not block a
+// release. Unlisted slugs resolve on request (dynamicParams defaults to true),
+// where primary-read failures still reach the normal retry boundary.
 export async function generateStaticParams() {
-  const live = await fetchRecipes();
-  const recipes = live ?? RECIPES;
-  return recipes.map((r) => ({ slug: r.slug }));
+  try {
+    const live = await fetchRecipes();
+    return (live ?? (DEMO_MODE ? RECIPES : [])).map((r) => ({ slug: r.slug }));
+  } catch {
+    return [];
+  }
 }
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {

@@ -39,7 +39,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      PERF_NODE_MODULES: ${{ runner.temp }}/perf-runtime/node_modules
       NEXT_TELEMETRY_DISABLED: '1'
     steps:
       - uses: actions/checkout@v7
@@ -59,7 +58,10 @@ jobs:
           (cd backend && node node_modules/prisma/build/index.js generate)
           node backend/node_modules/typescript/bin/tsc --project shared/tsconfig.json
       - name: Install isolated browser tooling
+        env:
+          PERF_NODE_MODULES: ${{ runner.temp }}/perf-runtime/node_modules
         run: |
+          echo "PERF_NODE_MODULES=$PERF_NODE_MODULES" >> "$GITHUB_ENV"
           npm install --prefix "$RUNNER_TEMP/perf-runtime" --no-package-lock --no-save playwright@1.62.1
           node "$PERF_NODE_MODULES/playwright/cli.js" install chromium --with-deps
       - name: Request, BFF, hero, media, cache and commerce regressions

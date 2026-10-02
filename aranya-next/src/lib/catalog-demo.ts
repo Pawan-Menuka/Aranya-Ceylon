@@ -21,4 +21,3 @@ export function demoCatalogPage(query: CatalogQuery, market: Market, cursor?: st
   const hasNextPage = offset + items.length < filtered.length;
   return { items, total: filtered.length, facets: CATALOG_FACETS, featured: CATALOG.filter(p => p.featured).slice(0, 3), nextCursor: hasNextPage ? String(offset + items.length) : null, hasNextPage, market: market === "local" ? "LOCAL" : "INTERNATIONAL", demo: true };
 }
-
