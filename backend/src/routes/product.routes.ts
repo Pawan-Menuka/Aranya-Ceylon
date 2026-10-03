@@ -3,7 +3,7 @@ import * as productController from '../controllers/product.controller.js';
 import { requireAuth, requireRole } from '../middleware/authenticate.js';
 import { uploadMiddleware, validateImageContent } from '../middleware/upload.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
-import { reviewLimiter } from '../middleware/rateLimit.js';
+import { adminLimiter, reviewLimiter } from '../middleware/rateLimit.js';
 import * as reviewController from '../controllers/review.controller.js';
 const router = Router();
 
@@ -36,7 +36,7 @@ router.patch('/:id',
     asyncHandler(productController.updateProduct),
 );
 router.post('/:id/images',
-    asyncHandler(requireAuth), requireRole('ADMIN', 'SUPERADMIN'),
+    asyncHandler(requireAuth), requireRole('ADMIN', 'SUPERADMIN'), adminLimiter,
     uploadMiddleware.array('images', 10),
     validateImageContent, // reject spoofed Content-Type by checking magic bytes
     asyncHandler(productController.uploadProductImages),

@@ -6,7 +6,6 @@ import express from 'express';
 import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
-import { SHARED_VERSION } from '@aranya/shared';
 import { ZodError } from 'zod';
 import authRoutes from './routes/auth.routes.js';
 import productRoutes from './routes/product.routes.js';
@@ -147,6 +146,8 @@ if (process.env.ENABLE_DEV_ROUTES === 'true') {
 }
 
 // --- Health check ---
+// Public and unauthenticated: reports only whether the API and its database are up, not which
+// environment or versions are running (final audit #46).
 app.get('/health', async (_req, res) => {
     try {
         await prisma.$queryRaw`SELECT 1`;
@@ -154,8 +155,6 @@ app.get('/health', async (_req, res) => {
             status: 'ok',
             timestamp: new Date().toISOString(),
             database: 'connected',
-            shared: SHARED_VERSION,
-            env: process.env.NODE_ENV ?? 'development',
         });
     } catch {
         res.status(503).json({ status: 'error', database: 'disconnected' });

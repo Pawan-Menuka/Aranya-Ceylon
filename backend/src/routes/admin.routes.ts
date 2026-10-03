@@ -10,6 +10,7 @@ import * as giftAdmin from '../controllers/admin/gift.admin.controller.js';
 import * as couponAdmin from '../controllers/admin/coupon.admin.controller.js';
 import * as reviewAdmin from '../controllers/admin/review.admin.controller.js';
 import * as userAdmin from '../controllers/admin/user.admin.controller.js';
+import * as productImageAdmin from '../controllers/admin/product-image.admin.controller.js';
 import * as analyticsAdmin from '../controllers/admin/analytics.admin.controller.js';
 import * as productController from '../controllers/product.controller.js';
 
@@ -72,5 +73,7 @@ router.get('/products', asyncHandler(productController.adminListProducts));
 router.post('/products', asyncHandler(productController.createProduct));
 router.patch('/products/:id', asyncHandler(productController.updateProduct));
 router.delete('/products/:id', asyncHandler(productController.archiveProduct));
+router.put('/products/:id/images/order', asyncHandler(productImageAdmin.reorderProductImages));
+router.delete('/products/:id/images/:imageId', asyncHandler(productImageAdmin.deleteProductImage));
 
 export default router;
