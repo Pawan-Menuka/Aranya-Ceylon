@@ -22,6 +22,7 @@ interface VariantRow { id: string; market: string; stock: number }
 interface CouponRow {
     id: string; code: string; discountType: 'PERCENTAGE' | 'FIXED_AMOUNT';
     discountValue: number; usageLimit: number | null; usageCount: number; expiresAt: Date | null;
+    currency?: 'LKR' | 'USD' | null;
 }
 type CartWhere = { where: { id?: string; userId?: string; guestToken?: string } };
 type CartItemWhere = { where: { id: string; cartId: string } };
@@ -190,12 +191,46 @@ describe('calculateCartTotal — #5 coupon application', () => {
     it('clamps a fixed coupon so the discount never exceeds the subtotal', async () => {
         setCart(['59.97'], 'coupon_big');
         s.couponsById.set('coupon_big', {
-            id: 'coupon_big', code: 'HUGE', discountType: 'FIXED_AMOUNT',
+            id: 'coupon_big', code: 'HUGE', discountType: 'FIXED_AMOUNT', currency: 'USD',
             discountValue: 1000, usageLimit: null, usageCount: 0, expiresAt: null,
         });
         const r = await calculateCartTotal('cart_1', 'INTERNATIONAL', 'STANDARD');
         expect(r.discountCents).toBe(5997);   // clamped to subtotal, not 100000
         expect(r.totalCents).toBe(499);       // only shipping remains
+    });
+
+    // Final audit #11: a fixed amount is money in one currency. An LKR coupon
+    // worth Rs 500 must not become $500 off in the international store.
+    it('drops a fixed coupon issued for the other store\'s currency', async () => {
+        setCart(['59.97'], 'coupon_lkr');
+        s.couponsById.set('coupon_lkr', {
+            id: 'coupon_lkr', code: 'RS500', discountType: 'FIXED_AMOUNT', currency: 'LKR',
+            discountValue: 500, usageLimit: null, usageCount: 0, expiresAt: null,
+        });
+        const r = await calculateCartTotal('cart_1', 'INTERNATIONAL', 'STANDARD');
+        expect(r.discountCents).toBe(0);
+        expect(r.couponId).toBeNull();
+    });
+
+    it('drops a fixed coupon that names no currency at all', async () => {
+        setCart(['59.97'], 'coupon_nocur');
+        s.couponsById.set('coupon_nocur', {
+            id: 'coupon_nocur', code: 'FLAT', discountType: 'FIXED_AMOUNT',
+            discountValue: 500, usageLimit: null, usageCount: 0, expiresAt: null,
+        });
+        const r = await calculateCartTotal('cart_1', 'INTERNATIONAL', 'STANDARD');
+        expect(r.discountCents).toBe(0);
+        expect(r.couponId).toBeNull();
+    });
+
+    it('applies a percentage coupon tied to a currency only in that store', async () => {
+        setCart(['59.97'], 'coupon_usd_pct');
+        s.couponsById.set('coupon_usd_pct', {
+            id: 'coupon_usd_pct', code: 'INTL10', discountType: 'PERCENTAGE', currency: 'USD',
+            discountValue: 10, usageLimit: null, usageCount: 0, expiresAt: null,
+        });
+        expect((await calculateCartTotal('cart_1', 'INTERNATIONAL', 'STANDARD')).discountCents).toBe(600);
+        expect((await calculateCartTotal('cart_1', 'LOCAL', 'STANDARD')).discountCents).toBe(0);
     });
 
     it('silently drops an expired coupon instead of failing', async () => {
@@ -217,13 +252,22 @@ describe('validateCoupon', () => {
             id: 'c1', code: 'SAVE10', discountType: 'PERCENTAGE',
             discountValue: 10, usageLimit: null, usageCount: 0, expiresAt: null,
         });
-        const r = await validateCoupon('SAVE10', 5997);
+        const r = await validateCoupon('SAVE10', 5997, 'USD');
         expect(r.discountCents).toBe(600);
         expect(r.discount).toBe(6);
     });
 
     it('throws COUPON_NOT_FOUND for an unknown code', async () => {
-        await expect(validateCoupon('NOPE', 5997)).rejects.toThrow('COUPON_NOT_FOUND');
+        await expect(validateCoupon('NOPE', 5997, 'USD')).rejects.toThrow('COUPON_NOT_FOUND');
+    });
+
+    it('throws COUPON_WRONG_STORE for a coupon issued in another currency', async () => {
+        s.couponsByCode.set('RS500', {
+            id: 'c3', code: 'RS500', discountType: 'FIXED_AMOUNT', currency: 'LKR',
+            discountValue: 500, usageLimit: null, usageCount: 0, expiresAt: null,
+        });
+        await expect(validateCoupon('RS500', 5997, 'USD')).rejects.toThrow('COUPON_WRONG_STORE');
+        expect((await validateCoupon('RS500', 599700, 'LKR')).discountCents).toBe(50000);
     });
 
     it('throws COUPON_USAGE_LIMIT_REACHED when the limit is hit', async () => {
@@ -231,7 +275,7 @@ describe('validateCoupon', () => {
             id: 'c2', code: 'MAXED', discountType: 'PERCENTAGE',
             discountValue: 10, usageLimit: 5, usageCount: 5, expiresAt: null,
         });
-        await expect(validateCoupon('MAXED', 5997)).rejects.toThrow('COUPON_USAGE_LIMIT_REACHED');
+        await expect(validateCoupon('MAXED', 5997, 'USD')).rejects.toThrow('COUPON_USAGE_LIMIT_REACHED');
     });
 });
 

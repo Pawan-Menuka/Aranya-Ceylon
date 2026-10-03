@@ -21,12 +21,9 @@ const state = vi.hoisted(() => ({
 const tx = {
     order: {
         updateMany: vi.fn(async () => ({ count: 1 })),
-        // updateOrderStatus uses .update() (singular), not updateMany — this
-        // was missing from the mock entirely before (the one pre-existing
-        // updateOrderStatus test never reached the transaction to exercise
-        // it). Returns the merged row so callers reading `updated.items` see
-        // the order's real line items.
-        update: vi.fn(async (args: { data: Partial<OrderRow> }) => ({ ...state.order, ...args.data })),
+        // updateOrderStatus claims the transition with a conditional
+        // updateMany, then re-reads the row inside the same transaction.
+        findUnique: vi.fn(async () => state.order),
     },
     orderEvent: { create: vi.fn(async () => ({})) },
     variant: { update: vi.fn(async () => ({})) },
@@ -58,7 +55,10 @@ vi.mock('../../services/stripe.service.js', () => ({
     }) } },
 }));
 
+vi.mock('../../services/pending-order.service.js', () => ({ cancelPendingOrder: vi.fn(async () => true) }));
+
 import { refundOrder, updateOrderStatus } from './order.admin.controller.js';
+import { cancelPendingOrder } from '../../services/pending-order.service.js';
 
 const resDouble = () => responseDouble<Record<string, unknown>>();
 
@@ -125,31 +125,99 @@ describe('shipping status', () => {
     });
 });
 
-describe('updateOrderStatus — cancelling a PENDING order releases its reserved stock', () => {
-    it('releases stock when an admin cancels a still-PENDING order', async () => {
+// Final audit #10: status changes used to be accepted from any state to any
+// state, read-then-write outside a guard, and an admin cancel released stock
+// but not the coupon use or the Stripe PaymentIntent.
+describe('updateOrderStatus — cancelling an unpaid order', () => {
+    it('cancels a PENDING order through the shared release path', async () => {
+        state.order.status = 'PENDING';
+        vi.mocked(cancelPendingOrder).mockImplementationOnce(async () => { state.order.status = 'CANCELLED'; return true; });
+        const res = resDouble();
+        await updateOrderStatus(requestDouble({ params: { id: 'o1' }, body: { status: 'CANCELLED' } }), res);
+
+        expect(res.statusCode).toBe(200);
+        expect(cancelPendingOrder).toHaveBeenCalledWith({ id: 'o1', paymentIntentId: 'pi_1' }, 'Cancelled by an administrator.');
+        // Stock and coupon release belong to that path, not to this handler.
+        expect(tx.variant.update).not.toHaveBeenCalled();
+        expect(state.transactionCalls).toBe(0);
+    });
+
+    it('refuses to cancel while Stripe is still settling a payment', async () => {
+        state.order.status = 'PENDING';
+        vi.mocked(cancelPendingOrder).mockResolvedValueOnce(false);
+        const res = resDouble();
+        await updateOrderStatus(requestDouble({ params: { id: 'o1' }, body: { status: 'CANCELLED' } }), res);
+
+        expect(res.statusCode).toBe(409);
+        expect(res.body.code).toBe('PAYMENT_IN_PROGRESS');
+    });
+
+    it('reports a conflict when the order was paid while it was being cancelled', async () => {
+        state.order.status = 'PENDING';
+        // The release path is conditional on PENDING: a payment that landed
+        // first leaves the order PAID and the cancel a no-op.
+        vi.mocked(cancelPendingOrder).mockImplementationOnce(async () => { state.order.status = 'PAID'; return true; });
+        const res = resDouble();
+        await updateOrderStatus(requestDouble({ params: { id: 'o1' }, body: { status: 'CANCELLED' } }), res);
+
+        expect(res.statusCode).toBe(409);
+        expect(res.body.code).toBe('ORDER_CHANGED');
+    });
+});
+
+describe('updateOrderStatus — transition rules', () => {
+    it.each([
+        ['PAID', 'CANCELLED'],       // a paid order must be refunded, not cancelled
+        ['PAID', 'REFUNDED'],        // only the refund endpoint may set REFUNDED
+        ['PROCESSING', 'REFUNDED'],
+        ['PENDING', 'PROCESSING'],   // unpaid orders can't enter fulfilment
+        ['PENDING', 'DELIVERED'],
+        ['CANCELLED', 'PROCESSING'],
+        ['REFUNDED', 'DELIVERED'],
+        ['DELIVERED', 'PROCESSING'],
+    ])('refuses %s → %s without touching the order', async (from, to) => {
+        state.order.status = from;
+        const res = resDouble();
+        await updateOrderStatus(requestDouble({ params: { id: 'o1' }, body: { status: to } }), res);
+
+        expect(res.statusCode).toBe(409);
+        expect(res.body.code).toBe('INVALID_STATUS_TRANSITION');
+        expect(state.transactionCalls).toBe(0);
+        expect(cancelPendingOrder).not.toHaveBeenCalled();
+    });
+
+    it('refuses to ship an unpaid order even with a tracking number', async () => {
         state.order.status = 'PENDING';
         const res = resDouble();
-        await updateOrderStatus(requestDouble({ params: { id: 'o1' }, body: { status: 'CANCELLED' } }), res);
-
-        expect(res.statusCode).toBe(200);
-        expect(tx.variant.update).toHaveBeenCalledWith({ where: { id: 'v1' }, data: { stock: { increment: 2 } } });
+        await updateOrderStatus(requestDouble({ params: { id: 'o1' }, body: { status: 'SHIPPED', trackingNumber: 'TRK1' } }), res);
+        expect(res.statusCode).toBe(409);
     });
 
-    it('does not touch stock cancelling an already-PAID order — that is refundOrder\'s job', async () => {
-        state.order.status = 'PAID';
-        const res = resDouble();
-        await updateOrderStatus(requestDouble({ params: { id: 'o1' }, body: { status: 'CANCELLED' } }), res);
-
-        expect(res.statusCode).toBe(200);
-        expect(tx.variant.update).not.toHaveBeenCalled();
-    });
-
-    it('does not touch stock for a non-cancellation status change', async () => {
+    it('moves a PAID order to PROCESSING, claiming it against its current status', async () => {
         state.order.status = 'PAID';
         const res = resDouble();
         await updateOrderStatus(requestDouble({ params: { id: 'o1' }, body: { status: 'PROCESSING' } }), res);
 
         expect(res.statusCode).toBe(200);
+        expect(tx.order.updateMany).toHaveBeenCalledWith({ where: { id: 'o1', status: 'PAID' }, data: { status: 'PROCESSING' } });
         expect(tx.variant.update).not.toHaveBeenCalled();
+    });
+
+    it('reports a conflict instead of overwriting a status that changed underneath', async () => {
+        state.order.status = 'PAID';
+        tx.order.updateMany.mockResolvedValueOnce({ count: 0 });
+        const res = resDouble();
+        await updateOrderStatus(requestDouble({ params: { id: 'o1' }, body: { status: 'PROCESSING' } }), res);
+
+        expect(res.statusCode).toBe(409);
+        expect(res.body.code).toBe('ORDER_CHANGED');
+        expect(tx.orderEvent.create).not.toHaveBeenCalled();
+    });
+
+    it('allows correcting the tracking number on a shipped order', async () => {
+        state.order.status = 'SHIPPED';
+        const res = resDouble();
+        await updateOrderStatus(requestDouble({ params: { id: 'o1' }, body: { status: 'SHIPPED', trackingNumber: 'TRK2' } }), res);
+        expect(res.statusCode).toBe(200);
     });
 });

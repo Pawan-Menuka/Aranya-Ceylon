@@ -2,6 +2,8 @@ import crypto from 'crypto';
 
 const MERCHANT_ID = process.env.PAYHERE_MERCHANT_ID!;
 const MERCHANT_SECRET = process.env.PAYHERE_MERCHANT_SECRET!;
+// Validated at boot (config/env.ts): must be set explicitly when
+// PAYMENTS_MODE=live. The sandbox fallback only ever applies in stub mode.
 const MODE = process.env.PAYHERE_MODE ?? 'sandbox';
 
 // PayHere endpoints

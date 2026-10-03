@@ -339,6 +339,10 @@ model Coupon {
   code           String       @unique
   discountType   DiscountType
   discountValue  Decimal      @db.Decimal(10, 2)
+  // Store the coupon is valid in. A FIXED_AMOUNT value is money, so it MUST
+  // name its currency — "500" is Rs 500 locally but $500 abroad. null means
+  // "any store" and is only honoured for PERCENTAGE coupons.
+  currency       Currency?
   usageLimit     Int?         // null = unlimited
   usageCount     Int          @default(0)
   expiresAt      DateTime?

@@ -75,7 +75,13 @@ export const updateProductSchema = z.object({
     originLabel: z.string().optional().nullable(),
     color: z.string().optional().nullable(),
     flavour: z.array(z.string().max(50)).max(20).optional(),
-    variants: z.array(variantShape.extend({ id: z.string().optional() }).superRefine(refineVariantMarket)).min(1).optional(),
+    variants: z.array(variantShape.extend({
+        id: z.string().optional(),
+        // The stock value the editor loaded for an existing variant. When
+        // present, the API applies `stock − stockBase` as a delta, so units
+        // reserved by orders while the form was open are not overwritten.
+        stockBase: z.number().int().min(0).optional(),
+    }).superRefine(refineVariantMarket)).min(1).optional(),
 });
 
 export const productFilterSchema = z.object({

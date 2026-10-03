@@ -136,6 +136,14 @@ export async function updateProduct(req: Request, res: Response) {
     try {
         product = await publicMutation(tx => productService.updateProduct(id, data, tx), result => productPaths(before.slug, result!.slug), () => productService.updateProduct(id, data));
     } catch (err) {
+        // Matched by message, like isDuplicateSku matches by code — not by class.
+        if (err instanceof Error && err.message === 'STOCK_CHANGED') {
+            const sku = (err as { sku?: string }).sku ?? 'a variant';
+            return res.status(409).json({
+                error: `Stock for ${sku} changed while you were editing — some units have been sold or reserved. Reload the product and try again.`,
+                code: 'STOCK_CHANGED',
+            });
+        }
         if (isDuplicateSku(err)) return res.status(409).json({ error: SKU_CONFLICT });
         throw err;
     }

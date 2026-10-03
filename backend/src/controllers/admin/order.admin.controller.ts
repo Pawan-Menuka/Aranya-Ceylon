@@ -6,6 +6,7 @@ import { prisma } from '../../lib/prisma.js';
 import { writeAuditLog } from '../../services/audit.service.js';
 import { sendShippingNotification } from '../../services/email.service.js';
 import { stripe } from '../../services/stripe.service.js';
+import { cancelPendingOrder } from '../../services/pending-order.service.js';
 import { z } from 'zod';
 import type { Market, OrderStatus, Prisma } from '@prisma/client';
 
@@ -102,6 +103,33 @@ export async function getOrder(req: Request, res: Response) {
     return res.json({ order });
 }
 
+// Which status an admin may move an order to from each state. Everything else
+// is refused: this endpoint used to accept any target from any state, so an
+// unpaid order could be marked SHIPPED and a paid one marked CANCELLED or
+// REFUNDED with no gateway refund and no restock.
+//   • PAID is set only by a verified gateway webhook.
+//   • REFUNDED is set only by refundOrder, which refunds at the gateway first.
+//   • A paid order is never cancelled here — it has to be refunded.
+//   • SHIPPED → SHIPPED exists to correct a tracking number.
+const ADMIN_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
+    PENDING: ['CANCELLED'],
+    PAID: ['PROCESSING', 'SHIPPED'],
+    PROCESSING: ['SHIPPED'],
+    SHIPPED: ['SHIPPED', 'DELIVERED'],
+    DELIVERED: [],
+    CANCELLED: [],
+    REFUNDED: [],
+};
+
+function transitionError(from: OrderStatus, to: OrderStatus): string {
+    if (to === 'REFUNDED') return 'Use the refund action to refund an order — it refunds the payment and restocks the items.';
+    if (to === 'CANCELLED' && from !== 'PENDING') return 'A paid order cannot be cancelled. Refund it instead so the customer gets their money back.';
+    if (from === 'PENDING') return 'This order has not been paid yet, so it can only be cancelled.';
+    return `An order that is ${from} cannot be moved to ${to}.`;
+}
+
+const ORDER_CHANGED = 'This order changed while you were updating it. Reload it and check its current status.';
+
 // --- Update order status ---
 export async function updateOrderStatus(req: Request, res: Response) {
     const id = req.params.id!;
@@ -110,47 +138,59 @@ export async function updateOrderStatus(req: Request, res: Response) {
     const before = await prisma.order.findUnique({ where: { id } });
     if (!before) return res.status(404).json({ error: 'Order not found' });
 
-    // Atomic: update order + create timeline event
-    const order = await prisma.$transaction(async (tx) => {
-        const updated = await tx.order.update({
-            where: { id },
-            data: {
-                status,
-                ...(trackingNumber && { trackingNumber }),
-            },
-            include: { user: true, items: true },
-        });
+    if (!ADMIN_TRANSITIONS[before.status].includes(status)) {
+        return res.status(409).json({ error: transitionError(before.status, status), code: 'INVALID_STATUS_TRANSITION' });
+    }
 
-        // A still-PENDING order already reserved its stock at checkout-intent
-        // creation (roadmap: stock reservation at checkout). If an admin
-        // cancels it here before it was ever paid, that reservation must be
-        // released — mirrors refundOrder's restock-on-reversal above; without
-        // this an admin cancellation would silently leak the reserved stock
-        // forever (a PAID→CANCELLED/REFUNDED transition is refundOrder's job
-        // and already restocks there, so this only fires for PENDING).
-        if (before.status === 'PENDING' && status === 'CANCELLED') {
-            await Promise.all(
-                updated.items.map((item) =>
-                    tx.variant.update({
-                        where: { id: item.variantId },
-                        data: { stock: { increment: item.quantity } },
-                    }),
-                ),
-            );
+    let order;
+    if (status === 'CANCELLED') {
+        // Only reachable from PENDING. Goes through the same path as the
+        // stale-order sweep: the Stripe PaymentIntent is closed first, then the
+        // PENDING→CANCELLED flip, stock release and coupon-use release happen
+        // in one conditional transaction — so a payment that lands meanwhile
+        // wins, and a double click can never restock twice.
+        const cancelled = await cancelPendingOrder(
+            { id, paymentIntentId: before.paymentIntentId },
+            note ?? 'Cancelled by an administrator.',
+        );
+        if (!cancelled) {
+            return res.status(409).json({
+                error: 'Stripe is still processing a payment for this order, or could not be reached, so it was not cancelled. Try again in a few minutes.',
+                code: 'PAYMENT_IN_PROGRESS',
+            });
         }
-
-        await tx.orderEvent.create({
-            data: { orderId: id, status, note: note ?? `Status updated to ${status}` },
-        });
-
-        const recipient = updated.user?.email ?? updated.guestEmail;
-        if (outboxEnabled() && status === 'SHIPPED' && trackingNumber && recipient) {
-            const episode = createHash('sha256').update(trackingNumber).digest('hex');
-            await enqueueEmail(tx, `shipped:${id}:${episode}`,
-                () => sendShippingNotification({ to: recipient, orderId: id, trackingNumber, market: updated.market }));
+        order = await prisma.order.findUnique({ where: { id }, include: { user: true, items: true } });
+        if (!order || order.status !== 'CANCELLED') {
+            return res.status(409).json({ error: ORDER_CHANGED, code: 'ORDER_CHANGED' });
         }
-        return updated;
-    });
+    } else {
+        // Claim the transition against the status that was validated above, so a
+        // concurrent webhook or second admin can't be silently overwritten.
+        order = await prisma.$transaction(async (tx) => {
+            const claimed = await tx.order.updateMany({
+                where: { id, status: before.status },
+                data: {
+                    status,
+                    ...(trackingNumber && { trackingNumber }),
+                },
+            });
+            if (claimed.count === 0) return null;
+
+            await tx.orderEvent.create({
+                data: { orderId: id, status, note: note ?? `Status updated to ${status}` },
+            });
+
+            const updated = await tx.order.findUnique({ where: { id }, include: { user: true, items: true } });
+            const recipient = updated?.user?.email ?? updated?.guestEmail;
+            if (updated && outboxEnabled() && status === 'SHIPPED' && trackingNumber && recipient) {
+                const episode = createHash('sha256').update(trackingNumber).digest('hex');
+                await enqueueEmail(tx, `shipped:${id}:${episode}`,
+                    () => sendShippingNotification({ to: recipient, orderId: id, trackingNumber, market: updated.market }));
+            }
+            return updated;
+        });
+        if (!order) return res.status(409).json({ error: ORDER_CHANGED, code: 'ORDER_CHANGED' });
+    }
 
     // P3-5: send shipping email — fall back to guestEmail so guest orders are notified
     const shippingRecipient = order.user?.email ?? (order as { guestEmail?: string | null }).guestEmail ?? null;
