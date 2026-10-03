@@ -4,7 +4,7 @@ import type { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { auditPublicMutation } from '../../lib/audit-public-mutation.js';
-import { enqueueRevalidation, publicMutation } from '../../lib/public-mutation.js';
+import { enqueueRevalidation } from '../../lib/public-mutation.js';
 import { z } from 'zod';
 
 type Tx = Prisma.TransactionClient;
@@ -59,6 +59,17 @@ async function ensureBackingProduct(
     const totalGrams = gift.contents.length * jarGrams;
     const slug = backingSlug(gift.slug);
 
+    // A gift set with this slug existed before and was deleted. Its backing
+    // product is archived, not removed (orders may reference it), and used to
+    // block this slug forever with a unique-constraint "already exists".
+    // Revive it with the new gift set's details instead.
+    const previous = await tx.product.findUnique({ where: { slug }, select: { id: true } });
+    if (previous) {
+        await tx.product.update({ where: { id: previous.id }, data: { status: 'DRAFT', featured: gift.featured, color: gift.color } });
+        await syncBackingProduct(tx, gift.slug, gift);
+        return tx.product.findUniqueOrThrow({ where: { id: previous.id }, include: { variants: true } });
+    }
+
     return tx.product.create({
         data: {
             name: gift.name,
@@ -89,15 +100,18 @@ async function ensureBackingProduct(
 async function syncBackingProduct(
     tx: Tx,
     oldSlug: string,
-    gift: { slug: string; jar: string; contents: string[]; usd: Prisma.Decimal | number; lkr: Prisma.Decimal | number },
+    gift: { slug: string; name: string; blurb: string; jar: string; contents: string[]; usd: Prisma.Decimal | number; lkr: Prisma.Decimal | number },
 ) {
     const product = await tx.product.findUnique({ where: { slug: backingSlug(oldSlug) }, include: { variants: true } });
     if (!product) return;
 
+    // Name and description too: the backing product's name is what order
+    // lines, emails and the admin order view show for this gift set.
     const newSlug = backingSlug(gift.slug);
-    if (newSlug !== product.slug) {
-        await tx.product.update({ where: { id: product.id }, data: { slug: newSlug } });
-    }
+    await tx.product.update({
+        where: { id: product.id },
+        data: { name: gift.name, description: gift.blurb, ...(newSlug !== product.slug && { slug: newSlug }) },
+    });
 
     const jarGrams = parseInt(gift.jar, 10) || 50;
     const totalGrams = gift.contents.length * jarGrams;
@@ -201,7 +215,14 @@ export async function deleteGift(req: Request, res: Response) {
     const existing = await prisma.giftSet.findUnique({ where: { id } });
     if (!existing) { res.status(404).json({ error: 'Gift set not found' }); return; }
 
-    await publicMutation(tx => tx.giftSet.delete({ where: { id } }), () => ['/gifts', '/search']);
+    // Archive the hidden backing product in the same transaction: left as a
+    // DRAFT it stayed purchasable by id, and its slug blocked re-creating this
+    // gift set. Archived (not deleted) because orders may reference it.
+    await prisma.$transaction(async (tx) => {
+        await tx.giftSet.delete({ where: { id } });
+        await tx.product.updateMany({ where: { slug: backingSlug(existing.slug) }, data: { status: 'ARCHIVED' } });
+        await enqueueRevalidation(tx, ['/gifts', '/search']);
+    });
 
     await auditPublicMutation({
         req, event: 'GIFT_DELETE',

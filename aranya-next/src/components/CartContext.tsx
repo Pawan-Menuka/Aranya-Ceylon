@@ -11,6 +11,7 @@ import { bootstrapCart, registerCartMutationDrain, addCartItem, updateCartItem, 
 import type { CartItem } from "@/lib/types";
 import { useMarket } from "./MarketContext";
 import { useAuth } from "./AuthContext";
+import { DEMO_MODE } from "@/lib/demo";
 
 // Client cart store as a typed React context (ports cart-store.js + the useCart
 // hook). Persists to localStorage; currency/totals derive from the active market
@@ -471,7 +472,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           if (scope !== scopeRef.current) return false;
           // Offline/demo continuity only: accept a known local promo when the
           // backend is unreachable (there is no real checkout in that mode).
-          if (CONFIG[market].promo[c]) {
+          // Gated on DEMO_MODE: this branch also runs when the backend REJECTS
+          // the code, and in production that showed a discount checkout then refused.
+          if (DEMO_MODE && CONFIG[market].promo[c]) {
             setState((s) => ({ ...s, promo: c }));
             return true;
           }

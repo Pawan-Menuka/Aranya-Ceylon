@@ -209,6 +209,18 @@ describe('createIntent — #19 market re-validation', () => {
         expect(res.statusCode).toBe(409);
     });
 
+    // Final audit #29: archived products stayed purchasable through carts
+    // that already held them.
+    it('rejects a product archived after it was added to the cart', async () => {
+        store.cart = cartWith({ market: 'INTERNATIONAL', currency: 'USD' });
+        (store.cart.items[0]!.product as { id: string; status?: string }).status = 'ARCHIVED';
+        const res = mockRes();
+        await createIntent(userReq(), res);
+        expect(res.statusCode).toBe(409);
+        expect(res.body.items).toEqual([{ productId: 'p1', variantId: 'v1' }]);
+        expect(store.lastOrderData).toBeNull();
+    });
+
     it('lets a matching INTERNATIONAL/USD cart through', async () => {
         const res = mockRes();
         await createIntent(userReq(), res);

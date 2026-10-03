@@ -261,6 +261,9 @@ function PayHereRedirectForm({ intent }: { intent: PayHereIntent }) {
 // Country options
 // ---------------------------------------------------------------------------
 
+// First entry of the local District select below.
+const LOCAL_DEFAULT_DISTRICT = "Colombo";
+
 const INTL_COUNTRIES = [
   { value: "US", label: "United States" },
   { value: "GB", label: "United Kingdom" },
@@ -472,6 +475,13 @@ export function CheckoutClient() {
     setCountry(market === "local" ? "LK" : "US");
     if (market === "local" && pay !== "card") setPay("card");
   }, [market, pay]);
+
+  // The local District select displays its first option before anyone picks
+  // one, but the state behind it started empty — so the district shown was
+  // never submitted. Keep the state equal to what is shown.
+  React.useEffect(() => {
+    setRegion(market === "local" ? LOCAL_DEFAULT_DISTRICT : "");
+  }, [market]);
 
   // Fetch server-authoritative totals whenever delivery method, market, or cart changes
   React.useEffect(() => {

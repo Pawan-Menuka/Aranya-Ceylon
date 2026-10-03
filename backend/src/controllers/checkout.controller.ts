@@ -86,13 +86,15 @@ export async function createIntent(req: Request, res: Response) {
         }
     }
 
-    // Market re-validation: a variant's market can change while the cart sits.
-    // Re-check every line so we never charge a cross-market item.
+    // Market re-validation: a variant's market can change while the cart sits,
+    // and a product can be archived after it was added. Re-check every line so
+    // we never charge a cross-market or withdrawn item.
     const expectedCurrency = market === 'LOCAL' ? 'LKR' : 'USD';
     const wrongMarket = cart.items.filter(
         (item) =>
             (item.variant.market !== market && item.variant.market !== 'BOTH') ||
-            item.variant.currency !== expectedCurrency,
+            item.variant.currency !== expectedCurrency ||
+            item.product.status === 'ARCHIVED',
     );
     if (wrongMarket.length > 0) {
         return res.status(409).json({

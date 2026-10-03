@@ -157,6 +157,15 @@ app.use((_req, res) => {
 });
 
 app.use((err: Error & { status?: number; expose?: boolean }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    // The response is already gone — typically the 30s request timeout answered
+    // 503 and the handler failed afterwards. Writing again throws "headers
+    // already sent" inside this handler, so just record it. (Work that
+    // completes after the timeout still takes effect; the client was told to
+    // retry, which the idempotent order paths tolerate.)
+    if (res.headersSent) {
+        console.error('[ERROR after response sent]', err);
+        return;
+    }
     // Controllers that call schema.parse() directly (cart, checkout, contact,
     // wholesale, admin) throw a ZodError, which has no .status — without this
     // branch it would fall through to a 500 for what is really a 400. Surface

@@ -121,6 +121,9 @@ describe('lazy shopping mutations', () => {
         await controller.addItem(request({ body: addBody }), res);
         expect(db.variant.findFirst).toHaveBeenCalledWith({ where: {
             id: 'variant-1', productId: 'product-1', market: { in: ['LOCAL', 'BOTH'] },
+            // Final audit #35 / #29: priced in this store's currency, and the
+            // product not archived.
+            currency: 'LKR', product: { status: { not: 'ARCHIVED' } },
         } });
         expect(db.variant.findFirst.mock.invocationCallOrder[0]).toBeLessThan(db.cart.create.mock.invocationCallOrder[0]!);
         expect(db.cartItem.upsert.mock.invocationCallOrder[0]).toBeLessThan(res.cookie.mock.invocationCallOrder[0]!);

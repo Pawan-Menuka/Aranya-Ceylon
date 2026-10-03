@@ -36,7 +36,9 @@ export const checkoutSchema = z.object({
     }),
     shippingMethod: z.enum(['STANDARD', 'EXPRESS']),
     saveAddress: z.boolean().default(false),
-    couponCode: z.string().max(50).optional(),
+    // Upper-cased like applyCouponSchema.code: the same code used to work on
+    // one endpoint and be "not valid" on the other depending on its case.
+    couponCode: z.string().trim().max(50).toUpperCase().optional(),
     giftWrap: z.boolean().default(false),
     giftNote: z.string().max(500).optional(),
 });

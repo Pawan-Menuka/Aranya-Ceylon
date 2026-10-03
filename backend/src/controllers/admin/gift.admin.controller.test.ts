@@ -80,6 +80,16 @@ const store = vi.hoisted(() => {
                 Object.assign(row, data);
                 return row;
             },
+            updateMany: async ({ where, data }: { where: { slug: string }; data: Partial<ProductRow> }) => {
+                const rows = s.products.filter((p) => p.slug === where.slug);
+                rows.forEach((row) => Object.assign(row, data));
+                return { count: rows.length };
+            },
+            findUniqueOrThrow: async ({ where }: ById) => {
+                const row = s.products.find((p) => p.id === where.id);
+                if (!row) throw new Error('NOT_FOUND');
+                return { ...row, variants: s.variants.filter((v) => v.productId === row.id) };
+            },
         },
         variant: {
             update: async ({ where, data }: VariantUpdate) => {
@@ -223,6 +233,40 @@ describe('updateGift — #2 price sync', () => {
 
         expect(res.statusCode).toBe(200); // does not throw / fail the request
         expect(store.s.products).toHaveLength(0);
+    });
+
+    it('keeps the backing product name in step with a renamed gift set', async () => {
+        await createGift(requestDouble({ body: baseBody }), resDouble());
+        const giftId = store.s.giftSets[0]!.id;
+        await updateGift(requestDouble({ params: { id: giftId }, body: { name: 'The Ceylon Classic II' } }), resDouble());
+        expect(store.s.products[0]!.name).toBe('The Ceylon Classic II');
+    });
+});
+
+// Final audit #30: deleting a gift set left its DRAFT backing product behind —
+// still purchasable by id, and its slug blocked re-creating the gift set.
+describe('deleteGift — backing product', () => {
+    it('archives the backing product instead of leaving it on sale', async () => {
+        await createGift(requestDouble({ body: baseBody }), resDouble());
+        await deleteGift(requestDouble({ params: { id: store.s.giftSets[0]!.id } }), resDouble());
+
+        expect(store.s.giftSets).toHaveLength(0);
+        expect(store.s.products).toHaveLength(1);        // kept: orders may reference it
+        expect(store.s.products[0]!.status).toBe('ARCHIVED');
+    });
+
+    it('lets the same slug be created again, reviving the backing product', async () => {
+        await createGift(requestDouble({ body: baseBody }), resDouble());
+        await deleteGift(requestDouble({ params: { id: store.s.giftSets[0]!.id } }), resDouble());
+
+        const res = resDouble();
+        await createGift(requestDouble({ body: { ...baseBody, name: 'The Classic, returned', usd: 33 } }), res);
+
+        expect(res.statusCode).toBe(201);
+        expect(store.s.products).toHaveLength(1);         // revived, not duplicated
+        expect(store.s.products[0]!.status).toBe('DRAFT');
+        expect(store.s.products[0]!.name).toBe('The Classic, returned');
+        expect(store.s.variants.find((v) => v.currency === 'USD')!.price).toBe(33);
     });
 });
 
