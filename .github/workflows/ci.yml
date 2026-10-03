@@ -5,6 +5,8 @@ on:
     branches: [main, Develop]
   pull_request:
     branches: [main, Develop]
+  # Lets deploy.yml run these exact jobs as a gate before it touches production.
+  workflow_call:
 
 jobs:
   quality:
@@ -50,9 +52,24 @@ jobs:
           DATABASE_URL: postgresql://fixture:fixture@localhost:5432/fixture
         run: node backend/node_modules/prisma/build/index.js validate --config backend/prisma.config.ts
 
-      - name: Security audit
-        # Report-only: remaining high/critical findings include transitive
-        # dependencies in Prisma tooling that cannot be patched directly.
+      - name: Security audit (fails on critical)
+        # A critical advisory in a production dependency fails the build. An
+        # unreachable audit endpoint only warns, so a registry outage cannot
+        # block a release.
+        run: |
+          set +e
+          pnpm audit --audit-level=critical --prod 2>&1 | tee audit-critical.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ] && grep -q ERR_PNPM_AUDIT_BAD_RESPONSE audit-critical.log; then
+            echo "::warning::npm audit endpoint unavailable; critical-advisory gate skipped"
+            exit 0
+          fi
+          exit "$code"
+
+      - name: Security audit (high, report only)
+        # High advisories are listed for review, not enforced: several are
+        # transitive (Express 4 -> path-to-regexp / qs, jsdom -> undici) and
+        # have no fix inside the current major versions.
         run: pnpm audit --audit-level=high --prod || true
 
       - name: Lighthouse CI (report only)

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
     send: vi.fn(),
@@ -13,6 +13,16 @@ vi.mock('resend', () => ({
 }));
 vi.mock('./audit.service.js', () => ({ writeAuditLog: mocks.audit }));
 
+// The first dynamic import of the email module transforms and loads its whole
+// dependency graph. On a loaded machine that exceeded the 5 s test timeout, and
+// the late `send` call of the timed-out test then leaked into the next one
+// (audit #61). Pay that cost once, up front, with a generous budget.
+beforeAll(async () => {
+    vi.stubEnv('RESEND_API_KEY', 're_fixture_never_sent');
+    await import('./email.service.js');
+    vi.unstubAllEnvs();
+}, 60_000);
+
 beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
@@ -24,7 +34,7 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
-describe('verification email uses public BFF entry point', () => {
+describe('verification email uses public BFF entry point', { timeout: 20_000 }, () => {
     it('uses the first trimmed frontend origin and strips trailing slashes', async () => {
         vi.stubEnv('FRONTEND_URL', '  https://shop.example/// , https://secondary.example ');
         vi.stubEnv('API_URL', 'https://private-api.example');

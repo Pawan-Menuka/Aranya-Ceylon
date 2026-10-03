@@ -1,5 +1,10 @@
 # Aranya Ceylon — Known Issues & Fix Guide
 
+> **Historical document — do not use as current status.** This is a June 2026 review of the original
+> prototype (the `frontend/` directory, since removed) and an early backend commit. Many findings were
+> fixed or no longer apply. For the current state see the
+> [final audit report](../audits/final-audit-report.md) and the [deployment checklist](deployment-checklist.md).
+
 > Generated from a full code review on 2026-06-11. Covers commit `69e5364` **plus the uncommitted
 > local changes** in `backend/` (UI fields, rating aggregation, dev-seed route, CORS changes) and the
 > **uncommitted frontend prototype** (~110 files in `frontend/`). None of the uncommitted backend

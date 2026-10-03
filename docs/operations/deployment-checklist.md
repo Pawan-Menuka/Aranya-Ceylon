@@ -64,8 +64,11 @@ Set every variable from `backend/.env.example`. The app **fails to boot** if a r
 
 ### 5. CI/CD
 - [x] `deploy.yml` env var name fixed (bug #1 above) — verify a real deploy actually applies migrations via the direct connection, not just that CI goes green.
-- [ ] Confirm which branch triggers `deploy.yml` (`main`) is actually the one you intend to ship from — `Develop` is the active-work branch per [`.claude/CLAUDE.md`](../../.claude/CLAUDE.md); the current flow appears to be periodic `Develop → main` merge PRs to trigger deploys. If that's intentional, no action needed — just confirming it's a deliberate release gate, not an accident.
-- [ ] `pnpm audit --audit-level=high` is report-only in CI (`|| true`) — this is documented as intentional (transitive Prisma tooling deps), but worth a manual skim before launch in case a new high/critical advisory landed outside that known set.
+- [ ] Confirm which branch triggers `deploy.yml` (`main`) is actually the one you intend to ship from — `Develop` is the active-work branch per [`.claude/CLAUDE.md`](../../.claude/CLAUDE.md); the current flow appears to be periodic `Develop → main` merge PRs to trigger deploys. If that's intentional, no action needed — just confirming it's a deliberate release gate, not an accident. `main` has been well behind `Develop`: sync it ([final audit](../audits/final-audit-report.md) #55) so the performance work and its migrations are what gets deployed.
+- [x] `deploy.yml` now runs the whole CI workflow first (`ci` job calling `ci.yml`) and `prisma migrate deploy` only runs if it passes, so a red commit can no longer migrate production ([final audit](../audits/final-audit-report.md) #56).
+- [ ] **Railway ordering** — Railway auto-deploys from `main` on its own, outside GitHub Actions, so the repository cannot make it wait. In the service's deploy settings turn on waiting for GitHub checks to pass, so new code never starts before CI is green. Migrations still run from the Actions job, in parallel with Railway's build; for strict ordering move `prisma migrate deploy` into Railway's pre-deploy command instead (and drop the Actions migration step).
+- [x] `pnpm audit --audit-level=critical --prod` is enforced in CI: a critical advisory in a production dependency fails the build (an unreachable audit endpoint only warns). `--audit-level=high` stays report-only because several highs are transitive (Express 4 → `path-to-regexp` / `qs`, `isomorphic-dompurify` → jsdom → `undici`, Next's bundled `postcss`) — skim the CI log for new highs before launch ([final audit](../audits/final-audit-report.md) #57, #58).
+- [ ] If `.next/cache` lives on a persistent volume, wipe `fetch-cache` on every storefront restart: Next 15 keeps its list of revalidated tags in memory only, so a restarted server would serve cache entries invalidated before the restart until they expire. Not needed on platforms where a restart starts from a clean image.
 
 ### 6. Monitoring
 - [ ] Wire `/health` into an uptime monitor (Better Stack, UptimeRobot, etc.).
@@ -83,4 +86,4 @@ Pulled from `SECURITY.md` + `backend/src/config/env.ts` — listed so this check
 ## Not addressed here (deliberately out of scope for this pass)
 
 - Horizontal scaling / leader election for cron jobs — only matters once running >1 backend instance; `index.ts` already has a comment flagging it for that point.
-- Transactional order-confirmation emails — infrastructure (Resend) is wired for other emails, but the order-confirmation send itself isn't built yet. Separate task if wanted.
+- Richer customer emails — the order-confirmation email is sent when a payment is confirmed, but it carries no line items or address, guests cannot look an order up, and there are no cancellation or refund emails ([final audit](../audits/final-audit-report.md) #45, a build-or-cut decision).
