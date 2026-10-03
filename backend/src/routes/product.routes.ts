@@ -3,6 +3,8 @@ import * as productController from '../controllers/product.controller.js';
 import { requireAuth, requireRole } from '../middleware/authenticate.js';
 import { uploadMiddleware, validateImageContent } from '../middleware/upload.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
+import { reviewLimiter } from '../middleware/rateLimit.js';
+import * as reviewController from '../controllers/review.controller.js';
 const router = Router();
 
 // Public routes
@@ -11,6 +13,13 @@ router.get('/featured', asyncHandler(productController.getFeatured));
 router.get('/bestsellers', asyncHandler(productController.getBestsellers));
 router.get('/search', asyncHandler(productController.searchProducts));
 router.get('/:slug', asyncHandler(productController.getProduct));
+router.get('/:slug/reviews', asyncHandler(reviewController.listProductReviews));
+
+// Signed-in buyers submit a review; it is held for moderation until an admin approves it.
+router.post('/:id/reviews',
+    asyncHandler(requireAuth), reviewLimiter,
+    asyncHandler(reviewController.createReview),
+);
 
 // Admin routes
 // Two-segment path so it can't be captured by the public GET '/:slug'.
