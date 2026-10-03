@@ -107,6 +107,9 @@ function dashboard(){
 }
 async function synthetic(state,options={}){
   const session=await context(options),calls=[];
+  // A signed-in fixture carries the API's readable session marker, as a real
+  // returning browser does; without it the storefront skips session restore.
+  if(state.role)await session.c.addCookies([{name:'aranya_session',value:'1',url:base}]);
   await session.c.route('**/api/**',async route=>{
     const request=route.request(),url=new URL(request.url()),pathname=url.pathname.slice(4),method=request.method();
     calls.push({path:pathname,method});
@@ -141,16 +144,19 @@ try{
   const {chromium}=await loadPlaywright();browser=await chromium.launch({headless:true,...(process.env.PERF_BROWSER_CHANNEL?{channel:process.env.PERF_BROWSER_CHANNEL}:{})});
   fs.writeFileSync(output+'/environment.json',JSON.stringify({sourceFingerprint,fixtureSha256,mediaFixtureSha256,apiFixtureSha256,node:process.version,browser:browser.version(),chunks,limits:['Local production build and frozen in-memory catalog/cart fixture; no database writes','Auth, roles, merges, gateway intent and order status checks use isolated browser response interception','External HTTP requests are blocked; no real gateway, payment, account, mail or staging authentication is exercised','This harness is controlled functional verification, separate from principal timing benchmarks']},null,2));
 
-  await check('Fresh home restores one session then performs one read-only bootstrap; optional chunks stay absent',async()=>{
+  await check('Fresh anonymous home skips session restore and performs one read-only bootstrap; optional chunks stay absent',async()=>{
     const {c,p,seen,apiRequests}=await context();api.calls.length=0;
     try{
       await p.goto(base,{waitUntil:'domcontentloaded'});
       await until(()=>count(apiRequests,'/cart/bootstrap')===1,'Fresh cart bootstrap did not complete');await sleep(1200);
       absent(seen,components);
       assert(!seen.includes('/products')&&!seen.includes('/categories'),'Idle home speculatively requested a catalog/category route');
-      assert(count(apiRequests,'/auth/refresh')===1,'Fresh visit restored its session more than once');
+      // No session marker cookie means no session to restore: an anonymous
+      // visit must not spend a rate-limited POST /auth/refresh. Returning
+      // sessions (and their restore-before-bootstrap order) are covered by
+      // the controlled signed-in checks below.
+      assert(count(apiRequests,'/auth/refresh')===0,'Anonymous fresh visit attempted a session refresh');
       assert(count(apiRequests,'/cart/bootstrap')===1&&!count(apiRequests,'/cart','GET'),'Fresh visit used legacy creating cart GET');
-      assert(apiRequests.findIndex(row=>row.path==='/auth/refresh')<apiRequests.findIndex(row=>row.path==='/cart/bootstrap'),'Bootstrap preceded session restoration');
       assert(!(await c.cookies()).some(cookie=>cookie.name==='guestCartToken'),'Fresh non-shopping home created a guest cart cookie');
       assert(!api.calls.some(row=>row.path.startsWith('/cart')&&row.method!=='GET'),'Fresh non-shopping home sent a cart mutation');
       assert(api.cartStats.created===0,'Fresh non-shopping home created an in-memory cart');

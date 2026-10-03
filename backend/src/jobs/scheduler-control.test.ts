@@ -25,7 +25,9 @@ it('preserves the default six schedules and starts them once per process', async
     startAllJobs();
     expect(schedule.mock.calls.map(call => call[0])).toEqual([
         '* * * * *', '0 * * * *', '0 8 * * *',
-        '0 * * * *', '0 3 * * *', '30 * * * *',
+        // Stale-order sweep: every 10 minutes, so an unpaid order's stock is
+        // released close to the 60-minute reservation window, not an hour late.
+        '*/10 * * * *', '0 3 * * *', '30 * * * *',
     ]);
     for (const call of schedule.mock.calls) {
         expect(call[2]).toEqual({ noOverlap: true });

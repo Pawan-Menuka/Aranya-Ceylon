@@ -41,10 +41,31 @@ import { outboxWorkerEnabled } from './jobs/outboxWorker.js';
 import { dashboardRollupsEnabled } from './services/dashboard-rollups.js';
 
 
+// Backstop for a promise nobody awaited or caught. Node's default is to
+// terminate the process, which turns one stray rejection (a fire-and-forget
+// send, a handler missing asyncHandler) into an outage for every customer.
+// Route handlers are still expected to be wrapped — this only keeps the API
+// up, and loud, if one is missed.
+process.on('unhandledRejection', (reason) => {
+    console.error('[UNHANDLED REJECTION]', reason);
+});
+
 const app = express();
 const PORT = process.env.PORT ?? 4000;
 // Validate the strict BFF rollout before opening the listener or connecting to the database.
 const bffClientIdentity = bffClientIdentityFromEnv(process.env);
+// Browsers reach this API only through the storefront's BFF, which strips
+// forwarded-IP headers. Unless that BFF signs the visitor's address (and this
+// API requires it), every shopper arrives from the storefront server's own IP
+// and shares ONE bucket per rate limiter — 10 sign-ins per 15 minutes for the
+// whole site. Not enforced, because the hosting topology decides how the
+// client IP reaches the BFF; see docs/operations/deployment-checklist.md.
+if (process.env.NODE_ENV === 'production' && process.env.BFF_CLIENT_IP_REQUIRED !== 'true') {
+    console.warn(
+        '⚠ BFF client identity is not enforced (BFF_CLIENT_IP_SECRET + BFF_CLIENT_IP_REQUIRED=true). '
+        + 'Rate limits and audit-log IPs will key on the storefront server, not on individual visitors.',
+    );
+}
 const API_HOST = apiListenHostFromEnv(process.env);
 // Validate optional background features before any listener or database connection.
 const durableOutbox = outboxEnabled();

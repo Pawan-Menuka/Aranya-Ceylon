@@ -66,7 +66,7 @@ export function CartDrawer() {
     return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
   }, [open]);
 
-  const pct = t.freeShip ? 100 : Math.min(100, (1 - t.remainingToFree / t.freeShipThreshold) * 100);
+  const pct = t.freeShip || t.freeShipThreshold === null ? 100 : Math.min(100, (1 - t.remainingToFree / t.freeShipThreshold) * 100);
   const cfg = cart.config();
 
   return (
@@ -97,6 +97,8 @@ export function CartDrawer() {
           </div>
         ) : (
           <>
+            {/* Free-shipping progress — only while the store offers a threshold (lib/cart.ts CONFIG). */}
+            {t.freeShipThreshold !== null && (
             <div style={{ padding: "16px 24px 14px", background: "var(--surface)", borderBottom: "1px solid var(--line)" }}>
               <div style={{ fontFamily: "var(--font-ui)", fontSize: 12.5, color: "var(--ink)", marginBottom: 8, fontWeight: 600 }}>
                 {t.freeShip ? (
@@ -112,6 +114,7 @@ export function CartDrawer() {
                 <div style={{ height: "100%", width: pct + "%", borderRadius: 999, background: accent, transition: "width .35s" }} />
               </div>
             </div>
+            )}
 
             <div style={{ flex: 1, overflowY: "auto", padding: "8px 24px" }}>
               {items.map((it) => (

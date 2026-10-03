@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { enqueueOutbox, outboxEnabled } from '../lib/outbox.js';
 import { enqueueEmail, sendLowStockAlert, sendAbandonedCartEmail } from '../services/email.service.js';
 import { revalidateFrontend } from '../lib/revalidate.js';
-import { cancelOrderAndReleaseStock } from '../controllers/webhook.controller.js';
+import { cancelPendingOrder, isPastForceCancelAge, pendingOrderTtlMs } from '../services/pending-order.service.js';
 import { withJobLease, type JobLeaseHandle } from './jobLease.js';
 
 const PAGE = 200;
@@ -53,13 +53,14 @@ export async function runBoundedTokenPruning(lease?: JobLeaseHandle): Promise<nu
 }
 export async function runBoundedStaleOrders(lease?: JobLeaseHandle): Promise<number> {
     const deadline = Date.now() + RUN_BUDGET_MS;
-    const cutoff = new Date(Date.now() - 24 * 3600_000);
-    const rows = await guarded(lease, tx => tx.order.findMany({ where: { status: 'PENDING', createdAt: { lt: cutoff } }, select: { id: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: PAGE }));
+    const cutoff = new Date(Date.now() - pendingOrderTtlMs());
+    const rows = await guarded(lease, tx => tx.order.findMany({ where: { status: 'PENDING', createdAt: { lt: cutoff } }, select: { id: true, paymentIntentId: true, createdAt: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: PAGE }));
     let processed = 0;
     for (const row of rows) {
         if (Date.now() >= deadline) break;
-        await cancelOrderAndReleaseStock(row.id, 'Cancelled — stale PENDING order older than 24h.', lease);
-        processed++;
+        // Closes the Stripe intent before releasing the reservation; an order
+        // whose payment is settling is left for the webhook to decide.
+        if (await cancelPendingOrder(row, 'Cancelled — unpaid order past its reservation window.', { lease, force: isPastForceCancelAge(row.createdAt) })) processed++;
     }
     return processed;
 }
@@ -130,7 +131,7 @@ export function startLeasedJobs(): void {
     schedule('scheduled-posts', '* * * * *', runBoundedPublications);
     schedule('cart-expiry', '0 * * * *', runBoundedCartExpiry);
     schedule('low-stock', '0 8 * * *', runBoundedLowStock);
-    schedule('stale-orders', '0 * * * *', runBoundedStaleOrders);
+    schedule('stale-orders', '*/10 * * * *', runBoundedStaleOrders);
     schedule('token-pruning', '0 3 * * *', runBoundedTokenPruning);
     schedule('abandoned-carts', '30 * * * *', runBoundedAbandonedCarts);
 }

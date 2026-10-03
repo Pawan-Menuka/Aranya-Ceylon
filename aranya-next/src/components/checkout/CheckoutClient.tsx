@@ -11,6 +11,7 @@ import { useMarket } from "../MarketContext";
 import { useAuth } from "../AuthContext";
 import { createIntent, pollOrderPaid, type CheckoutInput, type PayHereIntent, type StripeIntent, type StubIntent } from "@/lib/api/checkout";
 import { getCartTotals, type ServerTotals } from "@/lib/api/cart";
+import { CONFIG, fmt as fmtMoney } from "@/lib/cart";
 import type { Market } from "@/lib/types";
 
 const StripePaymentForm = dynamic(
@@ -111,9 +112,11 @@ function Section({ n, title, sub, children }: { n: string; title: string; sub?: 
 }
 
 function DeliveryOptions({ market, value, onChange, standardLabel }: { market: Market; value: string; onChange: (v: string) => void; standardLabel: string }) {
+  // Express price mirrors what the API charges (lib/cart.ts CONFIG).
+  const expressLabel = fmtMoney(CONFIG[market].expressShip, market);
   const opts: [string, string, string, string][] = market === "local"
-    ? [["standard", "Island-wide courier", "1–3 working days", standardLabel], ["express", "Express (Colombo metro)", "Next day", "Rs 1,500"]]
-    : [["standard", "Tracked international", "7–12 working days", standardLabel], ["express", "Express courier (DHL)", "3–5 working days", "$18.00"]];
+    ? [["standard", "Island-wide courier", "1–3 working days", standardLabel], ["express", "Express (Colombo metro)", "Next day", expressLabel]]
+    : [["standard", "Tracked international", "7–12 working days", standardLabel], ["express", "Express courier (DHL)", "3–5 working days", expressLabel]];
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {opts.map(([id, title, eta, price]) => {
@@ -480,7 +483,7 @@ export function CheckoutClient() {
   }, [deliv, market, cart.count, cart.giftWrap]);
 
   const t = cart.totals;
-  const expressFee = market === "local" ? 1500 : 18; // for DeliveryOptions label fallback
+  const expressFee = CONFIG[market].expressShip; // client estimate until server totals arrive
   const totalFallback = t.subtotal - t.discount + t.gift + (deliv === "express" ? expressFee : t.ship);
 
   const placeOrder = async () => {
@@ -714,7 +717,8 @@ export function CheckoutClient() {
                   </div>
                   <p style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--muted)", margin: 0 }}>
                     Your card details are handled directly by Stripe — we never see or store them.
-                    {!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY && (
+                    {/* Developer hint only: the key actually reaches the browser from the API with each payment intent. */}
+                    {process.env.NODE_ENV !== "production" && !process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY && (
                       <span style={{ display: "block", marginTop: 6, color: "#b45309" }}>
                         (Stripe test keys not configured — set NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY to enable card capture.)
                       </span>

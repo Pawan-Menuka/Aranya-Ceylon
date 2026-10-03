@@ -272,6 +272,27 @@ export async function calculateCartTotal(
 
     if (!cart) throw new Error('CART_NOT_FOUND');
 
+    return calculateTotalsForLines(cart.items, cart.couponId, market, shippingMethod, giftWrap);
+}
+
+// The minimum a line needs to be priced — satisfied by any loaded cart item.
+type PricedCartLine = { quantity: number; variant: { price: Prisma.Decimal | number | string } };
+
+// --- Calculate totals for lines the caller has ALREADY loaded ---
+// Checkout must price the exact lines it reserves stock for and snapshots onto
+// the order. Re-reading the cart to price it (as calculateCartTotal does) let a
+// concurrent quantity change land between the two reads, producing an order
+// for N units charged at fewer. Only the coupon is read here; the lines are
+// never re-fetched.
+export async function calculateTotalsForLines(
+    lines: PricedCartLine[],
+    couponId: string | null,
+    market: Market,
+    shippingMethod: 'STANDARD' | 'EXPRESS' = 'STANDARD',
+    giftWrap: boolean = false,
+) {
+    const cart = { items: lines, couponId };
+
     const subtotalCents = cart.items.reduce(
         (sum, item) => sum + toCents(item.variant.price) * item.quantity,
         0,

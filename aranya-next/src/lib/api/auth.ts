@@ -58,7 +58,17 @@ export async function resetPassword(token: string, password: string): Promise<{ 
   return apiFetch("/auth/reset-password", { method: "POST", body: { token, password } });
 }
 
+// The API sets this readable marker alongside the HttpOnly refresh cookie and
+// clears them together. Without it this browser has no session to restore, so
+// the boot-time refresh is skipped: anonymous page loads no longer spend a
+// rate-limited POST /auth/refresh just to learn they are signed out.
+const SESSION_HINT_COOKIE = /(?:^|;\s*)aranya_session=/;
+function hasSessionHint(): boolean {
+  return typeof document !== "undefined" && SESSION_HINT_COOKIE.test(document.cookie);
+}
+
 export async function refresh(): Promise<boolean> {
+  if (!hasSessionHint()) return false;
   return refreshSession();
 }
 

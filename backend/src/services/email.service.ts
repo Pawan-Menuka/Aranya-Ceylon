@@ -236,6 +236,37 @@ export async function sendNewOrderAdminNotification(params: {
     }, 'ADMIN_NEW_ORDER');
 }
 
+// --- Admin alert: payment received for a closed order ---
+// A gateway confirmed payment for an order that was already cancelled or
+// refunded (webhook.controller.ts reportPaymentForClosedOrder). The customer
+// has been charged for an order nobody will fulfil unless someone acts.
+export async function sendPaymentForClosedOrderAlert(params: {
+    orderId: string;
+    status: string;
+    total: number;
+    currency: string;
+    gateway: string;
+    paymentRef: string;
+}) {
+    const { orderId, status, total, currency, gateway, paymentRef } = params;
+    const currencySymbol = currency === 'LKR' ? 'LKR ' : '$';
+    const frontend = (process.env.FRONTEND_URL ?? 'http://localhost:3000').split(',')[0]!.trim();
+    const shortId = orderId.slice(-8).toUpperCase();
+
+    await sendMail({
+        from: FROM,
+        to: process.env.ADMIN_EMAIL ?? FROM,
+        subject: `Action needed: payment received for ${status.toLowerCase()} order #${shortId}`,
+        html: `
+            <h2>Payment received for a closed order</h2>
+            <p>Order <strong>#${shortId}</strong> is <strong>${escapeHtml(status)}</strong>, but ${escapeHtml(gateway)} has just confirmed a payment of <strong>${currencySymbol}${total.toFixed(2)}</strong> for it.</p>
+            <p>Gateway reference: <strong>${escapeHtml(paymentRef)}</strong></p>
+            <p>The customer has been charged and the order's stock was already released. Refund the payment in ${escapeHtml(gateway)}, or reinstate and fulfil the order.</p>
+            <p><a href="${frontend}/admin#orders">Open the admin console</a></p>
+        `,
+    }, 'PAYMENT_FOR_CLOSED_ORDER');
+}
+
 // --- Shipping notification ---
 export async function sendShippingNotification(params: {
     to: string;

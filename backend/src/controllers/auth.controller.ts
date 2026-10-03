@@ -36,6 +36,30 @@ const refreshCookieOptions = {
     path: REFRESH_COOKIE_PATH, // sent to /auth/* (refresh + logout)
 };
 
+// Readable companion to the HttpOnly refresh cookie. It carries no secret and
+// grants nothing — it only tells the storefront "this browser may have a
+// session", so an anonymous visitor's page load can skip POST /auth/refresh
+// entirely instead of spending a rate-limited request to learn it has none.
+// Same lifetime as the refresh cookie; set and cleared alongside it.
+const SESSION_HINT_COOKIE_NAME = 'aranya_session';
+const sessionHintCookieOptions = {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+    maxAge: refreshCookieOptions.maxAge,
+    path: '/',
+};
+
+function setSessionCookies(res: Response, refreshTokenPlaintext: string) {
+    res.cookie(REFRESH_COOKIE_NAME, refreshTokenPlaintext, refreshCookieOptions);
+    res.cookie(SESSION_HINT_COOKIE_NAME, '1', sessionHintCookieOptions);
+}
+
+function clearSessionCookies(res: Response) {
+    res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
+    res.clearCookie(SESSION_HINT_COOKIE_NAME, { path: sessionHintCookieOptions.path });
+}
+
 // --- Register ---
 // Returns the SAME neutral response whether or not the email already exists,
 // so an attacker can't enumerate registered accounts (#9). No token is issued
@@ -230,7 +254,7 @@ export async function login(req: Request, res: Response) {
         });
     }
 
-    res.cookie(REFRESH_COOKIE_NAME, refreshTokenPlaintext, refreshCookieOptions);
+    setSessionCookies(res, refreshTokenPlaintext);
 
     return res.json({
         accessToken,
@@ -243,13 +267,15 @@ export async function refresh(req: Request, res: Response) {
     const token = req.cookies?.[REFRESH_COOKIE_NAME];
 
     if (!token) {
+        // Drop a stale hint so the storefront stops asking on every page load.
+        clearSessionCookies(res);
         return res.status(401).json({ error: 'No refresh token' });
     }
 
     try {
         const { accessToken, refreshTokenPlaintext, user } = await rotateRefreshToken(token);
 
-        res.cookie(REFRESH_COOKIE_NAME, refreshTokenPlaintext, refreshCookieOptions);
+        setSessionCookies(res, refreshTokenPlaintext);
 
         return res.json({
             accessToken,
@@ -257,7 +283,7 @@ export async function refresh(req: Request, res: Response) {
         });
     } catch (err: unknown) {
         // Clear cookie on any token error
-        res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
+        clearSessionCookies(res);
 
         const message = err instanceof Error ? err.message : '';
         if (message === 'TOKEN_REUSE_DETECTED') {
@@ -277,14 +303,14 @@ export async function logout(req: Request, res: Response) {
         await revokeTokenFamily(token);
     }
 
-    res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
+    clearSessionCookies(res);
     return res.json({ message: 'Logged out successfully' });
 }
 
 // --- Logout everywhere (all devices) ---
 export async function logoutAll(req: Request, res: Response) {
     await revokeAllUserTokens(req.user!.userId);
-    res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
+    clearSessionCookies(res);
     return res.json({ message: 'Logged out on all devices' });
 }
 
