@@ -7,14 +7,14 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { NextFunction } from 'express';
 import { requestDouble, responseDouble } from '../test/httpDoubles.js';
 
-const db = vi.hoisted(() => ({ role: 'ADMIN' as string | null, fail: false }));
+const db = vi.hoisted(() => ({ role: 'ADMIN' as string | null, fail: false, suspended: false }));
 
 vi.mock('../lib/prisma.js', () => ({
     prisma: {
         user: {
             findUnique: vi.fn(async () => {
                 if (db.fail) throw new Error('db down');
-                return db.role === null ? null : { role: db.role };
+                return db.role === null ? null : { role: db.role, suspendedAt: db.suspended ? new Date() : null };
             }),
         },
     },
@@ -40,6 +40,7 @@ async function run(req = adminReq()) {
 beforeEach(() => {
     db.role = 'ADMIN';
     db.fail = false;
+    db.suspended = false;
     vi.clearAllMocks();
 });
 
@@ -53,6 +54,14 @@ describe('requireRole', () => {
         db.role = 'CUSTOMER';
         const { res, nextArg } = await run();
         expect(res.statusCode).toBe(403);
+        expect(nextArg).toBe('not called');
+    });
+
+    it('refuses a suspended admin immediately, not when the token expires', async () => {
+        db.suspended = true;
+        const { res, nextArg } = await run();
+        expect(res.statusCode).toBe(403);
+        expect(res.body).toMatchObject({ code: 'ACCOUNT_SUSPENDED' });
         expect(nextArg).toBe('not called');
     });
 

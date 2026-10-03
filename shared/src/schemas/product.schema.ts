@@ -129,3 +129,9 @@ export const catalogFilterSchema = z.object({
     search: z.string().max(200).optional().transform(value => value?.trim() || undefined),
 });
 export type CatalogFilterInput = z.infer<typeof catalogFilterSchema>;
+
+// New display order for a product's images: every image id exactly once, lead image first.
+export const reorderProductImagesSchema = z.object({
+    imageIds: z.array(z.string().min(1).max(40)).min(1).max(50)
+        .refine((ids) => new Set(ids).size === ids.length, 'Each image can appear only once'),
+});

@@ -7,6 +7,10 @@ import * as orderAdmin from '../controllers/admin/order.admin.controller.js';
 import * as blogAdmin from '../controllers/admin/blog.admin.controller.js';
 import * as recipeAdmin from '../controllers/admin/recipe.admin.controller.js';
 import * as giftAdmin from '../controllers/admin/gift.admin.controller.js';
+import * as couponAdmin from '../controllers/admin/coupon.admin.controller.js';
+import * as reviewAdmin from '../controllers/admin/review.admin.controller.js';
+import * as userAdmin from '../controllers/admin/user.admin.controller.js';
+import * as productImageAdmin from '../controllers/admin/product-image.admin.controller.js';
 import * as analyticsAdmin from '../controllers/admin/analytics.admin.controller.js';
 import * as productController from '../controllers/product.controller.js';
 
@@ -46,10 +50,30 @@ router.post('/gifts', asyncHandler(giftAdmin.createGift));
 router.patch('/gifts/:id', asyncHandler(giftAdmin.updateGift));
 router.delete('/gifts/:id', asyncHandler(giftAdmin.deleteGift));
 
+// --- Coupons ---
+router.get('/coupons', asyncHandler(couponAdmin.listCoupons));
+router.get('/coupons/:id', asyncHandler(couponAdmin.getCoupon));
+router.post('/coupons', asyncHandler(couponAdmin.createCoupon));
+router.patch('/coupons/:id', asyncHandler(couponAdmin.updateCoupon));
+router.post('/coupons/:id/deactivate', asyncHandler(couponAdmin.deactivateCoupon));
+
+// --- Reviews (moderation) ---
+router.get('/reviews', asyncHandler(reviewAdmin.listReviews));
+router.patch('/reviews/:id', asyncHandler(reviewAdmin.moderateReview));
+
+// --- Users (SUPERADMIN only) ---
+router.get('/users', requireRole('SUPERADMIN'), asyncHandler(userAdmin.listUsers));
+router.patch('/users/:id/role', requireRole('SUPERADMIN'), asyncHandler(userAdmin.changeUserRole));
+router.post('/users/:id/suspend', requireRole('SUPERADMIN'), asyncHandler(userAdmin.suspendUser));
+router.post('/users/:id/unsuspend', requireRole('SUPERADMIN'), asyncHandler(userAdmin.unsuspendUser));
+router.post('/users/:id/reset-2fa', requireRole('SUPERADMIN'), asyncHandler(userAdmin.resetTwoFactor));
+
 // --- Products ---
 router.get('/products', asyncHandler(productController.adminListProducts));
 router.post('/products', asyncHandler(productController.createProduct));
 router.patch('/products/:id', asyncHandler(productController.updateProduct));
 router.delete('/products/:id', asyncHandler(productController.archiveProduct));
+router.put('/products/:id/images/order', asyncHandler(productImageAdmin.reorderProductImages));
+router.delete('/products/:id/images/:imageId', asyncHandler(productImageAdmin.deleteProductImage));
 
 export default router;

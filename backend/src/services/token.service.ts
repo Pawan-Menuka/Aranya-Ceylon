@@ -68,6 +68,12 @@ export async function rotateRefreshToken(refreshTokenCookie: string) {
         throw new Error('INVALID_TOKEN');
     }
 
+    // A suspended account cannot renew its session: end every session it has.
+    if (tokenRecord.user.suspendedAt) {
+        await prisma.token.deleteMany({ where: { userId: tokenRecord.userId, type: 'REFRESH' } });
+        throw new Error('ACCOUNT_SUSPENDED');
+    }
+
     // 3. Token already used. Within the grace window this is a second tab of
     // the same browser refreshing at the same moment (every tab restores its
     // session on load, and they share one cookie) — not theft. It gets its own

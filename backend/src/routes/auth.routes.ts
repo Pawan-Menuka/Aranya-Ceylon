@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { register, login, refresh, logout, logoutAll, getMe, patchMe, verifyEmail, resendVerification, forgotPassword, resetPassword, listAddresses, createAddress, updateAddress, deleteAddress } from '../controllers/auth.controller.js';
-import { requireAuth } from '../middleware/authenticate.js';
+import { requireAuth, requireRole } from '../middleware/authenticate.js';
+import * as twoFactor from '../controllers/two-factor.controller.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { validate } from '../middleware/validate.js';
 import { authLimiter, loginLimiter, refreshLimiter } from '../middleware/rateLimit.js';
-import { registerSchema, loginSchema, patchMeSchema, createAddressSchema, updateAddressSchema, forgotPasswordSchema, resetPasswordSchema } from '@aranya/shared';
+import { registerSchema, loginSchema, patchMeSchema, createAddressSchema, updateAddressSchema, forgotPasswordSchema, resetPasswordSchema, twoFactorEnableSchema, twoFactorDisableSchema } from '@aranya/shared';
 
 const router = Router();
 
@@ -24,6 +25,13 @@ router.post('/logout', authLimiter, asyncHandler(logout));
 router.post('/logout-all', asyncHandler(requireAuth), asyncHandler(logoutAll));
 router.get('/me', asyncHandler(requireAuth), asyncHandler(getMe));
 router.patch('/me', asyncHandler(requireAuth), validate(patchMeSchema), asyncHandler(patchMe));
+
+// Two-factor sign-in for admin accounts. The verify steps are guessing surfaces,
+// so they share the strict login budget; setup only mints a secret.
+const adminOnly = [asyncHandler(requireAuth), requireRole('ADMIN', 'SUPERADMIN')];
+router.post('/2fa/setup', authLimiter, ...adminOnly, asyncHandler(twoFactor.setup));
+router.post('/2fa/enable', loginLimiter, ...adminOnly, validate(twoFactorEnableSchema), asyncHandler(twoFactor.enable));
+router.post('/2fa/disable', loginLimiter, ...adminOnly, validate(twoFactorDisableSchema), asyncHandler(twoFactor.disable));
 
 // Addresses
 router.get('/me/addresses', asyncHandler(requireAuth), asyncHandler(listAddresses));
