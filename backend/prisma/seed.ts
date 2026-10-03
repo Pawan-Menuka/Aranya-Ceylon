@@ -341,7 +341,9 @@ async function main() {
     // ships in source (SEC-03). In production the password is mandatory; locally
     // a clearly-insecure default is used and printed so devs can log in.
     const isProd = process.env.NODE_ENV === 'production';
-    const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@aranyaceylon.com';
+    // Stored lower-case, like every account email: sign-in lower-cases what is
+    // typed, so a mixed-case seeded admin could otherwise never log in.
+    const adminEmail = (process.env.SEED_ADMIN_EMAIL ?? 'admin@aranyaceylon.com').trim().toLowerCase();
     const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? (isProd ? '' : 'dev-only-admin-change-me');
 
     if (!adminPassword) {

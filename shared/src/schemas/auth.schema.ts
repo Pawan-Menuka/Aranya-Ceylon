@@ -1,33 +1,41 @@
 import { z } from 'zod';
 
+// Every email that identifies an account is trimmed and lower-cased before it
+// reaches the database. Without this "John@Gmail.com" and "john@gmail.com"
+// were two different accounts, and signing in with a different case than at
+// registration failed with "invalid email or password".
+export const emailSchema = z.string().trim().toLowerCase().max(254).email('Invalid email address');
+
+// bcrypt only uses the first 72 bytes; the cap stops unbounded input, not
+// strong passphrases.
+const newPasswordSchema = z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .max(128, 'Password must be at most 128 characters')
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[0-9]/, 'Password must contain at least one number')
+    .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character');
+
 export const registerSchema = z.object({
     name: z.string().min(2, 'Name must be at least 2 characters').max(100),
-    email: z.string().email('Invalid email address'),
-    password: z
-        .string()
-        .min(8, 'Password must be at least 8 characters')
-        .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-        .regex(/[0-9]/, 'Password must contain at least one number')
-        .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
+    email: emailSchema,
+    password: newPasswordSchema,
 });
 
 export const loginSchema = z.object({
-    email: z.string().email(),
-    password: z.string().min(1, 'Password is required'),
+    email: emailSchema,
+    // Deliberately looser than newPasswordSchema: sign-in must not reveal the
+    // password rules, only bound the input.
+    password: z.string().min(1, 'Password is required').max(1024),
 });
 
 export const forgotPasswordSchema = z.object({
-    email: z.string().email(),
+    email: emailSchema,
 });
 
 export const resetPasswordSchema = z.object({
-    token: z.string().min(1),
-    password: z
-        .string()
-        .min(8)
-        .regex(/[A-Z]/)
-        .regex(/[0-9]/)
-        .regex(/[^A-Za-z0-9]/),
+    token: z.string().min(1).max(200),
+    password: newPasswordSchema,
 });
 
 export const patchMeSchema = z.object({

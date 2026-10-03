@@ -6,12 +6,14 @@ import { prisma } from '../lib/prisma.js';
 import { outboxEnabled } from '../lib/outbox.js';
 import { enqueueEmail } from '../services/email.service.js';
 
+// Upper bounds (final audit #24): these are emailed verbatim to the support
+// inbox and were otherwise limited only by the 512 KB request body.
 const contactSchema = z.object({
-    name: z.string().min(1),
-    email: z.string().email(),
-    order: z.string().optional(),
-    subject: z.string().min(1),
-    message: z.string().min(10),
+    name: z.string().min(1).max(100),
+    email: z.string().email().max(254),
+    order: z.string().max(50).optional(),
+    subject: z.string().min(1).max(200),
+    message: z.string().min(10).max(5000),
     consent: z.boolean(),
 });
 

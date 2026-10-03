@@ -2,15 +2,26 @@ import type { Request, Response } from 'express';
 import { outboxEnabled } from '../lib/outbox.js';
 import { enqueueAuthEmail } from '../services/token.service.js';
 import { hash, verify } from '@node-rs/bcrypt';
+import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { issueTokenPair, rotateRefreshToken, revokeTokenFamily, revokeAllUserTokens, issueEmailVerificationToken, verifyEmailToken, issuePasswordResetToken, resetPasswordWithToken } from '../services/token.service.js';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../services/email.service.js';
 import { writeAuditLog } from '../services/audit.service.js';
-import type { RegisterInput, LoginInput, ForgotPasswordInput, ResetPasswordInput } from '@aranya/shared';
+import { emailSchema, type RegisterInput, type LoginInput, type ForgotPasswordInput, type ResetPasswordInput } from '@aranya/shared';
 
 const BCRYPT_ROUNDS = 12;
+
+// Hash of a random secret nobody knows, compared against when a sign-in names
+// an unknown email (see login). Created once, on first use, at the same cost
+// as real password hashes; a failed attempt is simply retried next time.
+let unknownEmailHashPromise: Promise<string> | undefined;
+function unknownEmailHash(): Promise<string> {
+    unknownEmailHashPromise ??= hash(randomBytes(32).toString('hex'), BCRYPT_ROUNDS)
+        .catch((err: unknown) => { unknownEmailHashPromise = undefined; throw err; });
+    return unknownEmailHashPromise;
+}
 const REFRESH_COOKIE_NAME = 'refreshToken';
 // Scope the refresh cookie to /auth (not /auth/refresh) so the browser also
 // sends it to POST /auth/logout — otherwise logout never receives the cookie
@@ -140,7 +151,7 @@ export async function verifyEmail(req: Request, res: Response) {
 // Neutral response (anti-enumeration): always 200 with the same message whether
 // or not the email exists or is already verified. A new link is only actually
 // issued + sent for a real, still-unverified account. Rate-limited at the route.
-const resendVerificationSchema = z.object({ email: z.string().email() });
+const resendVerificationSchema = z.object({ email: emailSchema });
 const NEUTRAL_RESEND_MESSAGE = 'If that account exists and still needs verifying, a new link has been sent.';
 export async function resendVerification(req: Request, res: Response) {
     const { email } = resendVerificationSchema.parse(req.body); // ZodError → 400
@@ -223,8 +234,11 @@ export async function login(req: Request, res: Response) {
 
     const user = await prisma.user.findUnique({ where: { email } });
 
-    // Always hash even if user not found — prevents timing-based enumeration
-    const passwordHash = user?.passwordHash ?? '$2b$12$invalidhashfortimingprotection';
+    // Always run a full bcrypt comparison, even when the email is unknown, so
+    // response time doesn't reveal which emails are registered. The stand-in
+    // must be a REAL hash at the same cost: the old literal placeholder was not
+    // valid bcrypt and was rejected in ~0 ms versus ~200 ms for a real account.
+    const passwordHash = user?.passwordHash ?? await unknownEmailHash();
     const isValid = await verify(password, passwordHash);
 
     if (!user || !isValid) {

@@ -68,8 +68,13 @@ export async function rotateRefreshToken(refreshTokenCookie: string) {
         throw new Error('INVALID_TOKEN');
     }
 
-    // 3. Token already used — REUSE DETECTED → nuke the entire family
+    // 3. Token already used. Within the grace window this is a second tab of
+    // the same browser refreshing at the same moment (every tab restores its
+    // session on load, and they share one cookie) — not theft. It gets its own
+    // successor in the same family. Outside the window it is a replay of a
+    // spent token: REUSE DETECTED → nuke the entire family.
     if (tokenRecord.usedAt !== null) {
+        if (withinReuseGrace(tokenRecord.usedAt)) return issueSuccessor(tokenRecord);
         await prisma.token.deleteMany({
             where: { family: tokenRecord.family },
         });
@@ -88,13 +93,27 @@ export async function rotateRefreshToken(refreshTokenCookie: string) {
         where: { id: tokenRecord.id, usedAt: null },
         data: { usedAt: new Date() },
     });
-    if (count === 0) {
-        // Lost the race — treat like reuse: kill the family
-        await prisma.token.deleteMany({ where: { family: tokenRecord.family } });
-        throw new Error('TOKEN_REUSE_DETECTED');
-    }
+    // count === 0: another request consumed it between our read and this
+    // claim — milliseconds ago, so by definition a concurrent refresh from the
+    // same browser. Treating that as theft logged out anyone who reopened a
+    // browser with several tabs of the store.
+    return issueSuccessor(tokenRecord, count === 0 ? 'concurrent' : 'rotated');
+}
 
-    // 6. Issue new token in the SAME family — keeps the chain trackable
+// A spent refresh token presented again this soon after use is a concurrent
+// refresh, not a replay. Small enough that a stolen, already-rotated token is
+// still caught almost every time.
+const REFRESH_REUSE_GRACE_MS = 10_000;
+function withinReuseGrace(usedAt: Date): boolean {
+    return Date.now() - usedAt.getTime() <= REFRESH_REUSE_GRACE_MS;
+}
+
+// Issue the next refresh token in the SAME family — keeps the chain trackable
+// and revocable as one session.
+async function issueSuccessor(
+    tokenRecord: { userId: string; family: string | null; user: User },
+    _reason: 'rotated' | 'concurrent' = 'rotated',
+) {
     const newPlaintext = createId() + createId();
 
     const expiresAt = new Date();
@@ -183,11 +202,21 @@ export async function verifyEmailToken(plaintext: string): Promise<void> {
         throw new Error('VERIFICATION_TOKEN_EXPIRED');
     }
 
-    // Flip verified + burn the token atomically so a replayed link can't re-run.
-    await prisma.$transaction([
-        prisma.user.update({ where: { id: record.userId }, data: { verified: true } }),
-        prisma.token.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
-    ]);
+    // Claim the token first, conditionally: of two simultaneous clicks only one
+    // can burn it. (The check above read usedAt; this write re-checks it.)
+    await claimSingleUseToken(record.id, 'INVALID_VERIFICATION_TOKEN');
+    await prisma.user.update({ where: { id: record.userId }, data: { verified: true } });
+}
+
+// Burn a single-use token only if it is still unused. The validity checks in
+// the callers are a read; without this guard two concurrent requests with the
+// same link could both pass them and both act on it.
+async function claimSingleUseToken(id: string, invalidError: string): Promise<void> {
+    const { count } = await prisma.token.updateMany({
+        where: { id, usedAt: null },
+        data: { usedAt: new Date() },
+    });
+    if (count === 0) throw new Error(invalidError);
 }
 
 // How long a password-reset link stays valid — shorter than email verification
@@ -235,9 +264,14 @@ export async function resetPasswordWithToken(plaintext: string, newPasswordHash:
         throw new Error('RESET_TOKEN_EXPIRED');
     }
 
+    // Claim first (see claimSingleUseToken). If the update below then fails,
+    // the link is spent and the user requests a new one — the safe direction.
+    await claimSingleUseToken(record.id, 'INVALID_RESET_TOKEN');
     await prisma.$transaction([
-        prisma.user.update({ where: { id: record.userId }, data: { passwordHash: newPasswordHash } }),
-        prisma.token.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
+        // Following the emailed link proves the mailbox, so the account is
+        // verified too — otherwise an unverified user who reset their password
+        // still could not sign in.
+        prisma.user.update({ where: { id: record.userId }, data: { passwordHash: newPasswordHash, verified: true } }),
         prisma.token.deleteMany({ where: { userId: record.userId, type: 'REFRESH' } }),
     ]);
 }
