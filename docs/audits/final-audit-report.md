@@ -152,12 +152,12 @@ The PR #170 performance work is thorough; these are what remains.
 | # | Severity | File:line | Finding | Fix approach | Status |
 |---|---|---|---|---|---|
 | 48 | Medium | `backend/src/middleware/rateLimit.ts`; `backend/src/lib/simpleCache.ts`; `backend/src/jobs/scheduler.ts:229-255` | Rate limiters, the catalog cache and cron jobs are all per-process. This is documented, but it means the API is **single-instance only**: a second replica doubles every limit and (in legacy mode) every scheduled job. Limits also reset on each restart / deploy. | Keep one instance, or move limiter + cache to Redis and enable the leased scheduler before scaling out. | decision |
-| 49 | Low | `aranya-next/src/components/AuthContext.tsx:72-77` | One extra `POST /auth/refresh` round trip (BFF → API → DB-free 401) on every page load for every anonymous visitor. | Fixed by the session-hint cookie in #6. | pending |
-| 50 | Low | `backend/prisma/schema.prisma:415-426, 547-567` | Unbounded tables: `WebhookEvent` (full gateway payloads including customer PII), delivered `OutboxMessage` rows and `AuditLog` are never pruned. | Add a retention job (e.g. 90 days for webhook payloads and delivered outbox rows). | pending |
+| 49 | Low | `aranya-next/src/components/AuthContext.tsx:72-77` | One extra `POST /auth/refresh` round trip (BFF → API → DB-free 401) on every page load for every anonymous visitor. | Fixed by the session-hint cookie in #6. | done (#6; see §18) |
+| 50 | Low | `backend/prisma/schema.prisma:415-426, 547-567` | Unbounded tables: `WebhookEvent` (full gateway payloads including customer PII), delivered `OutboxMessage` rows and `AuditLog` are never pruned. | Add a retention job (e.g. 90 days for webhook payloads and delivered outbox rows). | done (§18; audit log kept — owner decision) |
 | 51 | Low | `backend/src/services/catalog-query.ts:40-56`; `backend/src/services/search-query.ts:22-31`; `backend/src/services/admin-page-query.ts:12-14, 39` | Catalog sorts and search use per-row correlated `COUNT(*)` subqueries and `strpos(lower(...))` scans; admin audit search scans `diff::text` across the whole log. Fine for a small catalog; cost grows linearly with products, orders and audit rows. | No action now. Revisit with materialised counts / trigram indexes if the catalog or log grows. | skipped (acceptable at current scale) |
 | 52 | Low | `aranya-next/public/hero` (384 files, 81 MB), `aranya-next/public/images` (21 MB) | ~102 MB of binary media lives in git, and the build copies it again into `public/media` (~105 MB), inflating clone time and every deploy artifact. | Move hero frames to object storage / CDN (`NEXT_PUBLIC_ASSETS_URL` already exists), or at least Git LFS. | decision |
-| 53 | Low | `backend/prisma/schema.prisma:170` | `@@index([slug])` on `Product` duplicates the index already created by `@unique`. | Drop it. | pending |
-| 54 | Low | `aranya-next/src/lib/*-data.ts` | Demo datasets (`admin-data.ts` 446 lines, `account-data.ts`, `journal-data.ts`, `recipes-data.ts`, `gifts-data.ts`, `catalog-data.ts`) are imported by ~30 modules and ship in production bundles even though `DEMO_MODE` is off. | Load them lazily behind `DEMO_MODE` so they are tree-shaken from production. | pending |
+| 53 | Low | `backend/prisma/schema.prisma:170` | `@@index([slug])` on `Product` duplicates the index already created by `@unique`. | Drop it. | done (§18) |
+| 54 | Low | `aranya-next/src/lib/*-data.ts` | Demo datasets (`admin-data.ts` 446 lines, `account-data.ts`, `journal-data.ts`, `recipes-data.ts`, `gifts-data.ts`, `catalog-data.ts`) are imported by ~30 modules and ship in production bundles even though `DEMO_MODE` is off. | Load them lazily behind `DEMO_MODE` so they are tree-shaken from production. | done (§18) |
 
 ---
 
@@ -412,3 +412,25 @@ No markup or styles changed.
 Verification: `pnpm typecheck`, `pnpm lint` clean; storefront production build succeeds with the same rendering modes as before (dynamic pages, SSG for product / journal / recipe detail); backend unit tests 594 / 594; storefront tests 233 / 233. Browser check (demo mode) of home, about, product page with cart drawer and checkout: layout matches Next 14, no hydration or React errors, shipping options and totals correct. `pnpm audit --prod`: **0 critical** (was 2); no advisory left against `next` itself. Remaining highs are transitive and tracked in #57 (undici / dompurify via isomorphic-dompurify, qs / path-to-regexp via Express, Next's build-time postcss, plus `deepmerge-ts` and `mysql2`, which are new to the list). Playwright e2e and the perf browser scripts were not run locally — CI's smoke job covers them.
 
 Known dev-only warnings left alone (hand-designed layout): the hero poster `fill` image has a `sticky` parent; one product image `fill` container reports zero height. Node 20 locally vs the `>=22` engine field is a local-environment warning only.
+
+---
+
+## 18. Wave 6 progress log (2026-10-03)
+
+Branch `claude/audit-wave6-performance`, stacked on the Next.js 15 upgrade (PR #179). Committed locally, not yet pushed.
+
+| # | Status | What was done / what remains |
+|---|---|---|
+| 48 | decision | Unchanged — single API instance, or Redis-backed limiter / cache plus the leased scheduler before scaling out. Ties in with the hosting decision (#5). |
+| 49 | done | Already closed by #6: `apiRefresh` skips the call when the `aranya_session` hint cookie is absent (browser-verified in Wave 1). |
+| 50 | done | New hourly `retention` job (`45 * * * *`, both the legacy and the leased scheduler): deletes one page (200) each of `WebhookEvent` rows and DELIVERED `OutboxMessage` rows older than 90 days. DEAD outbox rows are kept for an operator. Outbox dedupe keys all encode one-time events (`paid:<order>`, `shipped:<order>:<episode>`, `cart:<id>:<updatedAt>`, random UUIDs) and order state gates any resend, so deleting spent rows cannot cause a duplicate email. **`AuditLog` is not pruned** — how long to keep the admin trail is an owner decision. Test added. |
+| 51 | skipped | Unchanged (acceptable at current scale). |
+| 52 | decision | Unchanged — hero frames to object storage / CDN or Git LFS. |
+| 53 | done | `@@index([slug])` removed from `Product`; migration `20261003020000_drop_duplicate_product_slug_index` drops `Product_slug_idx` (`IF EXISTS`). The unique index `Product_slug_key` remains. |
+| 54 | done | Cause: webpack decides which exports are used across the whole build, so admin's use of `JOURNAL` / `RECIPES` / `GIFTS` kept those datasets inside the shared modules that storefront client components import for helpers, and `AuthContext` pulled the entire demo account (fake addresses, orders, tracking numbers) into the root layout on every page. Fix: the datasets moved to `journal-demo.ts`, `recipes-demo.ts`, `gifts-demo.ts` (with `getPost`, `getRecipe`, `recipeSpices`), imported only by server pages, the sitemap and admin; `toPost` uses a five-entry curated-slot map instead of searching the demo journal; `AuthContext` imports a small `demo-user.ts`; `GiftsClient` dropped its unreachable client-side fallback (the page always passes `gifts`). No markup or styles changed. |
+
+Bundle effect (production build, First Load JS): every storefront page −3 kB (demo account out of the root layout); `/recipes` and `/recipes/[slug]` 144 → 136 kB and 146 → 138 kB; `/journal` 142 → 137 kB; `/search` 149 → 145 kB; `/gifts` 144 → 141 kB; `/admin` 131 → 127 kB. After the change the demo strings appear only in `/account` (its demo fallback) and admin-only chunks. Still shipped: `/account` keeps the demo account for its demo-mode fallbacks, and `catalog-data` stays in the storefront because search and gift helpers read it.
+
+Deploy notes for Wave 6: run `prisma migrate deploy` (one new migration).
+
+Verification: `pnpm typecheck`, `pnpm lint`, Prisma validate clean; storefront production build succeeds; storefront tests 233 / 233; backend unit tests 595 / 595 (1 new; `scheduler-control` and `email.service` timed out in the cold full run and passed alone — #61). Browser check (demo mode): gifts, journal list and article (curated cover slot), recipes list and detail, and search render without route errors; the gifts grid hydrates with prices and à-la-carte comparisons.

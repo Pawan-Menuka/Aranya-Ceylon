@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useAdminPage } from "./useAdminPage";
 import { AdminPagination } from "./AdminPagination";
-import { GIFTS } from "@/lib/gifts-data";
+import { GIFTS } from "@/lib/gifts-demo";
 import { parsePrice } from "@/lib/catalog-data";
 import { formatMoney } from "@/lib/money";
 import { AIcon, Pill, FlagRow } from "./AdminPrimitives";

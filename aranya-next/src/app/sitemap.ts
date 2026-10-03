@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 import type { Product, Blog, Paginated } from "@/lib/types";
 import { fetchRecipes } from "@/lib/api/recipes";
 import { CATALOG } from "@/lib/catalog-data";
-import { JOURNAL } from "@/lib/journal-data";
-import { RECIPES } from "@/lib/recipes-data";
+import { JOURNAL } from "@/lib/journal-demo";
+import { RECIPES } from "@/lib/recipes-demo";
 
 // Roadmap: SEO infrastructure. Next.js serves whatever this default export
 // returns at /sitemap.xml automatically — no route handler needed. Revalidate

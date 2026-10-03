@@ -51,6 +51,20 @@ export async function runBoundedTokenPruning(lease?: JobLeaseHandle): Promise<nu
         return (await tx.token.deleteMany({ where: { id: { in: rows.map(row => row.id) }, expiresAt: { lt: new Date() } } })).count;
     });
 }
+// Webhook payloads carry customer PII and delivered outbox rows are spent, so
+// both are dropped after 90 days (audit #50). DEAD outbox rows are kept for an
+// operator, and the audit log is kept indefinitely.
+export const RETENTION_DAYS = 90;
+export async function runBoundedRetention(lease?: JobLeaseHandle): Promise<number> {
+    const cutoff = new Date(Date.now() - RETENTION_DAYS * 86_400_000);
+    return guarded(lease, async tx => {
+        const events = await tx.webhookEvent.findMany({ where: { createdAt: { lt: cutoff } }, select: { id: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: PAGE });
+        const messages = await tx.outboxMessage.findMany({ where: { status: 'DELIVERED', deliveredAt: { lt: cutoff } }, select: { id: true }, orderBy: [{ deliveredAt: 'asc' }, { id: 'asc' }], take: PAGE });
+        const removedEvents = await tx.webhookEvent.deleteMany({ where: { id: { in: events.map(row => row.id) }, createdAt: { lt: cutoff } } });
+        const removedMessages = await tx.outboxMessage.deleteMany({ where: { id: { in: messages.map(row => row.id) }, status: 'DELIVERED', deliveredAt: { lt: cutoff } } });
+        return removedEvents.count + removedMessages.count;
+    });
+}
 export async function runBoundedStaleOrders(lease?: JobLeaseHandle): Promise<number> {
     const deadline = Date.now() + RUN_BUDGET_MS;
     const cutoff = new Date(Date.now() - pendingOrderTtlMs());
@@ -134,6 +148,7 @@ export function startLeasedJobs(): void {
     schedule('stale-orders', '*/10 * * * *', runBoundedStaleOrders);
     schedule('token-pruning', '0 3 * * *', runBoundedTokenPruning);
     schedule('abandoned-carts', '30 * * * *', runBoundedAbandonedCarts);
+    schedule('retention', '45 * * * *', runBoundedRetention);
 }
 export async function stopLeasedJobs(): Promise<void> {
     await Promise.all(tasks.splice(0).map(task => task.stop()));

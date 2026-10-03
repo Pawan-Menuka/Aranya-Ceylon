@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { resolveMarket } from "@/lib/market";
-import { GIFTS } from "@/lib/gifts-data";
+import { GIFTS } from "@/lib/gifts-demo";
 import { fetchGifts } from "@/lib/api/gifts";
 import { SiteChrome } from "@/components/SiteChrome";
 import { GiftsClient } from "@/components/marketing/GiftsClient";

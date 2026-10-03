@@ -167,7 +167,6 @@ model Product {
   wishlistItems  WishlistItem[]
   cartItems      CartItem[]
 
-  @@index([slug])
   @@index([featured])
   // GIN index for FTS — added in raw migration (Step 2.6)
 }
