@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { resolveMarket } from "@/lib/market";
 import { SiteChrome } from "@/components/SiteChrome";
 import { ShippingClient } from "@/components/marketing/ShippingClient";
 
@@ -10,10 +9,9 @@ export const metadata: Metadata = {
   alternates: { canonical: "/shipping" },
 };
 
-export default async function ShippingPage() {
-  const market = await resolveMarket();
+export default function ShippingPage() {
   return (
-    <SiteChrome initialMarket={market} hero>
+    <SiteChrome hero>
       <ShippingClient />
     </SiteChrome>
   );

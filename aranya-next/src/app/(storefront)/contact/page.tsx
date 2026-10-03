@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { resolveMarket } from "@/lib/market";
 import { SiteChrome } from "@/components/SiteChrome";
 import { ContactClient } from "@/components/marketing/ContactClient";
 
@@ -10,10 +9,9 @@ export const metadata: Metadata = {
   alternates: { canonical: "/contact" },
 };
 
-export default async function ContactPage() {
-  const market = await resolveMarket();
+export default function ContactPage() {
   return (
-    <SiteChrome initialMarket={market} hero>
+    <SiteChrome hero>
       <ContactClient />
     </SiteChrome>
   );

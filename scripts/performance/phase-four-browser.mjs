@@ -91,7 +91,7 @@ try {
         if(api.calls.filter(c=>c.path===primaryPath).length!==1)throw new Error('Primary fetched more than once for metadata/page');
         await invalidate([spec.tag]);
         const c=await browser.newContext({viewport:{width:1440,height:900}});await c.addInitScript(()=>localStorage.setItem('aranya-market-ack','1'));page=await c.newPage();page.on('pageerror',e=>errors.push(e.message));
-        const start=performance.now();await page.goto(base+spec.route,{waitUntil:'commit'});await page.locator('['+spec.marker+']').waitFor({state:'visible',timeout:2500});const browserPrimaryMs=performance.now()-start;
+        const start=performance.now();await page.goto(base+spec.route,{waitUntil:'commit'});await page.locator('['+spec.marker+']').first().waitFor({state:'visible',timeout:2500});const browserPrimaryMs=performance.now()-start;
         const beforeComplete=await page.evaluate(()=>document.readyState!=='complete');
         await page.screenshot({path:output+'/'+spec.name+'-streaming-primary.png'});await page.waitForLoadState('load');await c.close();
         if(browserPrimaryMs>2500||!beforeComplete)throw new Error('Browser primary content did not precede related completion');

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { resolveMarket } from "@/lib/market";
 import { SiteChrome } from "@/components/SiteChrome";
 import { LegalClient } from "@/components/legal/LegalCommon";
 import { PRIVACY_SECTIONS } from "@/components/legal/legal-content";
@@ -11,10 +10,9 @@ export const metadata: Metadata = {
   alternates: { canonical: "/privacy" },
 };
 
-export default async function PrivacyPage() {
-  const market = await resolveMarket();
+export default function PrivacyPage() {
   return (
-    <SiteChrome initialMarket={market} hero>
+    <SiteChrome hero>
       <LegalClient active="Privacy" title={<>Privacy<br />Policy.</>} updated="June 2026"
         lead="What we collect when you shop our spices, why we collect it, and the choices you have over your information."
         sections={PRIVACY_SECTIONS} />

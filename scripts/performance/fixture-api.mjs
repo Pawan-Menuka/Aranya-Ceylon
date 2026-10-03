@@ -24,6 +24,11 @@ function verifiedMarket(token) {
   } catch { return 'INTERNATIONAL'; }
 }
 export async function startFixtureApi({port=4101,delayMs=0,faults=new Map(),phase9Rows=0,admin=false}={}) {
+  // Every phase starts a new Next server on the shared isolated build, and a new fixture holds new data.
+  // Next 15 keeps its revalidated-tag list in memory only (Next 14 wrote tags-manifest.json), so a restarted
+  // server trusts on-disk Data Cache entries an earlier phase had already invalidated. Start each fixture
+  // from an empty Data Cache so a previous phase's catalog state (e.g. an archived product) cannot leak in.
+  fs.rmSync(path.join(path.dirname(fileURLToPath(import.meta.url)),'../../aranya-next/.performance-build/.next/cache/fetch-cache'),{recursive:true,force:true});
   const source=JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)),'fixtures/catalog.json'),'utf8'));
   const data=phase9Rows?phaseNineData(source,phase9Rows):source;
   const carts=new Map();

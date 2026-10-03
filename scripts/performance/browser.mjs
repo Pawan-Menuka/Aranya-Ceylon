@@ -11,6 +11,13 @@ export async function loadPlaywright() {
   }
 }
 
+// Next 15 / React 19.2 reveal streamed Suspense content in batches: for a short window after a data page
+// loads, the revealed copy and React's hidden holding copy both exist, so strict locators match twice and
+// counts double. Wait for the holding containers and route skeleton to go before reading content.
+export async function settled(page, timeout = 10000) {
+  await page.waitForFunction(() => !document.querySelector('div[hidden][id^="S:"]') && !document.querySelector('[data-route-loading]'), null, { timeout });
+}
+
 // Browser-local observations only; records no HTML, headers, cookie or auth values.
 export function installObservers() {
   performance.setResourceTimingBufferSize(2500);

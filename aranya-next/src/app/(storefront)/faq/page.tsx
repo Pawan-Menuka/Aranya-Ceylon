@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { resolveMarket } from "@/lib/market";
 import { SiteChrome } from "@/components/SiteChrome";
 import { FaqClient } from "@/components/marketing/FaqClient";
 
@@ -10,10 +9,9 @@ export const metadata: Metadata = {
   alternates: { canonical: "/faq" },
 };
 
-export default async function FaqPage() {
-  const market = await resolveMarket();
+export default function FaqPage() {
   return (
-    <SiteChrome initialMarket={market} hero>
+    <SiteChrome hero>
       <FaqClient />
     </SiteChrome>
   );

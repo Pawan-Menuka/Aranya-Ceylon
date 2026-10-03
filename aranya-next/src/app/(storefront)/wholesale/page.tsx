@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { resolveMarket } from "@/lib/market";
 import { SiteChrome } from "@/components/SiteChrome";
 import { WholesaleClient } from "@/components/marketing/WholesaleClient";
 
@@ -10,10 +9,9 @@ export const metadata: Metadata = {
   alternates: { canonical: "/wholesale" },
 };
 
-export default async function WholesalePage() {
-  const market = await resolveMarket();
+export default function WholesalePage() {
   return (
-    <SiteChrome initialMarket={market} hero>
+    <SiteChrome hero>
       <WholesaleClient />
     </SiteChrome>
   );
