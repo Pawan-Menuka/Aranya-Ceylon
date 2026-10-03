@@ -21,11 +21,12 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs();
 
 describe("verified public Data Cache", () => {
   it("gives distinct guest/auth cookies and market JWT expirations the same Next cache key, while separating markets and queries", async () => {
-    // Use Next 14's real cache key algorithm, including its headers/cache fields.
+    // Use Next's real cache key algorithm, including its headers/cache fields
+    // (IncrementalCache.generateCacheKey; it was fetchCacheKey before Next 15).
     const keys: string[] = [];
     const upstream = vi.fn(); const entries = new Map<string, unknown>();
     vi.stubGlobal("fetch", vi.fn(async (url, init) => {
-      const key = await IncrementalCache.prototype.fetchCacheKey.call({} as IncrementalCache, url, init);
+      const key = await IncrementalCache.prototype.generateCacheKey.call({} as IncrementalCache, url, init);
       keys.push(key);
       if (!entries.has(key)) {
         upstream();
@@ -58,7 +59,7 @@ describe("verified public Data Cache", () => {
     const { publicApiFetch } = await import("../../aranya-next/src/lib/api/public");
     const { resolveMarket } = await import("../../aranya-next/src/lib/market");
     for (const value of invalid) {
-      request.market = value; expect(resolveMarket()).toBe("intl");
+      request.market = value; expect(await resolveMarket()).toBe("intl");
       await publicApiFetch("/products");
       expect(fetcher.mock.lastCall![1].headers.get("cookie")).toBe(`x-market=${canonicalMarketCookie("intl", secret)}`);
     }
@@ -69,7 +70,7 @@ describe("verified public Data Cache", () => {
     const fetcher = vi.fn(async () => Response.json({})); vi.stubGlobal("fetch", fetcher);
     const { publicApiFetch } = await import("../../aranya-next/src/lib/api/public");
     const { resolveMarket } = await import("../../aranya-next/src/lib/market");
-    expect(resolveMarket()).toBe("local");
+    expect(await resolveMarket()).toBe("local");
     await publicApiFetch("/products");
     const init = fetcher.mock.calls[0][1];
     expect(init.cache).toBe("no-store"); expect(init.next).toBeUndefined();

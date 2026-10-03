@@ -119,20 +119,21 @@ function rescopeCookiePath(cookie: string): string {
   return cookie.replace(/;\s*Path=\/auth\b/i, "; Path=/api/auth");
 }
 
-type Ctx = { params: { path: string[] } };
+// Next 15: route params arrive as a Promise.
+type Ctx = { params: Promise<{ path: string[] }> };
 
 export async function GET(req: NextRequest, { params }: Ctx) {
-  return proxy(req, params.path);
+  return proxy(req, (await params).path);
 }
 export async function POST(req: NextRequest, { params }: Ctx) {
-  return proxy(req, params.path);
+  return proxy(req, (await params).path);
 }
 export async function PATCH(req: NextRequest, { params }: Ctx) {
-  return proxy(req, params.path);
+  return proxy(req, (await params).path);
 }
 export async function PUT(req: NextRequest, { params }: Ctx) {
-  return proxy(req, params.path);
+  return proxy(req, (await params).path);
 }
 export async function DELETE(req: NextRequest, { params }: Ctx) {
-  return proxy(req, params.path);
+  return proxy(req, (await params).path);
 }

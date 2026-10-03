@@ -85,7 +85,10 @@ async function serverCookieHeader(): Promise<string> {
   // Dynamically imported so this module is also safe to bundle for the client.
   const { cookies } = await import("next/headers");
   try {
-    return cookies().toString();
+    // Next 15: cookies() is async. Without the await this still type-checks
+    // (a Promise has toString) but forwards "[object Promise]" instead of
+    // the visitor's cookies.
+    return (await cookies()).toString();
   } catch {
     return "";
   }

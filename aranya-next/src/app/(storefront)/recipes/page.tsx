@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 export const revalidate = 3600; // Public data lifetime; cookies/nonces keep HTML dynamic.
 
 export default async function RecipesPage() {
-  const market = resolveMarket();
+  const market = await resolveMarket();
   // Prefer live DB data; fall back to static file when backend is unavailable
   const recipes = (await fetchRecipes()) ?? RECIPES;
   return (

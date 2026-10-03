@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { resolveMarket } from "@/lib/market";
 import { SiteChrome } from "@/components/SiteChrome";
 import { AccountClient } from "@/components/account/AccountClient";
 
@@ -12,9 +11,8 @@ export const metadata: Metadata = {
 // Account is gated client-side (auth session lives in memory + HttpOnly refresh
 // cookie). The page renders the gate or the dashboard depending on session.
 export default function AccountPage() {
-  const market = resolveMarket();
   return (
-    <SiteChrome initialMarket={market}>
+    <SiteChrome>
       <AccountClient />
     </SiteChrome>
   );

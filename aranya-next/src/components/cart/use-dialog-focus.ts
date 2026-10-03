@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, type RefObject } from "react";
 
-export function useDialogFocus(ref: RefObject<HTMLElement>, open: boolean, close: () => void) {
+export function useDialogFocus(ref: RefObject<HTMLElement | null>, open: boolean, close: () => void) {
   useEffect(() => {
     const node = ref.current;
     if (!node) return;

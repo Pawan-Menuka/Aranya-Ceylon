@@ -46,7 +46,8 @@ export async function generateStaticParams() {
   }
 }
 
-export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const recipe = (await fetchRecipeBySlug(params.slug)) ?? getRecipe(params.slug);
   if (!recipe) return { title: "Recipe not found" };
   return {
@@ -57,8 +58,9 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   };
 }
 
-export default async function RecipeDetailPage({ params }: { params: { slug: string } }) {
-  const market = resolveMarket();
+export default async function RecipeDetailPage({ params: paramsPromise }: { params: Promise<{ slug: string }> }) {
+  const params = await paramsPromise;
+  const market = await resolveMarket();
   const recipe = (await fetchRecipeBySlug(params.slug)) ?? getRecipe(params.slug);
   if (!recipe) notFound();
 

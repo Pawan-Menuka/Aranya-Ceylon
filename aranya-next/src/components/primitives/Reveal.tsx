@@ -16,7 +16,7 @@ export function Reveal({
   children?: React.ReactNode;
   delay?: number;
   y?: number;
-  as?: keyof JSX.IntrinsicElements;
+  as?: keyof React.JSX.IntrinsicElements;
   style?: React.CSSProperties;
   [key: string]: unknown;
 }) {

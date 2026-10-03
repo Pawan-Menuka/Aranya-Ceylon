@@ -8,7 +8,7 @@ import { gzipSync } from 'node:zlib';
 import { spawn } from 'node:child_process';
 import { frontendSource } from './source.mjs';
 import { startFixtureApi, fixtureSecret, signedMarket } from './fixture-api.mjs';
-import { loadPlaywright } from './browser.mjs';
+import { loadPlaywright, settled } from './browser.mjs';
 
 const base = 'http://127.0.0.1:3101';
 const apiOrigin = 'http://127.0.0.1:4101';
@@ -220,7 +220,7 @@ try {
     try {
       await invalidate(['/products', '/search', '/journal']); api.calls.length = 0;
       await p.goto(base + '/search?q=Harvest', { waitUntil: 'domcontentloaded' });
-      await p.getByRole('button', { name: /Spices 131/ }).waitFor();
+      await p.getByRole('button', { name: /Spices 131/ }).waitFor(); await settled(p);
       assert(await p.locator('[data-screen-label="Search"] .sr-grid h3').count() === 20, 'First paint downloaded/rendered all product matches.');
       assert(queryCalls('Harvest').length === 1, 'SSR search requested more than its first matching page.');
       assert(!api.calls.some(call => call.path === '/products' || call.path === '/blog'), 'Search still downloaded a whole catalog/journal index.');
@@ -237,7 +237,7 @@ try {
     try {
       await invalidate(['/products', '/search', '/journal']); api.calls.length = 0;
       await p.goto(base + '/search?q=Chronicle', { waitUntil: 'domcontentloaded' });
-      await p.getByRole('button', { name: /Journal 63/ }).waitFor();
+      await p.getByRole('button', { name: /Journal 63/ }).waitFor(); await settled(p);
       assert(await p.locator('[data-screen-label="Search"] a[href^="/journal/"] h4').count() === 20, 'Journal first paint downloaded/rendered all matches.');
       assert(queryCalls('Chronicle').length === 1, 'SSR journal search did not stop at its first page.');
       const clicks = await loadAllMatches(p, 'journal');
@@ -257,7 +257,7 @@ try {
         if (new URL(route.request().url()).searchParams.get('q') === 'Harvest') { intercepted++; await held; return route.continue().catch(() => {}); }
         return route.continue();
       });
-      await p.goto(base + '/search', { waitUntil: 'load' }); await searchInput(p).fill('Harvest');
+      await p.goto(base + '/search', { waitUntil: 'load' }); await settled(p); await searchInput(p).fill('Harvest');
       await until(() => intercepted > 0, 'Debounced compact Harvest request did not start.');
       await searchInput(p).fill('Chronicle'); await p.getByRole('button', { name: /Journal 63/ }).waitFor();
       release(); await sleep(300);
@@ -286,7 +286,7 @@ try {
         if (new URL(route.request().url()).searchParams.get('q') === 'Harvest' && ++attempts === 1) return route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"Controlled unavailable"}' });
         return route.continue();
       });
-      await p.goto(base + '/search', { waitUntil: 'load' });
+      await p.goto(base + '/search', { waitUntil: 'load' }); await settled(p);
       await p.getByRole('button', { name: 'Cinnamon', exact: true }).click();
       await p.waitForFunction(() => document.querySelector('[data-screen-label="Search"] input[placeholder^="Search spices"]')?.value === 'Cinnamon');
       await searchInput(p).fill(''); await p.getByText('Bestsellers to start with', { exact: true }).waitFor();
@@ -310,12 +310,15 @@ try {
     const { c, p } = await context();
     try {
       await invalidate(['/search']); api.calls.length = 0;
-      await p.goto(base + '/search?q=Harvest', { waitUntil: 'load' });
+      await p.goto(base + '/search?q=Harvest', { waitUntil: 'load' }); await settled(p);
       await until(() => queryCalls('Harvest', 'INTERNATIONAL').length > 0, 'Initial compact search missing.', 160);
       await p.locator('footer').getByRole('button', { name: 'LKR', exact: true }).click();
       await until(() => queryCalls('Harvest', 'LOCAL').length > 0, 'Market change did not rerun compact search.', 160);
       await p.getByRole('button', { name: /Spices 131/ }).waitFor();
       await p.waitForFunction(() => document.querySelector('[data-screen-label="Search"] .sr-grid')?.textContent.includes('Rs '));
+      // The market switch also refreshes the route from the server. A late refresh resets the loaded pages, so let it land
+      // (and React finish revealing it) before paging; otherwise a click can be swallowed by the reset.
+      await p.waitForLoadState('networkidle'); await settled(p);
       const clicks = await loadAllMatches(p, 'products');
       assert(queryCalls('Harvest', 'LOCAL').some(call => new URLSearchParams(call.query).has('productCursor')), 'Local user paging did not continue all matches.');
       return { marketSearches: ['INTERNATIONAL', 'LOCAL'], localRequests: queryCalls('Harvest', 'LOCAL').length, loadMoreClicks: clicks };
@@ -327,7 +330,7 @@ try {
     try {
       await invalidate(['/recipes', '/products']); api.calls.length = 0;
       await p.goto(base + '/recipes/black-pork-curry', { waitUntil: 'domcontentloaded' });
-      await p.getByText('Spices in this recipe', { exact: true }).waitFor();
+      await settled(p); await p.getByText('Spices in this recipe', { exact: true }).waitFor();
       const productCalls = api.calls.filter(call => call.path === '/products');
       const lookup = productCalls.filter(call => new URLSearchParams(call.query).get('view') === 'lookup');
       assert(lookup.length === 1 && productCalls.length === 1, 'Recipe requested full catalog or repeated lookup.');
@@ -344,7 +347,7 @@ try {
   await check('Brand fonts remain distinct and admin CSS stays on admin', async () => {
     const { c, p } = await context();
     try {
-      await p.goto(base + '/search', { waitUntil: 'domcontentloaded' });
+      await p.goto(base + '/search', { waitUntil: 'domcontentloaded' }); await settled(p);
       await p.evaluate(async () => { await document.fonts.ready; });
       const roles = await p.evaluate(() => ({
         display: { family: getComputedStyle(document.querySelector('h1.disp')).fontFamily, weight: getComputedStyle(document.querySelector('h1.disp')).fontWeight, style: getComputedStyle(document.querySelector('h1.disp')).fontStyle },

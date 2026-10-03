@@ -29,7 +29,7 @@ async function loadPosts(): Promise<{ posts: Post[]; nextCursor: string | null }
 }
 
 export default async function JournalPage() {
-  const market = resolveMarket();
+  const market = await resolveMarket();
   const { posts, nextCursor } = await loadPosts();
   return (
     <SiteChrome initialMarket={market}>

@@ -39,9 +39,10 @@ function decodeJwtPayload(jwt: string): { market?: unknown } | null {
   }
 }
 
-export function resolveMarket(): Market {
+// Async since Next 15: cookies() and headers() return promises.
+export async function resolveMarket(): Promise<Market> {
   try {
-    const c = cookies().get("x-market");
+    const c = (await cookies()).get("x-market");
     const secret = marketCookieSecret();
     if (secret) return verifiedCookieMarket(c?.value, secret);
     if (c?.value) return marketFromCookieValue(c.value);
@@ -57,7 +58,7 @@ export function resolveMarket(): Market {
   // first-paint currency/CTA colour, never a charge — checkout re-resolves
   // the market authoritatively on the backend regardless.
   try {
-    if (headers().get("cf-ipcountry") === "LK") return "local";
+    if ((await headers()).get("cf-ipcountry") === "LK") return "local";
   } catch {
     // headers() also throws outside a request scope — same fallback.
   }

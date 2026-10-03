@@ -27,11 +27,12 @@ async function loadCatalog(query: CatalogQuery, market: Market): Promise<Catalog
 }
 
 export default async function ProductsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { cat?: string; form?: string; flavour?: string; origin?: string; sort?: string; search?: string };
+  searchParams: Promise<{ cat?: string; form?: string; flavour?: string; origin?: string; sort?: string; search?: string }>;
 }) {
-  const market = resolveMarket();
+  const searchParams = await searchParamsPromise;
+  const market = await resolveMarket();
   const initial = catalogQuery(searchParams);
   const page = await loadCatalog(initial, market);
 

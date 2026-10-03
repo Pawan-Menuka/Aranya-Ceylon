@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { resolveMarket } from "@/lib/market";
 import { SiteChrome } from "@/components/SiteChrome";
 import { AboutClient } from "@/components/marketing/AboutClient";
 
@@ -11,9 +10,8 @@ export const metadata: Metadata = {
 };
 
 export default function AboutPage() {
-  const market = resolveMarket();
   return (
-    <SiteChrome initialMarket={market} hero>
+    <SiteChrome hero>
       <AboutClient />
     </SiteChrome>
   );

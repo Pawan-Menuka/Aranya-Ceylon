@@ -28,7 +28,7 @@ async function loadGroups(): Promise<CatalogCategoryGroup[]> {
 }
 
 export default async function CategoriesPage() {
-  const market = resolveMarket();
+  const market = await resolveMarket();
   const groups = await loadGroups();
   return (
     <SiteChrome initialMarket={market}>
