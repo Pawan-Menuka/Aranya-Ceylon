@@ -36,7 +36,10 @@ vi.mock('../services/token.service.js', () => ({
     issueEmailVerificationToken: vi.fn(async () => 'stub-verify-token'),
     issuePasswordResetToken: vi.fn(async () => 'stub-reset-token'),
     resetPasswordWithToken: (token: string, hash: string) => store.resetPasswordImpl(token, hash),
+    issueTokenPair: vi.fn(async () => ({ accessToken: 'access-token', refreshTokenPlaintext: 'refresh-token' })),
 }));
+vi.mock('../services/audit.service.js', () => ({ writeAuditLog: vi.fn(async () => {}) }));
+vi.mock('../services/two-factor.service.js', () => ({ verifySecondFactor: vi.fn(async () => true) }));
 vi.mock('../services/email.service.js', () => ({
     sendVerificationEmail: vi.fn(async () => {}),
     sendPasswordResetEmail: vi.fn(async () => {}),
@@ -44,6 +47,8 @@ vi.mock('../services/email.service.js', () => ({
 
 import { register, forgotPassword, resetPassword, login } from './auth.controller.js';
 import { hash, verify } from '@node-rs/bcrypt';
+import { verifySecondFactor } from '../services/two-factor.service.js';
+import { SecretBoxUnavailableError } from '../lib/secret-box.js';
 import { registerSchema, loginSchema, checkoutSchema } from '@aranya/shared';
 
 // Minimal Express res double that captures status + json body.
@@ -206,6 +211,77 @@ describe('login — suspended accounts', () => {
         await login(requestDouble({ body: { email: 's@example.com', password: 'wrong' } }), res);
         expect(res.statusCode).toBe(401);
         expect(res.body).toEqual({ error: 'Invalid email or password' });
+    });
+});
+
+// Final audit #43: admin accounts can turn on TOTP two-factor sign-in.
+describe('login — two-factor sign-in', () => {
+    const admin = { id: 'a1', email: 'admin@example.com', name: 'Admin', passwordHash: '$2b$12$stub', verified: true, role: 'ADMIN', suspendedAt: null, twoFactorEnabled: true, twoFactorSecret: 'sealed', twoFactorLastStep: null, twoFactorRecoveryCodes: [] as string[], phone: null, newsletterOptIn: false };
+    const signIn = (body: Record<string, unknown> = {}) => {
+        const res = mockRes();
+        return login(requestDouble({ body: { email: 'admin@example.com', password: 'right-password', ...body } }), res).then(() => res);
+    };
+
+    beforeEach(() => {
+        vi.mocked(verifySecondFactor).mockReset().mockResolvedValue(true);
+        store.findUniqueImpl = async () => admin as never;
+    });
+
+    it('asks for a code, and issues no session, when the password is right but no code is given', async () => {
+        const res = await signIn();
+        expect(res.statusCode).toBe(403);
+        expect(res.body).toMatchObject({ code: 'TWO_FACTOR_REQUIRED' });
+        expect(res.cookies).toHaveLength(0);
+        expect(verifySecondFactor).not.toHaveBeenCalled();
+    });
+
+    it('never reveals that two-factor exists to someone with the wrong password', async () => {
+        vi.mocked(verify).mockResolvedValueOnce(false);
+        const res = await signIn();
+        expect(res.statusCode).toBe(401);
+        expect(res.body).toEqual({ error: 'Invalid email or password' });
+    });
+
+    it('rejects a wrong code without issuing a session', async () => {
+        vi.mocked(verifySecondFactor).mockResolvedValueOnce(false);
+        const res = await signIn({ totpCode: '123456' });
+        expect(res.statusCode).toBe(401);
+        expect(res.body).toMatchObject({ code: 'INVALID_TWO_FACTOR_CODE' });
+        expect(res.cookies).toHaveLength(0);
+    });
+
+    it('signs in with a valid authenticator code or recovery code', async () => {
+        const withCode = await signIn({ totpCode: '123456' });
+        expect(withCode.statusCode).toBe(200);
+        expect(withCode.body).toMatchObject({ accessToken: 'access-token' });
+        expect(withCode.cookies.length).toBeGreaterThan(0);
+        expect(verifySecondFactor).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'a1' }), { totpCode: '123456', recoveryCode: undefined });
+
+        const withRecovery = await signIn({ recoveryCode: 'AAAA-BBBB-CCCC-DDDD' });
+        expect(withRecovery.statusCode).toBe(200);
+    });
+
+    it('fails closed when the encryption key is missing instead of letting anyone in', async () => {
+        vi.mocked(verifySecondFactor).mockRejectedValueOnce(new SecretBoxUnavailableError());
+        const res = await signIn({ totpCode: '123456' });
+        expect(res.statusCode).toBe(503);
+        expect(res.body).toMatchObject({ code: 'TWO_FACTOR_UNAVAILABLE' });
+        expect(res.cookies).toHaveLength(0);
+    });
+
+    it('does not change sign-in for customers or for admins who have not turned it on', async () => {
+        store.findUniqueImpl = async () => ({ ...admin, twoFactorEnabled: false }) as never;
+        expect((await signIn()).statusCode).toBe(200);
+        store.findUniqueImpl = async () => ({ ...admin, role: 'CUSTOMER' }) as never; // two-factor applies to admin roles only
+        expect((await signIn()).statusCode).toBe(200);
+        expect(verifySecondFactor).not.toHaveBeenCalled();
+    });
+
+    it('accepts the optional code fields in the login schema and rejects malformed ones', () => {
+        expect(loginSchema.parse({ email: 'a@b.co', password: 'x', totpCode: '123456' }).totpCode).toBe('123456');
+        expect(() => loginSchema.parse({ email: 'a@b.co', password: 'x', totpCode: '12345' })).toThrow();
+        expect(() => loginSchema.parse({ email: 'a@b.co', password: 'x', totpCode: 'abcdef' })).toThrow();
+        expect(loginSchema.parse({ email: 'a@b.co', password: 'x' })).not.toHaveProperty('totpCode');
     });
 });
 

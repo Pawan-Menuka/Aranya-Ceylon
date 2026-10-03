@@ -65,6 +65,7 @@ router.get('/users', requireRole('SUPERADMIN'), asyncHandler(userAdmin.listUsers
 router.patch('/users/:id/role', requireRole('SUPERADMIN'), asyncHandler(userAdmin.changeUserRole));
 router.post('/users/:id/suspend', requireRole('SUPERADMIN'), asyncHandler(userAdmin.suspendUser));
 router.post('/users/:id/unsuspend', requireRole('SUPERADMIN'), asyncHandler(userAdmin.unsuspendUser));
+router.post('/users/:id/reset-2fa', requireRole('SUPERADMIN'), asyncHandler(userAdmin.resetTwoFactor));
 
 // --- Products ---
 router.get('/products', asyncHandler(productController.adminListProducts));

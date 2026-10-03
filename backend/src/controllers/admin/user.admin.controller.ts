@@ -4,6 +4,7 @@ import { adminListUsersQuerySchema, changeUserRoleSchema, suspendUserSchema } fr
 import { prisma } from '../../lib/prisma.js';
 import { revokeAllUserTokens } from '../../services/token.service.js';
 import { writeAuditLog } from '../../services/audit.service.js';
+import { disableTwoFactor } from '../../services/two-factor.service.js';
 
 // SUPERADMIN-only user management (final audit #43). Mounted behind
 // requireRole('SUPERADMIN') in admin.routes.ts.
@@ -137,3 +138,25 @@ async function setSuspended(req: Request, res: Response, suspend: boolean) {
 
 export const suspendUser = (req: Request, res: Response) => setSuspended(req, res, true);
 export const unsuspendUser = (req: Request, res: Response) => setSuspended(req, res, false);
+
+// Recovery path for an admin who lost their authenticator and recovery codes: a
+// different SUPERADMIN switches their two-factor off (they can re-enrol after
+// signing in with their password). Not available on yourself; use the
+// self-service disable, which needs a code.
+export async function resetTwoFactor(req: Request, res: Response) {
+    const id = req.params.id!;
+    if (id === req.user!.userId) {
+        res.status(409).json({ error: 'Use the two-factor settings to turn off your own two-factor sign-in.', code: 'CANNOT_CHANGE_SELF' });
+        return;
+    }
+    const target = await prisma.user.findUnique({ where: { id }, select: { id: true, twoFactorEnabled: true } });
+    if (!target) { res.status(404).json({ error: 'User not found' }); return; }
+    if (!target.twoFactorEnabled) { res.json({ user: { id, twoFactorEnabled: false }, changed: false }); return; }
+
+    await disableTwoFactor(id);
+    // The reset is usually a recovery, so end any session that may be in doubt.
+    await revokeAllUserTokens(id);
+    await writeAuditLog({ req, event: 'USER_2FA_RESET', targetType: 'User', targetId: id });
+
+    res.json({ user: { id, twoFactorEnabled: false }, changed: true });
+}

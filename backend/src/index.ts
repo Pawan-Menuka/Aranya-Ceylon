@@ -39,6 +39,7 @@ import { outboxEnabled } from './lib/outbox.js';
 import { distributedJobsEnabled } from './jobs/jobLease.js';
 import { outboxWorkerEnabled } from './jobs/outboxWorker.js';
 import { dashboardRollupsEnabled } from './services/dashboard-rollups.js';
+import { secretBoxConfigured } from './lib/secret-box.js';
 
 
 // Backstop for a promise nobody awaited or caught. Node's default is to
@@ -64,6 +65,15 @@ if (process.env.NODE_ENV === 'production' && process.env.BFF_CLIENT_IP_REQUIRED 
     console.warn(
         '⚠ BFF client identity is not enforced (BFF_CLIENT_IP_SECRET + BFF_CLIENT_IP_REQUIRED=true). '
         + 'Rate limits and audit-log IPs will key on the storefront server, not on individual visitors.',
+    );
+}
+// Admin two-factor sign-in encrypts each secret with this key. Without it admins
+// cannot enrol, and anyone who already has two-factor on cannot sign in (it fails
+// closed), so say so loudly at boot instead of at the first sign-in.
+if (process.env.NODE_ENV === 'production' && !secretBoxConfigured()) {
+    console.warn(
+        '⚠ TWO_FACTOR_ENCRYPTION_KEY is missing or invalid (canonical base64 of 32 bytes: `openssl rand -base64 32`). '
+        + 'Admin two-factor sign-in is unavailable until it is set.',
     );
 }
 const API_HOST = apiListenHostFromEnv(process.env);
