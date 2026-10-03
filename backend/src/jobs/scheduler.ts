@@ -5,7 +5,7 @@ import { revalidateFrontend } from '../lib/revalidate.js';
 import { cancelPendingOrder, isPastForceCancelAge, pendingOrderTtlMs } from '../services/pending-order.service.js';
 import { outboxEnabled } from '../lib/outbox.js';
 import { distributedJobsEnabled } from './jobLease.js';
-import { startLeasedJobs, runBoundedLowStock, runBoundedAbandonedCarts } from './leasedScheduler.js';
+import { startLeasedJobs, runBoundedLowStock, runBoundedAbandonedCarts, runBoundedRetention } from './leasedScheduler.js';
 
 // --- Job 1: Publish scheduled blog posts ---
 // Runs every minute. Checks for posts where scheduledAt <= now
@@ -232,6 +232,20 @@ export function startAbandonedCartRecoveryJob() {
     }, { noOverlap: true });
 }
 
+// --- Job 7: Data retention ---
+// Runs hourly (45 past). Deletes one page each of webhook payloads and
+// delivered outbox rows older than 90 days; see runBoundedRetention.
+export function startRetentionJob() {
+    cron.schedule('45 * * * *', async () => {
+        try {
+            const removed = await runBoundedRetention();
+            if (removed > 0) console.log(`🧹 Removed ${removed} expired webhook / outbox row(s)`);
+        } catch (err) {
+            console.error('[CRON] Retention job failed:', err);
+        }
+    }, { noOverlap: true });
+}
+
 // Set to false on every API replica except the designated scheduler runner.
 // This is a deployment control, not distributed leader election: the deployment
 // must ensure exactly one enabled runner before adding another API replica.
@@ -257,5 +271,6 @@ export function startAllJobs() {
     startStaleOrderCancellationJob();
     startTokenPruningJob();
     startAbandonedCartRecoveryJob();
+    startRetentionJob();
     console.log('⏰ Cron jobs started');
 }

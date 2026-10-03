@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useAdminPage } from "./useAdminPage";
 import { AdminPagination } from "./AdminPagination";
-import { RECIPES } from "@/lib/recipes-data";
+import { RECIPES } from "@/lib/recipes-demo";
 import { AIcon, Pill, FlagRow } from "./AdminPrimitives";
 import {
   listAdminRecipes, getAdminRecipe, createRecipe, updateRecipe, deleteRecipe,

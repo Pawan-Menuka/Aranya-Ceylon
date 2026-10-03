@@ -4,7 +4,7 @@ import * as React from "react";
 import type { AuthUser } from "@/lib/api/auth";
 import { login as apiLogin, register as apiRegister, refresh as apiRefresh, me as apiMe, logout as apiLogout } from "@/lib/api/auth";
 import { mergeCart, waitForCartMutations } from "@/lib/api/cart";
-import { ACCOUNT } from "@/lib/account-data";
+import { DEMO_ACCOUNT_USER } from "@/lib/demo-user";
 import { DEMO_MODE } from "@/lib/demo";
 import { withRequestDeadline } from "@/lib/api/request-deadline";
 
@@ -34,7 +34,7 @@ interface AuthCtx {
 
 const Ctx = React.createContext<AuthCtx | null>(null);
 
-const DEMO_USER: AuthUser = { id: "demo", name: ACCOUNT.user.name, email: ACCOUNT.user.email, role: "CUSTOMER" };
+const DEMO_USER: AuthUser = { id: "demo", name: DEMO_ACCOUNT_USER.name, email: DEMO_ACCOUNT_USER.email, role: "CUSTOMER" };
 
 // Treat "API unreachable" (BFF 502) or a network error as offline → demo mode.
 // A real 400/401 from the backend is surfaced to the form. Gated by DEMO_MODE

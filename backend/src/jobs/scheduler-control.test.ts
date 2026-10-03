@@ -19,7 +19,7 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-it('preserves the default six schedules and starts them once per process', async () => {
+it('preserves the default seven schedules and starts them once per process', async () => {
     const { startAllJobs } = await import('./scheduler.js');
     startAllJobs();
     startAllJobs();
@@ -28,6 +28,8 @@ it('preserves the default six schedules and starts them once per process', async
         // Stale-order sweep: every 10 minutes, so an unpaid order's stock is
         // released close to the 60-minute reservation window, not an hour late.
         '*/10 * * * *', '0 3 * * *', '30 * * * *',
+        // Data retention (audit #50).
+        '45 * * * *',
     ]);
     for (const call of schedule.mock.calls) {
         expect(call[2]).toEqual({ noOverlap: true });

@@ -1,5 +1,5 @@
 import { SPICES } from "./spice-data";
-import { JOURNAL } from "./journal-data";
+import { JOURNAL } from "./journal-demo";
 import type { Spice } from "./types";
 
 // Aranya Ceylon — ADMIN sample dataset (ported verbatim from admin-data.js).

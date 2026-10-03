@@ -4,8 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import type { Market, Spice } from "@/lib/types";
-import { GIFTS, GIFT_OCCASIONS, type GiftSet, giftCatalog, giftPrice, giftFmt, giftAlaCarte, giftSavePct } from "@/lib/gifts-data";
-// gifts prop: live data from backend; falls back to static GIFTS when null
+import { GIFT_OCCASIONS, type GiftSet, giftCatalog, giftPrice, giftFmt, giftAlaCarte, giftSavePct } from "@/lib/gifts-data";
+// gifts prop: live data from backend, or the page's server-side demo fallback
 import { Reveal } from "../primitives/Reveal";
 import { Liyawel, Eyebrow } from "../primitives/Motif";
 import { Seal } from "../primitives/Seal";
@@ -341,9 +341,8 @@ function GiftCorporate({ market }: { market: Market }) {
   );
 }
 
-export function GiftsClient({ gifts: liveGifts }: { gifts?: GiftSet[] }) {
+export function GiftsClient({ gifts }: { gifts: GiftSet[] }) {
   const { market } = useMarket();
-  const gifts = liveGifts ?? GIFTS;
   const gridRef = React.useRef<HTMLElement>(null);
   const scrollToGrid = () => { if (gridRef.current) gridRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); };
   return (

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { resolveMarket } from "@/lib/market";
-import { RECIPES } from "@/lib/recipes-data";
+import { RECIPES } from "@/lib/recipes-demo";
 import { fetchRecipes } from "@/lib/api/recipes";
 import { SiteChrome } from "@/components/SiteChrome";
 import { RecipesClient } from "@/components/recipes/RecipesClient";

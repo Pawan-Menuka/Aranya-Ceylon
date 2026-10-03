@@ -1,6 +1,7 @@
 import type { Market, Spice, Order } from "./types";
 import { paletteFor } from "./spice-data";
 import { formatOrderNumber } from "./order-number";
+import { DEMO_ACCOUNT_USER } from "./demo-user";
 
 // Account / order-tracking data (ported from account-data.js), typed. The demo
 // dataset powers the signed-in dashboard offline and as a fallback; live orders
@@ -118,7 +119,7 @@ export const AC_STEPS = [
 const STATUS_INDEX: Record<string, number> = { processing: 1, in_transit: 3, out_for_delivery: 4, delivered: 5 };
 
 export const ACCOUNT: AccountData = {
-  user: { first: "Amara", name: "Amara Wijesinghe", initials: "AW", email: "amara.w@example.com", since: "March 2024", tier: "Harvest Club · Gold", points: 1840, pointsTo: 2000 },
+  user: DEMO_ACCOUNT_USER,
   addresses: [
     { id: "a1", label: "Home", market: "intl", name: "Amara Wijesinghe", lines: ["48 Marine Drive, Apt 9B", "Brooklyn, NY 11209"], country: "United States", phone: "+1 (917) 555 0142", isDefault: true },
     { id: "a2", label: "Office", market: "intl", name: "Amara Wijesinghe", lines: ["120 Hudson Street, Floor 5"], cityzip: "New York, NY 10013", country: "United States", phone: "+1 (212) 555 0190", isDefault: false },
