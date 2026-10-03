@@ -1,5 +1,5 @@
-// Shared Zod schemas and TypeScript types
-// Populated in Phase 2 (Prisma) and Phase 3 (Auth)
+// Shared Zod schemas and TypeScript types used by both the API and the storefront.
+// Rebuild with `pnpm --filter @aranya/shared build` after editing; dist/ is not committed.
 
 export const SHARED_VERSION = '0.0.1';
 
