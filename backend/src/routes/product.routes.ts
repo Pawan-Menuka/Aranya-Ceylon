@@ -9,32 +9,15 @@ const router = Router();
 router.get('/', asyncHandler(productController.listProducts));
 router.get('/featured', asyncHandler(productController.getFeatured));
 router.get('/bestsellers', asyncHandler(productController.getBestsellers));
-router.get('/search', asyncHandler(productController.searchProducts));
 router.get('/:slug', asyncHandler(productController.getProduct));
 
-// Admin routes
-// Two-segment path so it can't be captured by the public GET '/:slug'.
-router.get('/admin/all',
-    asyncHandler(requireAuth), requireRole('ADMIN', 'SUPERADMIN'),
-    asyncHandler(productController.adminListProducts),
-);
-router.post('/',
-    asyncHandler(requireAuth), requireRole('ADMIN', 'SUPERADMIN'),
-    asyncHandler(productController.createProduct),
-);
-router.patch('/:id',
-    asyncHandler(requireAuth), requireRole('ADMIN', 'SUPERADMIN'),
-    asyncHandler(productController.updateProduct),
-);
+// Admin image upload. Product create / update / archive / list live under /admin/products
+// (admin.routes.ts), which is what the console calls and which is rate limited.
 router.post('/:id/images',
     asyncHandler(requireAuth), requireRole('ADMIN', 'SUPERADMIN'),
     uploadMiddleware.array('images', 10),
     validateImageContent, // reject spoofed Content-Type by checking magic bytes
     asyncHandler(productController.uploadProductImages),
-);
-router.delete('/:id',
-    asyncHandler(requireAuth), requireRole('ADMIN', 'SUPERADMIN'),
-    asyncHandler(productController.archiveProduct),
 );
 
 export default router;

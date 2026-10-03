@@ -68,12 +68,3 @@ export async function fetchGifts(featured?: boolean): Promise<GiftSet[] | null> 
   }
 }
 
-export async function fetchGiftBySlug(slug: string): Promise<GiftSet | null> {
-  try {
-    const data = await publicApiFetch<{ gift: ApiGiftSet }>(`/gifts/${encodeURIComponent(slug)}`, { revalidate: 3600 });
-    return toGiftSet(data.gift);
-  } catch (error) {
-    rethrowReadFailure(error);
-    return null;
-  }
-}

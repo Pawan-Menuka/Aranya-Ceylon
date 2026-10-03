@@ -251,6 +251,47 @@ phases. It is live (workflow + `perf:*` scripts) but is a candidate for archivin
 Dropping models needs a migration and is irreversible for any data in them; all five tables are expected to be
 empty, but confirm before removing.
 
+### 10.6 Cleanup log (2026-10-04)
+
+Branch `claude/dead-code-cleanup`. Every removal was re-checked by reference search first; unexports were judged by the
+TypeScript compiler (remove `export`, typecheck, restore whatever a real importer needs) plus the storefront tests.
+
+| # | Status | What was done / why it stays |
+|---|---|---|
+| D1 | done | `config/cors.ts` and `cors.test.ts` deleted (CORS lives in `middleware/browserCors.ts`). |
+| D2 | left | The `<image-slot>` editor is exercised by a smoke check ("Opt-in editor retains both saved sidecar formats…") and is the owner's design tooling. Remove it together with that check if the editor is retired. |
+| D3 | done | `apply-gift-migration.ts` and `apply-perf-indexes.ts` deleted (superseded by real migrations). |
+| D4 | left | The unwired `scripts/performance/*diagnostic*` / measurement scripts are harmless history; archive them with the rest of the PR #170 harness once the release is out. |
+| D5 | done | `seed:gifts` and `seed:recipes` scripts added; README documents them (run after `seed:catalog`). |
+| D6, D7, D8 | left | `requireVerified`, `sendWholesaleStatusEmail`, `deleteImage` are stubs for undecided features (verified-only actions, #47 wholesale, #44 image removal). Mount, build or delete once those are decided. |
+| D9 | done | `getRelatedProducts` removed. |
+| D10 | done | `addToCart` removed; its two tests (cart is not a reservation; bad variant rejected) now drive the live `addToShopperCart`, which gained a check that a rejected add creates no cart. |
+| D11 | left | `clearDashboardCache` is a test-reset helper; keep. |
+| D12 | done | `shared/src/schemas/common.schema.ts` and its export removed. |
+| D13 | done | `twoFactorVerified` removed from the access-token payload type. |
+| D14 | left | Audit-event names belong to the unbuilt features (#41, #43, #47). |
+| D15 | pending | `@types/node-cron` removal needs the npm registry (lockfile). |
+| D16 | done | `GET /blog/recent` (route, controller, service) removed. |
+| D17 | done | `GET /products/search`, `searchProducts` controller, `searchAutocomplete` service removed (search is `GET /search`). |
+| D18 | done | The duplicate `GET /products/admin/all`, `POST /products`, `PATCH /products/:id`, `DELETE /products/:id` removed along with their missing `adminLimiter`; the console uses `/admin/products/*`. Only `POST /products/:id/images` remains on that router (it still has no `adminLimiter`; worth a follow-up). |
+| D19 | done | `GET /cart` (create-on-read) removed; the cart controller test now asserts the route is absent so it cannot return. |
+| D20 | done | `GET /gifts/:slug` removed. |
+| D21 | kept | `POST /auth/logout-all` stays; wire it into the account page. |
+| D22 | done | `Swatch` removed. |
+| D23 | done | `CATALOG_SORTS` removed. |
+| D24 | done / kept | `fetchGiftBySlug`, `searchProducts`, `getCart`, `getOrder` removed. `updateAddress` stays: it marks a missing edit-address feature, not junk. |
+| D25 | done | `canonicalMarketCookie` moved out of the production module into `public-cache.test.ts`, its only user, as an independent oracle. |
+| D26 | left | The checkout `pay` state sits in the hand-designed checkout markup; not touched without the owner. |
+| D27 | done | Unused `export`s dropped: `DayPoint`, `OrderItem`, `TopProduct`, `MarketSeg`, `LowStockItem`, `WholesaleApp`, `ActivityItem`, `AdminUser` (admin-data); `OrderEvent`, `AccountUser` (account-data); `VariantMarket`, `ProductImage`, `Review`, `OrderItem`, `OrderTimelineEntry`, `JournalSearchMetadata` (types). |
+| D28 | done | `export` dropped from `OrderLine`, `AD_NAV`, `LegalHeader`, `RIcon`, `AC_STEPS`, `spiceForKey`, `variantUnitPrices`, `toCsv`, `downloadCsv`, `contentToBlocks`, `num`. `HERO_FRAME_LIMITS` keeps its export: `hero-loader.test.ts` reads it, which only the test run (not the compiler) revealed. `MULT` was already file-local. |
+| D29 | pending | Declaring `playwright` for `scripts/performance` needs the npm registry. |
+| D30–D35 | left | Schema removals need migrations and are tied to the build-or-cut decisions (#41–#47) and the currency decision; none done. |
+
+Verification: `pnpm typecheck`, `pnpm lint`, both production builds clean; backend unit tests 589 / 589 (595 before; the
+difference is the 5 `isOriginAllowed` tests and the legacy `GET /cart` test, removed with their code); storefront tests
+233 / 233. The PostgreSQL integration and browser suites run in CI only; a search of the integration tests found no call
+to any removed route or function.
+
 ---
 
 ## 11. What is solid — do not regress

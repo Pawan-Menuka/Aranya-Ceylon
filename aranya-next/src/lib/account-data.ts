@@ -58,7 +58,7 @@ function L(key: string, weight: string, form: string, qty: number): OrderLineIte
   };
 }
 
-export interface OrderEvent { step: string; at: string; loc: string }
+interface OrderEvent { step: string; at: string; loc: string }
 export interface AccountAddress {
   id: string;
   label: string;
@@ -90,7 +90,7 @@ export interface AccountOrder {
   total?: number;
   currency?: "USD" | "LKR";
 }
-export interface AccountUser {
+interface AccountUser {
   first: string;
   name: string;
   initials: string;
@@ -108,7 +108,7 @@ export interface AccountData {
 }
 
 // canonical fulfilment steps (the tracking spine)
-export const AC_STEPS = [
+const AC_STEPS = [
   { key: "placed", label: "Order placed", note: "We received your order and payment." },
   { key: "packed", label: "Packed & sealed", note: "Fresh-milled and sealed at peak aroma within 24h." },
   { key: "shipped", label: "Dispatched", note: "Handed to the carrier from our Kandy facility." },
@@ -211,7 +211,7 @@ export function acBuildTimeline(order: AccountOrder, statusOverride?: string): T
 }
 
 // Build a Spice (card view-model) from a wishlist/reorder key.
-export function spiceForKey(key: string): Spice | null {
+function spiceForKey(key: string): Spice | null {
   const s = ACCOUNT_SPICES[key];
   if (!s) return null;
   return {

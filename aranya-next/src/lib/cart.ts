@@ -79,7 +79,7 @@ export function resolveVariant(
 }
 
 // Real per-unit prices for a weight in each market, drawn from live variants.
-export function variantUnitPrices(
+function variantUnitPrices(
   variants: Variant[] | undefined,
   weightStr: string,
 ): { unitUsd?: number; unitLkr?: number } {
@@ -114,7 +114,7 @@ export interface Totals {
   fmt: (n: number) => string;
 }
 
-export function num(p: string | number): number {
+function num(p: string | number): number {
   return typeof p === "number" ? p : parseFloat(String(p).replace(/[^0-9.]/g, "")) || 0;
 }
 

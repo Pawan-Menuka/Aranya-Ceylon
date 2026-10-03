@@ -29,11 +29,3 @@ export function verifiedCookieMarket(value: string | undefined, secret: string, 
     return "intl";
   }
 }
-
-/** Stable across guests, login cookies and JWT expirations within a market. */
-export function canonicalMarketCookie(market: Market, secret: string): string {
-  const header = Buffer.from(JSON.stringify({ alg: "HS256" })).toString("base64url");
-  const payload = Buffer.from(JSON.stringify({ market: market === "local" ? "local" : "international" })).toString("base64url");
-  const signature = createHmac("sha256", secret).update(`${header}.${payload}`).digest("base64url");
-  return `${header}.${payload}.${signature}`;
-}

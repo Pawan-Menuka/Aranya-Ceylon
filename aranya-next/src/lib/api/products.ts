@@ -63,12 +63,6 @@ export function getBestsellers(
   return publicApiFetch(`/products/bestsellers?view=cards`, { revalidate, ...options });
 }
 
-export function searchProducts(
-  query: string
-): Promise<{ results: Product[]; market: BackendMarket }> {
-  return publicApiFetch(`/products/search?q=${encodeURIComponent(query)}`);
-}
-
 export function getProduct(
   slug: string,
   revalidate: number | false = 300
