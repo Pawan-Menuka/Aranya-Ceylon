@@ -100,11 +100,18 @@ export async function adminListProducts(req: Request, res: Response) {
     return res.json({ products });
 }
 
-// A duplicate variant SKU trips the @unique constraint (Prisma P2002).
-function isDuplicateSku(err: unknown): boolean {
-    return (err as { code?: string }).code === 'P2002';
+// A duplicate slug or variant SKU trips a @unique constraint (Prisma P2002).
+// Every P2002 used to be reported as a SKU clash, so an admin who reused a
+// product slug was told to change SKUs that were fine. The constraint is named
+// in the error's metadata/message; its exact shape differs between drivers,
+// so it is matched as text.
+function uniqueConflictMessage(err: unknown): string | null {
+    if ((err as { code?: string }).code !== 'P2002') return null;
+    const detail = `${JSON.stringify((err as { meta?: unknown }).meta ?? '')} ${(err as { message?: string }).message ?? ''}`;
+    if (/slug/i.test(detail)) return 'A product with that slug already exists — choose a different slug.';
+    if (/sku/i.test(detail)) return 'A variant SKU already exists — SKUs must be unique.';
+    return 'This product clashes with an existing one — check that the slug and every variant SKU are unique.';
 }
-const SKU_CONFLICT = 'A variant SKU already exists — SKUs must be unique.';
 
 // --- Create product (admin) ---
 export async function createProduct(req: Request, res: Response) {
@@ -113,7 +120,8 @@ export async function createProduct(req: Request, res: Response) {
     try {
         product = await publicMutation(tx => productService.createProduct(data, tx), result => productPaths(result!.slug), () => productService.createProduct(data));
     } catch (err) {
-        if (isDuplicateSku(err)) return res.status(409).json({ error: SKU_CONFLICT });
+        const conflict = uniqueConflictMessage(err);
+        if (conflict) return res.status(409).json({ error: conflict });
         throw err;
     }
     await auditPublicMutation({
@@ -136,7 +144,7 @@ export async function updateProduct(req: Request, res: Response) {
     try {
         product = await publicMutation(tx => productService.updateProduct(id, data, tx), result => productPaths(before.slug, result!.slug), () => productService.updateProduct(id, data));
     } catch (err) {
-        // Matched by message, like isDuplicateSku matches by code — not by class.
+        // Matched by message, like uniqueConflictMessage matches by code — not by class.
         if (err instanceof Error && err.message === 'STOCK_CHANGED') {
             const sku = (err as { sku?: string }).sku ?? 'a variant';
             return res.status(409).json({
@@ -144,7 +152,8 @@ export async function updateProduct(req: Request, res: Response) {
                 code: 'STOCK_CHANGED',
             });
         }
-        if (isDuplicateSku(err)) return res.status(409).json({ error: SKU_CONFLICT });
+        const conflict = uniqueConflictMessage(err);
+        if (conflict) return res.status(409).json({ error: conflict });
         throw err;
     }
     const changedFields = Object.keys(data).filter((field) => field !== 'variants');

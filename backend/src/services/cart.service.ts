@@ -146,12 +146,20 @@ export async function addToShopperCart(
 }
 
 async function validateCartVariant(data: AddToCartInput, market: Market) {
-    // Verify variant exists AND belongs to the current market
+    // Verify the variant exists, belongs to the current market, is priced in
+    // this store's currency, and its product is still on sale.
+    //  • Currency: a BOTH-market variant has a single currency, so it used to
+    //    be addable in the other store and then always refused at checkout.
+    //  • Status: archived products stayed purchasable through existing carts
+    //    or a direct API call. DRAFT is allowed — gift sets are sold through
+    //    deliberately catalog-hidden DRAFT products.
     const variant = await prisma.variant.findFirst({
         where: {
             id: data.variantId,
             productId: data.productId,
             market: { in: [market, 'BOTH'] },
+            currency: market === 'LOCAL' ? 'LKR' : 'USD',
+            product: { status: { not: 'ARCHIVED' } },
         },
     });
 
@@ -242,33 +250,38 @@ export async function mergeGuestCart(guestToken: string, userId: string) {
 
     if (!guestCart || guestCart.items.length === 0) return;
 
-    // A merge with real items renews the target cart's shopping activity.
-    const userCart = await prisma.cart.upsert({
-        where: { userId },
-        update: { updatedAt: new Date(), abandonedEmailSentAt: null },
-        create: { userId },
+    // One transaction that starts by claiming the guest cart. Two sign-ins
+    // finishing together (two tabs) used to both add the guest lines — doubling
+    // every quantity — and the second then failed deleting the already-deleted
+    // cart. Deleting first means exactly one merge proceeds; the other sees
+    // nothing to claim. The lines were read above, so the cascade is harmless.
+    await prisma.$transaction(async (tx) => {
+        const claimed = await tx.cart.deleteMany({ where: { id: guestCart.id } });
+        if (claimed.count === 0) return;
+
+        // A merge with real items renews the target cart's shopping activity.
+        const userCart = await tx.cart.upsert({
+            where: { userId },
+            update: { updatedAt: new Date(), abandonedEmailSentAt: null },
+            create: { userId },
+        });
+
+        for (const item of guestCart.items) {
+            const key = { cartId_variantId: { cartId: userCart.id, variantId: item.variantId } };
+            const existing = await tx.cartItem.findUnique({ where: key, select: { quantity: true } });
+            // Same per-line ceiling the cart endpoints enforce.
+            const quantity = Math.min(MAX_LINE_QUANTITY, (existing?.quantity ?? 0) + item.quantity);
+            await tx.cartItem.upsert({
+                where: key,
+                update: { quantity },
+                create: { cartId: userCart.id, productId: item.productId, variantId: item.variantId, quantity },
+            });
+        }
     });
-
-    // Move all guest items to user cart atomically
-    await prisma.$transaction(
-        guestCart.items.map((item) =>
-            prisma.cartItem.upsert({
-                where: {
-                    cartId_variantId: { cartId: userCart.id, variantId: item.variantId },
-                },
-                update: { quantity: { increment: item.quantity } },
-                create: {
-                    cartId: userCart.id,
-                    productId: item.productId,
-                    variantId: item.variantId,
-                    quantity: item.quantity,
-                },
-            }),
-        ),
-    );
-
-    await prisma.cart.delete({ where: { id: guestCart.id } });
 }
+
+// Mirrors the 99 cap in addToCartSchema / updateCartItemSchema (@aranya/shared).
+const MAX_LINE_QUANTITY = 99;
 
 // --- Calculate cart total (market-aware currency, applies the cart's coupon) ---
 // Returns both integer cents (authoritative; used for gateway amounts) and 2dp

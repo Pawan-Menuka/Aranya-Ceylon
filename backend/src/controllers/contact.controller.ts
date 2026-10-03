@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { sendSupportNotification } from '../services/email.service.js';
+import { sendSupportNotification, supportAddress } from '../services/email.service.js';
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../lib/prisma.js';
 import { outboxEnabled } from '../lib/outbox.js';
@@ -45,7 +45,13 @@ export async function submitContact(req: Request, res: Response) {
         // Acknowledgement means the encrypted submission is durable, even during a provider outage.
         await prisma.$transaction(tx => enqueueEmail(tx, `support:${ref}`, notify));
     } else {
-        try { await notify(); } catch { console.error('[contact] notification failed', { ref }); }
+        // Without the durable outbox the email IS the submission — nothing is
+        // stored. Telling the visitor it was received when the send failed
+        // meant the enquiry was silently lost.
+        try { await notify(); } catch {
+            console.error('[contact] notification failed', { ref });
+            return res.status(503).json({ error: `We couldn't send your message just now. Please try again in a few minutes, or email ${supportAddress()}.` });
+        }
     }
 
     return res.status(201).json({ ref, message: 'Your message has been received.' });

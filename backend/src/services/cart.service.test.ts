@@ -73,8 +73,19 @@ vi.mock('../lib/prisma.js', () => ({
             delete: async ({ where }: CartWhere) => {
                 store.s.carts = store.s.carts.filter((c) => c.id !== where.id);
             },
+            // Deleting a cart cascades to its lines, as the real FK does.
+            deleteMany: async ({ where }: CartWhere) => {
+                const before = store.s.carts.length;
+                store.s.carts = store.s.carts.filter((c) => c.id !== where.id);
+                store.s.cartItems = store.s.cartItems.filter((i) => i.cartId !== where.id);
+                return { count: before - store.s.carts.length };
+            },
         },
         cartItem: {
+            findUnique: async ({ where }: { where: { cartId_variantId: { cartId: string; variantId: string } } }) => {
+                const key = where.cartId_variantId;
+                return store.s.cartItems.find((i) => i.cartId === key.cartId && i.variantId === key.variantId) ?? null;
+            },
             upsert: async ({ where, update, create }: {
                 where: { cartId_variantId: { cartId: string; variantId: string } };
                 update: { quantity: { increment: number } };
@@ -111,7 +122,11 @@ vi.mock('../lib/prisma.js', () => ({
         variant: {
             findFirst: async ({ where }: { where: { id: string } }) => store.s.variants.get(where.id) ?? null,
         },
-        $transaction: async (ops: Promise<unknown>[]) => Promise.all(ops),
+        // Array form for clearCart; callback form (handed this same fake) for
+        // mergeGuestCart.
+        $transaction: async function (this: unknown, ops: Promise<unknown>[] | ((tx: unknown) => Promise<unknown>)) {
+            return typeof ops === 'function' ? ops(this) : Promise.all(ops);
+        },
         coupon: {
             findUnique: async ({ where }: { where: { id?: string; code?: string } }) =>
                 (where.id ? store.s.couponsById.get(where.id) : where.code ? store.s.couponsByCode.get(where.code) : undefined) ?? null,
@@ -348,5 +363,34 @@ describe('mergeGuestCart — #20 also clears abandonedEmailSentAt on the target 
 
         const userCart = s.carts.find((c) => c.userId === 'user_1');
         expect(userCart?.abandonedEmailSentAt).toBeNull();
+    });
+});
+
+// Final audit #34: two sign-ins finishing together both merged the guest cart,
+// doubling quantities, and the second failed; merged lines could pass 99.
+describe('mergeGuestCart — concurrency and line cap', () => {
+    const guestWith = (quantity: number) => ({
+        id: 'guest_1', guestToken: 'g1', items: [{ productId: 'p1', variantId: 'v1', quantity }],
+    });
+
+    it('merges the guest lines once when two sign-ins race', async () => {
+        s.carts = [guestWith(2), { id: 'cart_1', userId: 'user_1', abandonedEmailSentAt: null }];
+        s.cartItems = [{ id: 'g_item', cartId: 'guest_1', productId: 'p1', variantId: 'v1', quantity: 2 }];
+
+        await Promise.all([mergeGuestCart('g1', 'user_1'), mergeGuestCart('g1', 'user_1')]);
+
+        const lines = s.cartItems.filter((i) => i.cartId === 'cart_1');
+        expect(lines).toHaveLength(1);
+        expect(lines[0]!.quantity).toBe(2);                         // not 4
+        expect(s.carts.some((c) => c.id === 'guest_1')).toBe(false); // guest cart gone
+    });
+
+    it('caps a merged line at 99', async () => {
+        s.carts = [guestWith(60), { id: 'cart_1', userId: 'user_1', abandonedEmailSentAt: null }];
+        s.cartItems = [{ id: 'u_item', cartId: 'cart_1', productId: 'p1', variantId: 'v1', quantity: 70 }];
+
+        await mergeGuestCart('g1', 'user_1');
+
+        expect(s.cartItems.find((i) => i.cartId === 'cart_1')!.quantity).toBe(99);
     });
 });

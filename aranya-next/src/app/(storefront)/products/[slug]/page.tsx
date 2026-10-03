@@ -95,7 +95,12 @@ export default async function ProductPage({ params }: { params: { slug: string }
       "@type": "Offer",
       priceCurrency: currencyForMarket(market),
       price: pdPrice(spice, market, "100g").replace(/[^0-9.]/g, ""),
-      availability: "https://schema.org/InStock",
+      // From live stock in this market (the API returns only this market's
+      // variants). Declaring InStock for a sold-out product misleads search
+      // results. Demo content has no stock data and keeps the old default.
+      availability: !product || (product.variants ?? []).some((v) => v.stock > 0)
+        ? "https://schema.org/InStock"
+        : "https://schema.org/OutOfStock",
     },
   };
 

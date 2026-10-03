@@ -108,9 +108,13 @@ function AdminConsole() {
         setGateError("Your account doesn't have console access. Contact a SUPERADMIN.");
       }
       // If real ADMIN/SUPERADMIN: isRealAdmin will be true on the next render → authed
-    } catch {
-      // Bad credentials
-      setGateError("Invalid email or password.");
+    } catch (error) {
+      // Only a 401 means bad credentials. Rate limiting, an unverified email or
+      // a server error used to be reported as a wrong password too.
+      const status = (error as { status?: number })?.status;
+      setGateError(status === 401
+        ? "Invalid email or password."
+        : (error as Error)?.message || "Sign-in failed. Please try again.");
     }
   }, [signIn, signOut]);
 

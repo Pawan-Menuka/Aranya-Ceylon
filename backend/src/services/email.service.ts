@@ -120,6 +120,9 @@ export async function sendOrderConfirmation(params: {
 }) {
     const { to, orderId, total, currency, market } = params;
     const currencySymbol = currency === 'LKR' ? 'LKR ' : '$';
+    // First origin only (FRONTEND_URL can be a comma-separated CORS list), and
+    // /account — the storefront has no /account/orders route, so the old link 404'd.
+    const frontend = (process.env.FRONTEND_URL ?? 'http://localhost:3000').split(',')[0]!.trim().replace(/\/+$/, '');
 
     await sendMail({
         from: FROM,
@@ -133,7 +136,7 @@ export async function sendOrderConfirmation(params: {
                 ? 'Your order will be dispatched within 1–2 business days.'
                 : 'Your order will be dispatched within 2–3 business days via DHL or FedEx.'
             }</p>
-            <p>Track your order at <a href="${process.env.FRONTEND_URL}/account/orders">aranyaceylon.com</a></p>
+            <p>Track your order at <a href="${frontend}/account">aranyaceylon.com</a></p>
         `,
     }, 'ORDER_CONFIRMATION');
 }
@@ -231,7 +234,7 @@ export async function sendNewOrderAdminNotification(params: {
             <h2>New paid order</h2>
             <p>Order <strong>#${orderId.slice(-8).toUpperCase()}</strong> (${market}) just came through.</p>
             <p>Total: <strong>${currencySymbol}${total.toFixed(2)}</strong> — ${itemCount} item${itemCount === 1 ? '' : 's'}</p>
-            <p><a href="${frontend}/admin/orders">View in admin</a></p>
+            <p><a href="${frontend}/admin#orders">View in admin</a></p>
         `,
     }, 'ADMIN_NEW_ORDER');
 }
@@ -355,6 +358,12 @@ export async function sendWholesaleStatusEmail(params: {
             ? `<h2>Application approved</h2><p>Congratulations ${escapeHtml(companyName)}! Your wholesale account is now active.</p>`
             : `<h2>Application update</h2><p>Thank you for applying, ${escapeHtml(companyName)}. Unfortunately we are unable to approve your application at this time.</p>`,
     }, 'WHOLESALE_STATUS');
+}
+
+// The public support inbox, for telling a visitor where to write when a form
+// submission could not be delivered. Same precedence as sendSupportNotification.
+export function supportAddress(): string {
+    return process.env.SUPPORT_EMAIL ?? process.env.ADMIN_EMAIL ?? FROM;
 }
 
 // --- Internal notification for contact / wholesale submissions ---

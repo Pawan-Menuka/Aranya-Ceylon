@@ -12,7 +12,8 @@ const blogFields = z.object({
     content: z.string().min(10),
     tags: z.array(z.string()).default([]),
     status: z.enum(['DRAFT', 'SCHEDULED', 'PUBLISHED']).default('DRAFT'),
-    scheduledAt: z.string().datetime().optional(),
+    // null clears a schedule (it previously could only ever be set).
+    scheduledAt: z.string().datetime().nullable().optional(),
     seoTitle: z.string().optional(),
     seoDesc: z.string().optional(),
 });
@@ -22,7 +23,7 @@ const blogFields = z.object({
 // sits SCHEDULED forever (FLOW-03). Applied to both create and (partial) update;
 // on update it only fires when status is explicitly set to SCHEDULED.
 const requireScheduledAt = (
-    data: { status?: string; scheduledAt?: string },
+    data: { status?: string; scheduledAt?: string | null },
     ctx: z.RefinementCtx,
 ) => {
     if (data.status === 'SCHEDULED' && !data.scheduledAt) {
@@ -101,10 +102,14 @@ export async function updateBlog(req: Request, res: Response) {
             where: { id },
             data: {
                 ...data,
-                ...(data.scheduledAt ? { scheduledAt: new Date(data.scheduledAt) } : {}),
+                ...(data.scheduledAt !== undefined && { scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null }),
                 ...(data.status === 'PUBLISHED' && !before.publishedAt
                     ? { publishedAt: new Date() }
                     : {}),
+                // Taking a post off the site clears its publication date, so
+                // publishing it again dates it now rather than burying it at
+                // its first, long-past date.
+                ...(data.status && data.status !== 'PUBLISHED' && { publishedAt: null }),
             },
         }), result => ['/', '/journal', '/search', `/journal/${before.slug}`, `/journal/${result.slug}`]);
     } catch (err) {
