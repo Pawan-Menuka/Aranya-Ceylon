@@ -42,7 +42,9 @@ vi.mock('../services/email.service.js', () => ({
     sendPasswordResetEmail: vi.fn(async () => {}),
 }));
 
-import { register, forgotPassword, resetPassword } from './auth.controller.js';
+import { register, forgotPassword, resetPassword, login } from './auth.controller.js';
+import { hash, verify } from '@node-rs/bcrypt';
+import { registerSchema, loginSchema, checkoutSchema } from '@aranya/shared';
 
 // Minimal Express res double that captures status + json body.
 function mockRes() {
@@ -151,5 +153,62 @@ describe('resetPassword', () => {
 
         expect(res.statusCode).toBe(400);
         expect(res.body).toEqual({ error: 'That reset link is invalid or has expired. Please request a new one.' });
+    });
+});
+
+// Final audit #18: the stand-in hash for unknown emails was not valid bcrypt,
+// so it was rejected in ~0 ms against ~200 ms for a real account — a timing
+// oracle for which emails are registered.
+describe('login — unknown emails cost the same as real ones', () => {
+    it('compares an unknown email against a real bcrypt hash generated once', async () => {
+        store.findUniqueImpl = async () => null;
+        const loginReq = (email: string) => requestDouble({ body: { email, password: 'whatever' } });
+        // The bcrypt mock is shared with the register tests above.
+        const hashCallsBefore = vi.mocked(hash).mock.calls.length;
+        const verifyCallsBefore = vi.mocked(verify).mock.calls.length;
+
+        const first = mockRes();
+        await login(loginReq('nobody@example.com'), first);
+        const second = mockRes();
+        await login(loginReq('nobody-else@example.com'), second);
+
+        expect(first.statusCode).toBe(401);
+        expect(second.statusCode).toBe(401);
+        const hashCalls = vi.mocked(hash).mock.calls.slice(hashCallsBefore);
+        const verifyCalls = vi.mocked(verify).mock.calls.slice(verifyCallsBefore);
+        // The stand-in is produced by the real hash function at the real cost,
+        // once — not on every attempt…
+        expect(hashCalls).toHaveLength(1);
+        expect(hashCalls[0]![1]).toBe(12);
+        // …and both attempts compared against it, never the old invalid literal.
+        expect(verifyCalls).toHaveLength(2);
+        expect(verifyCalls.every(([, stored]) => stored === '$2b$12$stubbedhashvalue')).toBe(true);
+    });
+});
+
+// Final audit #20: emails were case-sensitive, so the same address could hold
+// two accounts and signing in with a different case failed.
+describe('email normalisation', () => {
+    it('trims and lower-cases emails at registration and sign-in', () => {
+        expect(registerSchema.parse({ name: 'Jo', email: '  John@Gmail.COM ', password: 'Passw0rd!' }).email).toBe('john@gmail.com');
+        expect(loginSchema.parse({ email: 'JOHN@gmail.com', password: 'x' }).email).toBe('john@gmail.com');
+    });
+
+    it('normalises a guest checkout email the same way', () => {
+        const parsed = checkoutSchema.parse({
+            guestEmail: 'Guest@Example.com',
+            shippingAddress: { firstName: 'A', lastName: 'B', line1: '1 St', city: 'C', country: 'us' },
+            shippingMethod: 'STANDARD',
+        });
+        expect(parsed.guestEmail).toBe('guest@example.com');
+    });
+
+    // Final audit #24: inputs were bounded only by the request size.
+    it('rejects an oversized password and address line', () => {
+        expect(registerSchema.safeParse({ name: 'Jo', email: 'a@b.co', password: 'Aa1!' + 'x'.repeat(200) }).success).toBe(false);
+        expect(checkoutSchema.safeParse({
+            shippingAddress: { firstName: 'A', lastName: 'B', line1: 'x'.repeat(201), city: 'C', country: 'US' },
+            shippingMethod: 'STANDARD',
+        }).success).toBe(false);
     });
 });

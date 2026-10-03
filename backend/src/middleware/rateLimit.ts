@@ -94,6 +94,20 @@ export const checkoutLimiter = rateLimit({
     ...json429('Too many checkout attempts. Please wait a moment and try again.'),
 });
 
+// Applying a coupon is a yes/no oracle for whether a code exists, and it only
+// sat behind the global 120-per-minute limit, so codes could be guessed at
+// scale. A shopper needs a handful of attempts, not dozens. NOTE: until BFF
+// client identity is enforced (final audit #5) every visitor shares one IP
+// bucket, so this caps coupon attempts site-wide — kept generous for that.
+export const couponLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 30,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    keyGenerator,
+    ...json429('Too many coupon attempts. Please wait a few minutes and try again.'),
+});
+
 // Anti-spam limiter for the public, unauthenticated contact form.
 export const contactLimiter = rateLimit({
     windowMs: 60 * 60 * 1000, // 1 hour

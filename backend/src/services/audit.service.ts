@@ -28,9 +28,11 @@ type AuditEvent =
     | 'ADMIN_LOGIN'
     | 'EMAIL_SEND_FAILED';
 
-// Creates an immutable audit record.
-// The DB-level REVOKE DELETE ensures these records can never be
-// deleted even if this function or the API is compromised.
+// Creates an audit record. Append-only by convention: the API has no route that
+// updates or deletes these rows. The migration's `REVOKE DELETE ... FROM PUBLIC`
+// does NOT make them tamper-proof — it doesn't bind the table owner, which is
+// the role the API connects as. Real enforcement would need the app to connect
+// as a non-owner role with DELETE/UPDATE revoked.
 export async function writeAuditLog(params: {
     // Absent for events with no HTTP request in scope (e.g. a cron job's
     // best-effort email send) — ip/userAgent fall back to 'system' then.
