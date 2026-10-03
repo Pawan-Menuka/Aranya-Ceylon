@@ -454,4 +454,6 @@ Branch `claude/audit-wave7-deploy-ci`, from `Develop` after the Next 15 merge (i
 | 64 | decision | Unchanged — the main checkout's uncommitted files are the owner's to review. |
 | 65 | decision | Unchanged — sandbox-gateway and admin end-to-end coverage before launch. |
 
+Smoke follow-up: the first CI run of this PR failed phase six ("Failed page erased cards"). Same reveal-batching race as §17, in three more checks that load `/products`, click "Load more" and then count cards: for a moment the revealed cards and React's hidden holding copy both exist, so the count reads 16, not 8. Measured by repeating the sequence 25 times: 6 runs hit it (24%) without `settled()`, 0 of 25 with it; the three call sites now settle after navigation. It was unrelated to the PR's own changes and to `main` being behind `Develop`.
+
 Verification: `pnpm typecheck`, `pnpm lint` clean; backend and storefront unit tests 594 / 594 on a full cold run; both workflow files parse (`ci`, `deploy`; `deploy.needs = ci`). The deploy gate and the audit step run only on GitHub, so their first real run is this PR's CI and the next push to `main`.
