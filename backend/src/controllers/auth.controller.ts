@@ -270,7 +270,7 @@ export async function login(req: Request, res: Response) {
         if (!totpCode && !recoveryCode) {
             return res.status(403).json({ error: 'A two-factor code is required to sign in.', code: 'TWO_FACTOR_REQUIRED' });
         }
-        let ok = false;
+        let ok: boolean;
         try {
             ok = await verifySecondFactor(user, { totpCode, recoveryCode });
         } catch (err) {
