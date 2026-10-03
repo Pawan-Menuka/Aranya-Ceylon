@@ -316,6 +316,9 @@ try {
       await until(() => queryCalls('Harvest', 'LOCAL').length > 0, 'Market change did not rerun compact search.', 160);
       await p.getByRole('button', { name: /Spices 131/ }).waitFor();
       await p.waitForFunction(() => document.querySelector('[data-screen-label="Search"] .sr-grid')?.textContent.includes('Rs '));
+      // The market switch also refreshes the route from the server. A late refresh resets the loaded pages, so let it land
+      // (and React finish revealing it) before paging; otherwise a click can be swallowed by the reset.
+      await p.waitForLoadState('networkidle'); await settled(p);
       const clicks = await loadAllMatches(p, 'products');
       assert(queryCalls('Harvest', 'LOCAL').some(call => new URLSearchParams(call.query).has('productCursor')), 'Local user paging did not continue all matches.');
       return { marketSearches: ['INTERNATIONAL', 'LOCAL'], localRequests: queryCalls('Harvest', 'LOCAL').length, loadMoreClicks: clicks };
