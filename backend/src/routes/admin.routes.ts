@@ -9,6 +9,7 @@ import * as recipeAdmin from '../controllers/admin/recipe.admin.controller.js';
 import * as giftAdmin from '../controllers/admin/gift.admin.controller.js';
 import * as couponAdmin from '../controllers/admin/coupon.admin.controller.js';
 import * as reviewAdmin from '../controllers/admin/review.admin.controller.js';
+import * as userAdmin from '../controllers/admin/user.admin.controller.js';
 import * as analyticsAdmin from '../controllers/admin/analytics.admin.controller.js';
 import * as productController from '../controllers/product.controller.js';
 
@@ -58,6 +59,12 @@ router.post('/coupons/:id/deactivate', asyncHandler(couponAdmin.deactivateCoupon
 // --- Reviews (moderation) ---
 router.get('/reviews', asyncHandler(reviewAdmin.listReviews));
 router.patch('/reviews/:id', asyncHandler(reviewAdmin.moderateReview));
+
+// --- Users (SUPERADMIN only) ---
+router.get('/users', requireRole('SUPERADMIN'), asyncHandler(userAdmin.listUsers));
+router.patch('/users/:id/role', requireRole('SUPERADMIN'), asyncHandler(userAdmin.changeUserRole));
+router.post('/users/:id/suspend', requireRole('SUPERADMIN'), asyncHandler(userAdmin.suspendUser));
+router.post('/users/:id/unsuspend', requireRole('SUPERADMIN'), asyncHandler(userAdmin.unsuspendUser));
 
 // --- Products ---
 router.get('/products', asyncHandler(productController.adminListProducts));

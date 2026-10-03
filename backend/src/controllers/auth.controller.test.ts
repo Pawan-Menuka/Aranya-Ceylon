@@ -186,6 +186,29 @@ describe('login — unknown emails cost the same as real ones', () => {
     });
 });
 
+// Final audit #43: a suspended account cannot sign in.
+describe('login — suspended accounts', () => {
+    const suspended = { id: 'u1', email: 's@example.com', passwordHash: '$2b$12$stub', verified: true, role: 'CUSTOMER', suspendedAt: new Date() };
+
+    it('refuses a suspended user after the password check and issues no session', async () => {
+        store.findUniqueImpl = async () => suspended as never;
+        const res = mockRes();
+        await login(requestDouble({ body: { email: 's@example.com', password: 'right-password' } }), res);
+        expect(res.statusCode).toBe(403);
+        expect(res.body).toMatchObject({ code: 'ACCOUNT_SUSPENDED' });
+        expect(res.cookies).toHaveLength(0);
+    });
+
+    it('answers a wrong password on a suspended account exactly like any other wrong password', async () => {
+        store.findUniqueImpl = async () => suspended as never;
+        vi.mocked(verify).mockResolvedValueOnce(false);
+        const res = mockRes();
+        await login(requestDouble({ body: { email: 's@example.com', password: 'wrong' } }), res);
+        expect(res.statusCode).toBe(401);
+        expect(res.body).toEqual({ error: 'Invalid email or password' });
+    });
+});
+
 // Final audit #20: emails were case-sensitive, so the same address could hold
 // two accounts and signing in with a different case failed.
 describe('email normalisation', () => {

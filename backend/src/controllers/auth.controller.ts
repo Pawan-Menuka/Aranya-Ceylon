@@ -255,6 +255,12 @@ export async function login(req: Request, res: Response) {
         });
     }
 
+    // Checked after the password so an attacker learns nothing about an account
+    // they cannot sign in to.
+    if (user.suspendedAt) {
+        return res.status(403).json({ error: 'This account has been suspended. Please contact support.', code: 'ACCOUNT_SUSPENDED' });
+    }
+
     const { accessToken, refreshTokenPlaintext } = await issueTokenPair(user);
 
     if (user.role === 'ADMIN' || user.role === 'SUPERADMIN') {

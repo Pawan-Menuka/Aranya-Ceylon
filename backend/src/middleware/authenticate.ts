@@ -46,10 +46,14 @@ export function requireRole(...roles: string[]) {
             return res.status(403).json({ error: 'Insufficient permissions' });
         }
         const claimed = req.user;
-        prisma.user.findUnique({ where: { id: claimed.userId }, select: { role: true } })
+        prisma.user.findUnique({ where: { id: claimed.userId }, select: { role: true, suspendedAt: true } })
             .then((current) => {
                 if (!current || !roles.includes(current.role)) {
                     return res.status(403).json({ error: 'Insufficient permissions' });
+                }
+                // A suspended admin loses console access immediately, not when the token expires.
+                if (current.suspendedAt) {
+                    return res.status(403).json({ error: 'This account has been suspended.', code: 'ACCOUNT_SUSPENDED' });
                 }
                 claimed.role = current.role;
                 next();

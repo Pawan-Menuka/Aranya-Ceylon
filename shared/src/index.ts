@@ -9,3 +9,4 @@ export * from './schemas/product.schema.js';
 export * from './schemas/cart.schema.js';export * from './schemas/page.schema.js';
 export * from './schemas/coupon.schema.js';
 export * from './schemas/review.schema.js';
+export * from './schemas/admin-user.schema.js';

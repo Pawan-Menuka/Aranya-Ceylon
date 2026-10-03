@@ -189,6 +189,22 @@ describe('rotateRefreshToken — THE #1 regression test', () => {
     });
 });
 
+describe('rotateRefreshToken — suspended accounts', () => {
+    it('refuses to renew a session for a suspended user and ends all of their sessions', async () => {
+        const first = await issueTokenPair(testUser);
+        await issueTokenPair(testUser); // a second device
+        expect(rows.length).toBeGreaterThanOrEqual(2);
+
+        testUser.suspendedAt = new Date();
+        try {
+            await expect(rotateRefreshToken(first.refreshTokenPlaintext)).rejects.toThrow('ACCOUNT_SUSPENDED');
+            expect(rows.filter((r) => r.userId === testUser.id && r.type === 'REFRESH')).toHaveLength(0);
+        } finally {
+            testUser.suspendedAt = null;
+        }
+    });
+});
+
 describe('revocation', () => {
     it('revokeTokenFamily kills only the cookie\'s session', async () => {
         const session1 = await issueTokenPair(testUser);
