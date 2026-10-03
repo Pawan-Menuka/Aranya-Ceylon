@@ -17,7 +17,8 @@ function titleCase(slug: string): string {
   return slug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
 
-export default async function CategorySlugPage({ params }: { params: { slug: string } }) {
+export default async function CategorySlugPage({ params: paramsPromise }: { params: Promise<{ slug: string }> }) {
+  const params = await paramsPromise;
   let name = STATIC_NAMES[params.slug];
   if (!name) {
     try {

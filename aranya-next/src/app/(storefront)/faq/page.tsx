@@ -10,8 +10,8 @@ export const metadata: Metadata = {
   alternates: { canonical: "/faq" },
 };
 
-export default function FaqPage() {
-  const market = resolveMarket();
+export default async function FaqPage() {
+  const market = await resolveMarket();
   return (
     <SiteChrome initialMarket={market} hero>
       <FaqClient />

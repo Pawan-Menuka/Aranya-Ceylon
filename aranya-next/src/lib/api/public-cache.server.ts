@@ -41,7 +41,7 @@ export async function fetchPublicServer<T>(
   return withRequestDeadline(options.timeoutMs ?? requestTimeoutMs(resource.path), options.signal, async signal => {
     const { cookies } = await import("next/headers");
     let incoming: string | undefined;
-    try { incoming = cookies().get("x-market")?.value; } catch { /* Outside request scope: backend default. */ }
+    try { incoming = (await cookies()).get("x-market")?.value; } catch { /* Outside request scope: backend default. */ }
     const secret = process.env.MARKET_COOKIE_SECRET || undefined;
     const marketCookie = secret ? await canonicalCookie(incoming, secret) : incoming;
     const ttl = options.revalidate ?? resource.ttl;

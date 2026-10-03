@@ -11,8 +11,8 @@ export const metadata: Metadata = {
   alternates: { canonical: "/cookies" },
 };
 
-export default function CookiesPage() {
-  const market = resolveMarket();
+export default async function CookiesPage() {
+  const market = await resolveMarket();
   return (
     <SiteChrome initialMarket={market} hero>
       <LegalClient active="Cookies" title={<>Cookie<br />Policy.</>} updated="June 2026"

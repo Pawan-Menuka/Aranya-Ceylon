@@ -239,7 +239,7 @@ function WholesaleTiers({ market, scrollToForm }: { market: Market; scrollToForm
 interface WForm { company: string; contact: string; email: string; phone: string; country: string; type: string; volume: string; website: string; message: string; consent: boolean; }
 const EMPTY_WFORM: WForm = { company: "", contact: "", email: "", phone: "", country: "", type: "", volume: "", website: "", message: "", consent: false };
 
-function WholesaleForm({ market, formRef }: { market: Market; formRef: React.RefObject<HTMLElement> }) {
+function WholesaleForm({ market, formRef }: { market: Market; formRef: React.RefObject<HTMLElement | null> }) {
   const [done, setDone] = React.useState(false);
   const [ref, setRef] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);

@@ -11,8 +11,8 @@ export const metadata: Metadata = {
 
 // Account is gated client-side (auth session lives in memory + HttpOnly refresh
 // cookie). The page renders the gate or the dashboard depending on session.
-export default function AccountPage() {
-  const market = resolveMarket();
+export default async function AccountPage() {
+  const market = await resolveMarket();
   return (
     <SiteChrome initialMarket={market}>
       <AccountClient />

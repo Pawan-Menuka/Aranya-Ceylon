@@ -35,7 +35,7 @@ async function loadHomeData(): Promise<{ featured: Spice[]; bestsellers: Spice[]
 }
 
 export default async function Page() {
-  const market = resolveMarket();
+  const market = await resolveMarket();
   const { featured, bestsellers, ticker } = await loadHomeData();
 
   const jsonLd = {

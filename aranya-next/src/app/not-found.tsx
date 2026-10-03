@@ -4,8 +4,8 @@ import { NotFoundClient } from "@/components/marketing/NotFoundClient";
 
 // App-Router 404. Rendered for any unmatched route, wrapped in the storefront
 // chrome (solid nav + footer) so users land somewhere navigable.
-export default function NotFound() {
-  const market = resolveMarket();
+export default async function NotFound() {
+  const market = await resolveMarket();
   return (
     <SiteChrome initialMarket={market}>
       <NotFoundClient />

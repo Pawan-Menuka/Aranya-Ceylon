@@ -10,8 +10,8 @@ export const metadata: Metadata = {
   alternates: { canonical: "/contact" },
 };
 
-export default function ContactPage() {
-  const market = resolveMarket();
+export default async function ContactPage() {
+  const market = await resolveMarket();
   return (
     <SiteChrome initialMarket={market} hero>
       <ContactClient />

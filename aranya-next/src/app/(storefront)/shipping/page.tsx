@@ -10,8 +10,8 @@ export const metadata: Metadata = {
   alternates: { canonical: "/shipping" },
 };
 
-export default function ShippingPage() {
-  const market = resolveMarket();
+export default async function ShippingPage() {
+  const market = await resolveMarket();
   return (
     <SiteChrome initialMarket={market} hero>
       <ShippingClient />

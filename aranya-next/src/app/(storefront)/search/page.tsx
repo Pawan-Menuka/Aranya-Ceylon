@@ -15,8 +15,9 @@ export const metadata: Metadata = {
   robots: { index: false }, // search results pages shouldn't be indexed
 };
 
-export default async function SearchPage({ searchParams }: { searchParams: { q?: string } }) {
-  const market = resolveMarket();
+export default async function SearchPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ q?: string }> }) {
+  const searchParams = await searchParamsPromise;
+  const market = await resolveMarket();
   const query = (searchParams.q || "").trim().slice(0, 200);
   let initialResults: SearchView = emptySearchView();
   let best: CatalogSpice[] = [];

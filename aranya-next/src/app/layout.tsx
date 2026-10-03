@@ -25,8 +25,8 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image" },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const market = resolveMarket();
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const market = await resolveMarket();
   return (
     <html lang="en" className="__variable_6adbea __variable_a11773 __variable_cfa357">
       <body className="aranya">

@@ -11,8 +11,8 @@ export const metadata: Metadata = {
   alternates: { canonical: "/privacy" },
 };
 
-export default function PrivacyPage() {
-  const market = resolveMarket();
+export default async function PrivacyPage() {
+  const market = await resolveMarket();
   return (
     <SiteChrome initialMarket={market} hero>
       <LegalClient active="Privacy" title={<>Privacy<br />Policy.</>} updated="June 2026"

@@ -11,7 +11,7 @@ const publicPath = /^\/(?:products|categories|journal|recipes|gifts|about|contac
 // private data prefetch, touch-click delay, or unbounded retained key set.
 export const IntentLink = React.forwardRef<HTMLAnchorElement, React.ComponentPropsWithoutRef<typeof Link>>(function IntentLink(props, ref) {
   const router = useRouter(), { market } = useMarket();
-  const timer = React.useRef<ReturnType<typeof setTimeout>>();
+  const timer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const cancel = () => { if (timer.current) clearTimeout(timer.current); };
   React.useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
   const prefetch = () => {

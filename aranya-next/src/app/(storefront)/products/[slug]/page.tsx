@@ -62,7 +62,8 @@ export async function generateStaticParams() {
 
 export const revalidate = 300;
 
-export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const resolved = await resolveSpice(params.slug);
   if (!resolved) return { title: "Spice not found" };
   const { spice } = resolved;
@@ -75,8 +76,9 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   };
 }
 
-export default async function ProductPage({ params }: { params: { slug: string } }) {
-  const market: Market = resolveMarket();
+export default async function ProductPage({ params: paramsPromise }: { params: Promise<{ slug: string }> }) {
+  const params = await paramsPromise;
+  const market: Market = await resolveMarket();
   const resolved = await resolveSpice(params.slug);
   if (!resolved) notFound();
   const { spice, product } = resolved;

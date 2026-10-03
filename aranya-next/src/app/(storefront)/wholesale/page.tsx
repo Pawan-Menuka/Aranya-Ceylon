@@ -10,8 +10,8 @@ export const metadata: Metadata = {
   alternates: { canonical: "/wholesale" },
 };
 
-export default function WholesalePage() {
-  const market = resolveMarket();
+export default async function WholesalePage() {
+  const market = await resolveMarket();
   return (
     <SiteChrome initialMarket={market} hero>
       <WholesaleClient />

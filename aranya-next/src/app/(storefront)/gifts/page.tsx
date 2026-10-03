@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 export const revalidate = 3600;
 
 export default async function GiftsPage() {
-  const market = resolveMarket();
+  const market = await resolveMarket();
   const gifts = (await fetchGifts()) ?? GIFTS;
   return (
     <SiteChrome initialMarket={market} hero>

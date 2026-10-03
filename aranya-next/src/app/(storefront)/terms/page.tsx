@@ -11,8 +11,8 @@ export const metadata: Metadata = {
   alternates: { canonical: "/terms" },
 };
 
-export default function TermsPage() {
-  const market = resolveMarket();
+export default async function TermsPage() {
+  const market = await resolveMarket();
   return (
     <SiteChrome initialMarket={market} hero>
       <LegalClient active="Terms" title={<>Terms of<br />Service.</>} updated="June 2026"

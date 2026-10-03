@@ -142,7 +142,7 @@ function GiftHero({ market, onShop }: { market: Market; onShop: () => void }) {
   );
 }
 
-function FeaturedSet({ gifts, market, gridRef }: { gifts: GiftSet[]; market: Market; gridRef: React.RefObject<HTMLElement> }) {
+function FeaturedSet({ gifts, market, gridRef }: { gifts: GiftSet[]; market: Market; gridRef: React.RefObject<HTMLElement | null> }) {
   const set = gifts.find((g) => g.featured) || gifts[0];
   const [added, setAdded] = React.useState(false);
   const giftAdd = useGiftAdd();
@@ -232,7 +232,7 @@ function BuildYourOwn() {
   );
 }
 
-function GiftGrid({ gifts, market, gridRef }: { gifts: GiftSet[]; market: Market; gridRef: React.RefObject<HTMLElement> }) {
+function GiftGrid({ gifts, market, gridRef }: { gifts: GiftSet[]; market: Market; gridRef: React.RefObject<HTMLElement | null> }) {
   const sets = gifts.filter((g) => !g.featured);
   return (
     <section ref={gridRef as React.RefObject<HTMLDivElement>} id="sets" style={{ background: "var(--bg)", padding: "20px 0 100px", scrollMarginTop: 90 }}>

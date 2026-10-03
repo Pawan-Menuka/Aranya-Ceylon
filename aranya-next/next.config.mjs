@@ -13,11 +13,15 @@ const nextConfig = {
   // a real `next build`, not caught by `next dev`). Excluding it from
   // bundling keeps it a plain Node require() at runtime, where __dirname is
   // correct. See DEPLOY_READINESS_PLAN.md #0.1.
-  experimental: {
-    serverComponentsExternalPackages: ["isomorphic-dompurify", "jsdom"],
-  },
+  // Stable top-level option since Next 15 (was
+  // experimental.serverComponentsExternalPackages in Next 14).
+  serverExternalPackages: ["isomorphic-dompurify", "jsdom"],
   images: {
     imageSizes: [16, 32, 48, 64, 80, 96, 128, 160, 256, 384],
+    // Every quality the storefront requests: the default 75, and 90 for the
+    // editorial ImageSlot photography. Next 15.5 warns about unlisted values
+    // and Next 16 rejects them.
+    qualities: [75, 90],
     remotePatterns: [
       // Cloudinary CDN: product images uploaded via the admin panel
       { protocol: 'https', hostname: 'res.cloudinary.com' },
