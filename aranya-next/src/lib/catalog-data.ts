@@ -63,16 +63,6 @@ export const CATALOG_FACETS: FacetVocab = {
   flavour: ["Sweet", "Warm", "Citrus", "Floral", "Pungent", "Earthy"],
 };
 
-// Sort options: [value, label]
-export const CATALOG_SORTS: [string, string][] = [
-  ["featured", "Featured"],
-  ["best", "Best-selling"],
-  ["price-asc", "Price: Low to High"],
-  ["price-desc", "Price: High to Low"],
-  ["rating", "Top-rated"],
-  ["new", "Newest"],
-];
-
 // Adapter: live Product -> CatalogSpice (spec §8). Adds the facet/sort fields on
 // top of the base Spice mapping so the ported filter UI works unchanged.
 function deriveForm(p: Product | ProductCard): string {

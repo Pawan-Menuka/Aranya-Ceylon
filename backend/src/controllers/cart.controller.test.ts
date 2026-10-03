@@ -59,11 +59,14 @@ beforeEach(() => {
 });
 
 describe('read-only cart bootstrap', () => {
-    it('registers the dedicated GET route alongside the legacy route', () => {
+    it('registers the read-only bootstrap route and no create-on-read GET /cart', () => {
         const routes = router.stack.filter(layer => layer.route).map(layer => layer.route);
         expect(routes).toEqual(expect.arrayContaining([
             expect.objectContaining({ path: '/bootstrap', methods: { get: true } }),
-            expect.objectContaining({ path: '/', methods: { get: true } }),
+        ]));
+        // A plain GET would mint a cart (and a guest cookie) for every visitor who merely reads.
+        expect(routes).not.toEqual(expect.arrayContaining([
+            expect.objectContaining({ path: '/', methods: expect.objectContaining({ get: true }) }),
         ]));
     });
 
@@ -104,14 +107,6 @@ describe('read-only cart bootstrap', () => {
         expect(res.json).toHaveBeenCalledWith({ cart: null, market: 'LOCAL' });
         expect(res.cookie).not.toHaveBeenCalled();
         expectNoCartWrites();
-    });
-
-    it('keeps legacy GET /cart creation and guest-cookie behavior', async () => {
-        const res = response();
-        await controller.getCart(request(), res);
-        expect(db.cart.create).toHaveBeenCalledOnce();
-        expect(res.cookie).toHaveBeenCalledWith('guestCartToken', 'new-guest-token', expect.any(Object));
-        expect(res.json).toHaveBeenCalledWith({ cart: expect.objectContaining({ id: 'new-cart' }), market: 'LOCAL' });
     });
 });
 

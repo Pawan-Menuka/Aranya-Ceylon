@@ -50,7 +50,7 @@ vi.mock('../lib/prisma.js', () => ({
         cart: {
             // Existing single-cart tests below key off store.s.cart directly
             // (via a plain {id} where) — guestToken/userId lookups added on
-            // top for addToCart/mergeGuestCart coverage.
+            // top for addToShopperCart/mergeGuestCart coverage.
             findUnique: async ({ where }: CartWhere) => {
                 if (where.guestToken) return store.s.carts.find((c) => c.guestToken === where.guestToken) ?? null;
                 if (where.userId) return store.s.carts.find((c) => c.userId === where.userId) ?? null;
@@ -134,7 +134,7 @@ vi.mock('../lib/prisma.js', () => ({
     },
 }));
 
-import { calculateCartTotal, validateCoupon, getOrCreateCart, addToCart, updateCartItem, clearCart, mergeGuestCart } from './cart.service.js';
+import { calculateCartTotal, validateCoupon, getOrCreateCart, addToShopperCart, updateCartItem, clearCart, mergeGuestCart } from './cart.service.js';
 
 const { s } = store;
 
@@ -307,20 +307,23 @@ describe('getOrCreateCart — clears abandonedEmailSentAt on every touch (roadma
     });
 });
 
-describe('addToCart — #14 the cart is not a reservation', () => {
+describe('addToShopperCart — #14 the cart is not a reservation', () => {
     it('allows a quantity greater than current live stock (checkout enforces, not the cart)', async () => {
-        s.carts = [{ id: 'cart_1', abandonedEmailSentAt: new Date() }];
+        s.carts = [{ id: 'cart_1', guestToken: 'guest_1', abandonedEmailSentAt: new Date() }];
         s.variants.set('v1', { id: 'v1', market: 'BOTH', stock: 2 });
-        const item = await addToCart('cart_1', { productId: 'p1', variantId: 'v1', quantity: 5 }, 'INTERNATIONAL');
+        const { item, newGuestToken } = await addToShopperCart(undefined, 'guest_1', { productId: 'p1', variantId: 'v1', quantity: 5 }, 'INTERNATIONAL');
         expect(item.quantity).toBe(5);
+        expect(newGuestToken).toBeUndefined();
         expect(s.carts[0]!.abandonedEmailSentAt).toBeNull();
         expect(s.carts[0]!.updatedAt).toBeInstanceOf(Date);
     });
 
-    it('still rejects a variant that does not exist for the shopper\'s market', async () => {
+    it('still rejects a variant that does not exist in the current market, before any cart is created', async () => {
+        s.carts = [];
         await expect(
-            addToCart('cart_1', { productId: 'p1', variantId: 'missing', quantity: 1 }, 'INTERNATIONAL'),
+            addToShopperCart(undefined, undefined, { productId: 'p1', variantId: 'missing', quantity: 1 }, 'INTERNATIONAL'),
         ).rejects.toThrow('VARIANT_NOT_FOUND_FOR_MARKET');
+        expect(s.carts).toHaveLength(0);
     });
 });
 

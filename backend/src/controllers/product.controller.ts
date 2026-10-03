@@ -59,15 +59,6 @@ export async function getProduct(req: Request, res: Response) {
     return res.json({ product, market: req.market });
 }
 
-// --- Search autocomplete (public) ---
-export async function searchProducts(req: Request, res: Response) {
-    const q = String(req.query.q ?? '').trim();
-    if (q.length < 2) return res.json({ results: [] });
-
-    const results = await productService.searchAutocomplete(q, req.market!);
-    return res.json({ results, market: req.market });
-}
-
 // --- Featured products (public) ---
 export async function getFeatured(req: Request, res: Response) {
     const products = req.query.view === 'cards' ? await getPopularProductCards(req.market!, true, 4) : await withCache(

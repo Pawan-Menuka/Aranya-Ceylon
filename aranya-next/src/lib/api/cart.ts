@@ -17,12 +17,6 @@ export interface ServerTotals {
   couponId: string | null;
 }
 
-// Spec §6 — /cart (optionalAuth: works for guests + users). Browser-side calls
-// go through the BFF so the guestCartToken / auth cookies ride along.
-export function getCart(): Promise<{ cart: Cart; market: BackendMarket }> {
-  return apiFetch(`/cart`, { auth: true });
-}
-
 /** Passive storefront restore: no cart creation, cookie or recovery activity. */
 export function bootstrapCart(options: { signal?: AbortSignal } = {}): Promise<{ cart: Cart | null; market: BackendMarket }> {
   return apiFetch(`/cart/bootstrap`, { auth: true, ...options });

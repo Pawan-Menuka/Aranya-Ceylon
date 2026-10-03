@@ -31,7 +31,7 @@ function LegalTabs({ active }: { active: string }) {
   );
 }
 
-export function LegalHeader({ active, title, lead, updated }: { active: string; title: React.ReactNode; lead?: string; updated?: string }) {
+function LegalHeader({ active, title, lead, updated }: { active: string; title: React.ReactNode; lead?: string; updated?: string }) {
   return (
     <header data-hero style={{ position: "relative", background: "#1A1A1A", color: "#FDFAF5", overflow: "hidden" }}>
       <div style={{ position: "absolute", inset: 0, background: "radial-gradient(120% 80% at 50% -10%, rgba(15,110,86,.28), transparent 60%)", pointerEvents: "none" }} />

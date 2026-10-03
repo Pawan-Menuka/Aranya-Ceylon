@@ -14,7 +14,9 @@
         "test": "pnpm test:unit",
         "test:unit": "vitest run --exclude \"**/*.integration.test.ts\"",
         "test:integration": "vitest run --config vitest.integration.config.ts",
-        "seed:catalog": "tsx prisma/seed-catalog.ts"
+        "seed:catalog": "tsx prisma/seed-catalog.ts",
+        "seed:gifts": "tsx prisma/seed-gifts.ts",
+        "seed:recipes": "tsx prisma/seed-recipes.ts"
     },
     "dependencies": {
         "@aranya/shared": "workspace:*",

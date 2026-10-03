@@ -160,7 +160,7 @@ function TrackingTimeline({ order }: { order: AccountOrder }) {
   );
 }
 
-export function OrderLine({ item, market, compact }: { item: OrderLineItem; market: Market; compact?: boolean }) {
+function OrderLine({ item, market, compact }: { item: OrderLineItem; market: Market; compact?: boolean }) {
   const price = (market === "local" ? item.lkr : item.usd) * item.qty;
   return (
     <div style={{ display: "flex", gap: 14, alignItems: "center", padding: compact ? "10px 0" : "14px 0" }}>
