@@ -88,10 +88,6 @@ export function Avatar({ name, color }: { name: string; color?: string }) {
   return <span className="av" style={{ background: bg }}>{initials}</span>;
 }
 
-export function Swatch({ p, size = 30 }: { p: { base: string; deep: string }; size?: number }) {
-  return <span className="swatch" style={{ width: size, height: size, background: `radial-gradient(70% 70% at 50% 35%, ${p.base} 0%, ${p.deep} 95%)` }} />;
-}
-
 export function SectionCard({ title, action, children, pad = true, style, bodyStyle }: {
   title?: React.ReactNode; action?: React.ReactNode; children: React.ReactNode;
   pad?: boolean; style?: React.CSSProperties; bodyStyle?: React.CSSProperties;

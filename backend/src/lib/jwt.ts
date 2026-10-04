@@ -14,7 +14,6 @@ export interface AccessTokenPayload extends JWTPayload {
     userId: string;
     email: string;
     role: string;
-    twoFactorVerified?: boolean;
 }
 
 // --- Sign functions ---

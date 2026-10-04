@@ -50,6 +50,13 @@ pnpm --filter @aranya/backend run seed:catalog
 # or POST /dev/seed-catalog while the server is running
 ```
 
+Gift sets and recipes have their own seed scripts, so a fresh environment has them too (run `seed:catalog` first: a gift set is only purchasable once its backing product exists):
+
+```bash
+pnpm --filter @aranya/backend run seed:gifts
+pnpm --filter @aranya/backend run seed:recipes
+```
+
 ## Environment variables (`backend/.env`)
 
 | Variable | Purpose |

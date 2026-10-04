@@ -183,46 +183,6 @@ export async function getBestsellers(market: Market, limit = 8) {
     return enrichProductsWithRatingAvg(products);
 }
 
-// --- Related products (same category, exclude current) ---
-export async function getRelatedProducts(
-    productId: string,
-    categoryId: string,
-    market: Market,
-    limit = 6,
-) {
-    const products = await prisma.product.findMany({
-        where: {
-            categoryId,
-            id: { not: productId },
-            status: 'ACTIVE',
-            ...marketFilter(market),
-        },
-        include: buildProductIncludes(market),
-        take: limit,
-    });
-    return enrichProductsWithRatingAvg(products);
-}
-
-// --- Autocomplete search (pg_trgm fuzzy matching) ---
-export async function searchAutocomplete(
-    query: string,
-    market: Market,
-    limit = 5,
-) {
-    return prisma.$queryRaw<{ id: string; name: string; slug: string }[]>`
-        SELECT id, name, slug
-        FROM "Product"
-        WHERE status = 'ACTIVE'
-          AND market IN (${market}::"Market", 'BOTH'::"Market")
-          AND (
-            name % ${query}
-            OR "searchVector" @@ plainto_tsquery('english', ${query})
-          )
-        ORDER BY similarity(name, ${query}) DESC
-        LIMIT ${limit}
-    `;
-}
-
 // ----------------------------------------------------------------
 // ADMIN FUNCTIONS — no market filter, sees everything
 // ----------------------------------------------------------------

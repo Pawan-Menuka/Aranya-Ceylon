@@ -68,7 +68,7 @@ function inlineMarkdown(s: string): string {
 // renders. Without this, toPost never populated `body`, so every live article
 // fell back to canned placeholder prose (BUG-09b). Paragraph text is sanitised
 // at the server page boundary; headings/quotes render as escaped React text.
-export function contentToBlocks(content: string): PostBlock[] {
+function contentToBlocks(content: string): PostBlock[] {
   const blocks: PostBlock[] = [];
   for (const raw of (content || "").replace(/\r\n/g, "\n").split(/\n{2,}/)) {
     const para = raw.trim();

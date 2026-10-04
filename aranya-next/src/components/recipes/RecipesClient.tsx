@@ -11,7 +11,7 @@ import { ImageSlot } from "../primitives/ImageSlot";
 // Recipes hub (ported from recipes.jsx). Featured spotlight + course chips +
 // 3-up grid. Cards link to /recipes/[slug].
 
-export function RIcon({ name, size = 18, stroke = "currentColor", w = 1.7 }: { name: string; size?: number; stroke?: string; w?: number }) {
+function RIcon({ name, size = 18, stroke = "currentColor", w = 1.7 }: { name: string; size?: number; stroke?: string; w?: number }) {
   const p: Record<string, React.ReactNode> = {
     clock: (<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>),
     users: (<><circle cx="9" cy="8" r="3.2" /><path d="M2.5 20c0-3.4 2.9-5.5 6.5-5.5S15.5 16.6 15.5 20" /><path d="M16 5.2A3 3 0 0 1 16 11M16.5 14.6c2.6.5 4.5 2.3 4.5 5" /></>),

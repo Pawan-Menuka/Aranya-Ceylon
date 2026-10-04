@@ -20,8 +20,3 @@ export async function getBlog(req: Request, res: Response) {
     if (!blog) return res.status(404).json({ error: 'Blog post not found' });
     return res.json({ blog });
 }
-
-export async function getRecentBlogs(_req: Request, res: Response) {
-    const blogs = await blogService.getRecentBlogs();
-    return res.json({ blogs });
-}

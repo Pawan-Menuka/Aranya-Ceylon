@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IncrementalCache } from "../../aranya-next/node_modules/next/dist/server/lib/incremental-cache/index.js";
-import { canonicalMarketCookie, verifiedCookieMarket } from "../../aranya-next/src/lib/market-cookie.server";
+import { verifiedCookieMarket } from "../../aranya-next/src/lib/market-cookie.server";
 
 const request = vi.hoisted(() => ({ market: undefined as string | undefined, visitor: "guest-a" }));
 vi.mock("next/headers", () => ({ cookies: () => ({
@@ -9,6 +9,12 @@ vi.mock("next/headers", () => ({ cookies: () => ({
   toString: () => `x-market=${request.market ?? ""}; guestCartToken=${request.visitor}; refresh=${request.visitor}`,
 }) }));
 const secret = "public-cache-unit-fixture-secret-only";
+// Independent oracle for the canonical, guest-independent cookie the cache layer sends upstream.
+function canonicalMarketCookie(market: string, key: string): string {
+  const header = Buffer.from(JSON.stringify({ alg: "HS256" })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ market: market === "local" ? "local" : "international" })).toString("base64url");
+  return `${header}.${payload}.${createHmac("sha256", key).update(`${header}.${payload}`).digest("base64url")}`;
+}
 function token(claims: Record<string, unknown>, key = secret, header = { alg: "HS256" }): string {
   const parts = [header, claims].map(value => Buffer.from(JSON.stringify(value)).toString("base64url"));
   return `${parts.join(".")}.${createHmac("sha256", key).update(parts.join(".")).digest("base64url")}`;

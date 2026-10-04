@@ -119,18 +119,6 @@ export async function getOrCreateCart(userId?: string, guestToken?: string) {
     return { ...cart, newGuestToken };
 }
 
-// --- Add item to cart with market validation ---
-// Prevents cross-market items: a LOCAL visitor cannot add an
-// INTERNATIONAL variant to their cart, and vice versa.
-export async function addToCart(
-    cartId: string,
-    data: AddToCartInput,
-    market: Market,
-) {
-    await validateCartVariant(data, market);
-    return insertCartItem(cartId, data);
-}
-
 // Validate before minting a cart/token for a shopper's first add.
 export async function addToShopperCart(
     userId: string | undefined,

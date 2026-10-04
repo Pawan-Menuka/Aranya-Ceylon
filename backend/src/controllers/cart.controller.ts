@@ -18,20 +18,6 @@ export async function bootstrapCart(req: Request, res: Response) {
     return res.json({ cart, market: req.market });
 }
 
-// --- Get cart ---
-export async function getCart(req: Request, res: Response) {
-    const userId = req.user?.userId;
-    const guestToken = req.cookies?.[GUEST_TOKEN_COOKIE];
-
-    const result = await cartService.getOrCreateCart(userId, guestToken);
-
-    if ('newGuestToken' in result && result.newGuestToken) {
-        res.cookie(GUEST_TOKEN_COOKIE, result.newGuestToken, guestCookieOptions);
-    }
-
-    return res.json({ cart: result, market: req.market });
-}
-
 // --- Add item (market-validated) ---
 export async function addItem(req: Request, res: Response) {
     const userId = req.user?.userId;
