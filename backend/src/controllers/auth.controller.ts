@@ -9,6 +9,8 @@ import { prisma } from '../lib/prisma.js';
 import { issueTokenPair, rotateRefreshToken, revokeTokenFamily, revokeAllUserTokens, issueEmailVerificationToken, verifyEmailToken, issuePasswordResetToken, resetPasswordWithToken } from '../services/token.service.js';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../services/email.service.js';
 import { writeAuditLog } from '../services/audit.service.js';
+import { verifySecondFactor } from '../services/two-factor.service.js';
+import { SecretBoxUnavailableError } from '../lib/secret-box.js';
 import { emailSchema, type RegisterInput, type LoginInput, type ForgotPasswordInput, type ResetPasswordInput } from '@aranya/shared';
 
 const BCRYPT_ROUNDS = 12;
@@ -230,7 +232,7 @@ export async function resetPassword(req: Request, res: Response) {
 
 // --- Login ---
 export async function login(req: Request, res: Response) {
-    const { email, password } = req.body as LoginInput;
+    const { email, password, totpCode, recoveryCode } = req.body as LoginInput;
 
     const user = await prisma.user.findUnique({ where: { email } });
 
@@ -253,6 +255,34 @@ export async function login(req: Request, res: Response) {
             error: 'Please verify your email address before signing in — check your inbox for the verification link.',
             code: 'EMAIL_NOT_VERIFIED',
         });
+    }
+
+    // Checked after the password so an attacker learns nothing about an account
+    // they cannot sign in to.
+    if (user.suspendedAt) {
+        return res.status(403).json({ error: 'This account has been suspended. Please contact support.', code: 'ACCOUNT_SUSPENDED' });
+    }
+
+    // Second factor, for admin accounts that turned it on. Checked only after the
+    // password (so it reveals nothing to someone without credentials) and before
+    // any token exists.
+    if (user.twoFactorEnabled && (user.role === 'ADMIN' || user.role === 'SUPERADMIN')) {
+        if (!totpCode && !recoveryCode) {
+            return res.status(403).json({ error: 'A two-factor code is required to sign in.', code: 'TWO_FACTOR_REQUIRED' });
+        }
+        let ok: boolean;
+        try {
+            ok = await verifySecondFactor(user, { totpCode, recoveryCode });
+        } catch (err) {
+            // Fail closed: without the key the code cannot be checked, so nobody gets in on a guess.
+            if (err instanceof SecretBoxUnavailableError) {
+                return res.status(503).json({ error: 'Two-factor sign-in is temporarily unavailable.', code: 'TWO_FACTOR_UNAVAILABLE' });
+            }
+            throw err;
+        }
+        if (!ok) {
+            return res.status(401).json({ error: 'That verification code is not valid.', code: 'INVALID_TWO_FACTOR_CODE' });
+        }
     }
 
     const { accessToken, refreshTokenPlaintext } = await issueTokenPair(user);

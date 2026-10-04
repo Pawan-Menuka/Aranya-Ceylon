@@ -108,6 +108,12 @@ model User {
   verified           Boolean   @default(false)
   twoFactorEnabled   Boolean   @default(false)
   twoFactorSecret    String?   // Encrypted TOTP secret
+  // SHA-256 of each unused one-time recovery code (shown to the user once, at enrolment).
+  twoFactorRecoveryCodes String[] @default([])
+  // Time step of the last accepted TOTP code, so a code cannot be replayed within its window.
+  twoFactorLastStep  Int?
+  // Set by a SUPERADMIN; blocks sign-in and session renewal.
+  suspendedAt        DateTime?
   phone              String?
   newsletterOptIn    Boolean   @default(true)
   createdAt          DateTime  @default(now())

@@ -22,12 +22,29 @@ export const registerSchema = z.object({
     password: newPasswordSchema,
 });
 
+// Second-factor codes (admin accounts that turned on two-factor sign-in).
+const totpCodeSchema = z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code');
+const recoveryCodeSchema = z.string().trim().min(8).max(40);
+
 export const loginSchema = z.object({
     email: emailSchema,
     // Deliberately looser than newPasswordSchema: sign-in must not reveal the
     // password rules, only bound the input.
     password: z.string().min(1, 'Password is required').max(1024),
+    // Only read for accounts with two-factor on; ignored for everyone else.
+    totpCode: totpCodeSchema.optional(),
+    recoveryCode: recoveryCodeSchema.optional(),
 });
+
+export const twoFactorEnableSchema = z.object({ code: totpCodeSchema });
+
+export const twoFactorDisableSchema = z
+    .object({
+        password: z.string().min(1).max(1024),
+        totpCode: totpCodeSchema.optional(),
+        recoveryCode: recoveryCodeSchema.optional(),
+    })
+    .refine((body) => Boolean(body.totpCode) !== Boolean(body.recoveryCode), 'Provide either a 6-digit code or a recovery code');
 
 export const forgotPasswordSchema = z.object({
     email: emailSchema,
