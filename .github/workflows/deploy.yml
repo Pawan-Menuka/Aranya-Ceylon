@@ -31,6 +31,21 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      # Prisma's own message for a bad connection string (P1013) never says which
+      # one, and this step has failed that way before. Check the shape here, fail
+      # fast, and never print the value.
+      - name: Check database connection strings
+        run: |
+          bad=0
+          for name in DATABASE_URL DIRECT_URL; do
+            value="${!name}"
+            if [[ ! "$value" =~ ^postgres(ql)?:// ]]; then
+              echo "::error::$name is empty or does not start with postgresql:// (DIRECT_URL comes from the DIRECT_DATABASE_URL secret). Re-save the secret as the bare connection string: no quotes, no spaces, no 'psql' prefix."
+              bad=1
+            fi
+          done
+          exit "$bad"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
