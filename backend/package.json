@@ -6,12 +6,17 @@
         "dev": "tsx watch src/index.ts",
         "build": "tsc --project tsconfig.build.json",
         "start": "node dist/index.js",
+        "start:worker": "node dist/jobs/worker.js",
+        "outbox:status": "node dist/jobs/outboxOps.js status",
+        "outbox:replay": "node dist/jobs/outboxOps.js replay",
         "typecheck": "tsc --noEmit",
         "lint": "eslint src",
         "test": "pnpm test:unit",
         "test:unit": "vitest run --exclude \"**/*.integration.test.ts\"",
         "test:integration": "vitest run --config vitest.integration.config.ts",
-        "seed:catalog": "tsx prisma/seed-catalog.ts"
+        "seed:catalog": "tsx prisma/seed-catalog.ts",
+        "seed:gifts": "tsx prisma/seed-gifts.ts",
+        "seed:recipes": "tsx prisma/seed-recipes.ts"
     },
     "dependencies": {
         "@aranya/shared": "workspace:*",

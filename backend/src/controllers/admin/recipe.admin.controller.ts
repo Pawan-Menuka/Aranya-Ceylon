@@ -1,7 +1,9 @@
+import { adminContentPageSchema } from '@aranya/shared';
+import { listAdminPage } from '../../services/admin-page.service.js';
 import type { Request, Response } from 'express';
 import { prisma } from '../../lib/prisma.js';
-import { writeAuditLog } from '../../services/audit.service.js';
-import { revalidateFrontend } from '../../lib/revalidate.js';
+import { auditPublicMutation } from '../../lib/audit-public-mutation.js';
+import { publicMutation } from '../../lib/public-mutation.js';
 import { z } from 'zod';
 
 const ingredientGroupSchema = z.object({
@@ -29,7 +31,8 @@ const recipeSchema = z.object({
     status: z.enum(['DRAFT', 'PUBLISHED']).default('DRAFT'),
 });
 
-export async function listRecipes(_req: Request, res: Response) {
+export async function listRecipes(req: Request, res: Response) {
+    if (req.query.view === 'page') return res.json(await listAdminPage('recipes', adminContentPageSchema.parse(req.query)));
     const recipes = await prisma.recipe.findMany({
         orderBy: { createdAt: 'desc' },
         take: 500, // bound an otherwise unlimited load (PERF-07)
@@ -53,7 +56,7 @@ export async function createRecipe(req: Request, res: Response) {
 
     let recipe;
     try {
-        recipe = await prisma.recipe.create({ data });
+        recipe = await publicMutation(tx => tx.recipe.create({ data }), result => data.status === 'PUBLISHED' ? ['/recipes', '/search', `/recipes/${result.slug}`] : []);
     } catch (err) {
         if ((err as { code?: string }).code === 'P2002') {
             res.status(409).json({ error: 'A recipe with that slug already exists' }); return;
@@ -61,16 +64,10 @@ export async function createRecipe(req: Request, res: Response) {
         throw err;
     }
 
-    await writeAuditLog({
+    await auditPublicMutation({
         req, event: 'RECIPE_CREATE',
         targetType: 'Recipe', targetId: recipe.id,
-    });
-
-    // P3-4: revalidate when a recipe is published immediately on create
-    if (data.status === 'PUBLISHED') {
-        await revalidateFrontend(`/recipes/${recipe.slug}`);
-        await revalidateFrontend('/recipes');
-    }
+    }, data.status === 'PUBLISHED' ? ['/recipes', '/search', `/recipes/${recipe.slug}`] : []);
 
     res.status(201).json({ recipe });
 }
@@ -84,7 +81,7 @@ export async function updateRecipe(req: Request, res: Response) {
 
     let recipe;
     try {
-        recipe = await prisma.recipe.update({ where: { id }, data });
+        recipe = await publicMutation(tx => tx.recipe.update({ where: { id }, data }), result => ['/recipes', '/search', `/recipes/${existing.slug}`, `/recipes/${result.slug}`]);
     } catch (err) {
         if ((err as { code?: string }).code === 'P2002') {
             res.status(409).json({ error: 'A recipe with that slug already exists' }); return;
@@ -93,14 +90,11 @@ export async function updateRecipe(req: Request, res: Response) {
     }
 
     // P3-3: audit log for updates (was missing)
-    await writeAuditLog({
+    await auditPublicMutation({
         req, event: 'RECIPE_UPDATE',
         targetType: 'Recipe', targetId: id,
         diff: { before: existing, after: recipe },
-    });
-
-    await revalidateFrontend(`/recipes/${recipe.slug}`);
-    await revalidateFrontend('/recipes');
+    }, ['/recipes', '/search', `/recipes/${existing.slug}`, `/recipes/${recipe.slug}`]);
 
     res.json({ recipe });
 }
@@ -111,16 +105,12 @@ export async function deleteRecipe(req: Request, res: Response) {
     const existing = await prisma.recipe.findUnique({ where: { id } });
     if (!existing) { res.status(404).json({ error: 'Recipe not found' }); return; }
 
-    await prisma.recipe.delete({ where: { id } });
+    await publicMutation(tx => tx.recipe.delete({ where: { id } }), () => ['/recipes', '/search', `/recipes/${existing.slug}`]);
 
-    await writeAuditLog({
+    await auditPublicMutation({
         req, event: 'RECIPE_DELETE',
         targetType: 'Recipe', targetId: id,
-    });
-
-    // P3-4: revalidate on delete
-    await revalidateFrontend(`/recipes/${existing.slug}`);
-    await revalidateFrontend('/recipes');
+    }, ['/recipes', '/search', `/recipes/${existing.slug}`]);
 
     res.json({ ok: true });
 }

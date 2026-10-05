@@ -1,5 +1,5 @@
 import { SPICES } from "./spice-data";
-import { JOURNAL } from "./journal-data";
+import { JOURNAL } from "./journal-demo";
 import type { Spice } from "./types";
 
 // Aranya Ceylon — ADMIN sample dataset (ported verbatim from admin-data.js).
@@ -11,7 +11,7 @@ import type { Spice } from "./types";
 
 export type AdminMarket = "intl" | "local";
 
-export interface DayPoint {
+interface DayPoint {
   date: Date;
   label: string;
   dow: number;
@@ -19,7 +19,7 @@ export interface DayPoint {
   orders: number;
   intl: number;
 }
-export interface OrderItem {
+interface OrderItem {
   name: string;
   weight: string;
   qty: number;
@@ -47,7 +47,7 @@ export interface AdminOrder {
   tracking: string | null;
   timeline?: Array<{ status: string; note: string; date: Date }>;
 }
-export interface TopProduct {
+interface TopProduct {
   name: string;
   units: number;
   revUsd: number;
@@ -55,13 +55,13 @@ export interface TopProduct {
   trend: number[];
   color: string;
 }
-export interface MarketSeg {
+interface MarketSeg {
   key: string;
   label: string;
   value: number;
   color: string;
 }
-export interface LowStockItem {
+interface LowStockItem {
   name: string;
   sku: string;
   weight: string;
@@ -69,7 +69,7 @@ export interface LowStockItem {
   threshold: number;
   color: string;
 }
-export interface WholesaleApp {
+interface WholesaleApp {
   id: string;
   company: string;
   contact: string;
@@ -126,14 +126,14 @@ export interface AuditRow {
   meta: string;
   level: string;
 }
-export interface ActivityItem {
+interface ActivityItem {
   icon: string;
   tone: string;
   text: string;
   who: string;
   when: string;
 }
-export interface AdminUser {
+interface AdminUser {
   name: string;
   role: string;
   access: string;

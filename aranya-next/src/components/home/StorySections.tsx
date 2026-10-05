@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
+import { IntentLink as Link } from "../IntentLink";
 import type { Spice } from "@/lib/types";
 import { Reveal } from "../primitives/Reveal";
 import { Eyebrow } from "../primitives/Motif";
@@ -80,7 +80,7 @@ export function Bestsellers({ spices }: { spices: Spice[] }) {
         </div>
         <Reveal delay={120}>
           <div className="best-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 22 }}>
-            {picks.map((s) => <CardCFinal key={s.name} spice={s} market={market} />)}
+            {picks.map((s) => <CardCFinal key={s.name} spice={s} market={market} sizes="(max-width: 720px) calc(100vw - 84px), (max-width: 1024px) calc(50vw - 71px), (max-width: 1280px) calc(25vw - 76px), 244px" />)}
           </div>
         </Reveal>
       </div>

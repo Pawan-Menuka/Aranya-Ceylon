@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
+import { IntentLink as Link } from "./IntentLink";
 import { usePathname, useRouter } from "next/navigation";
 import { Seal } from "./primitives/Seal";
 import { Icon } from "./primitives/Icon";
@@ -20,11 +20,6 @@ const NAV_LINKS: { label: string; href: string; match: string[]; chevron?: boole
   { label: "About", href: "/about", match: ["/about"] },
 ];
 
-function smooth(a: number, b: number, x: number) {
-  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-  return t * t * (3 - 2 * t);
-}
-
 export function Navbar({
   heroMode = false,
   heroSelector = "[data-hero]",
@@ -39,43 +34,54 @@ export function Navbar({
   const { user } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const [p, setP] = React.useState(0);
-  const [dir, setDir] = React.useState<"up" | "down">("up");
-  const [y, setY] = React.useState(0);
-  const last = React.useRef(0);
+  const [appearance, setAppearance] = React.useState({ pathname, heroMode, solid: heroMode ? 0 : 1, hidden: false });
+  // The navbar persists across routes: never render the preceding page's
+  // hidden/glass state while the new page's hero is being measured.
+  const { solid, hidden } = appearance.pathname === pathname && appearance.heroMode === heroMode
+    ? appearance
+    : { solid: heroMode ? 0 : 1, hidden: false };
 
   React.useEffect(() => {
-    let raf = 0;
+    let raf = 0, last = window.scrollY, direction: "up" | "down" = "up", span = window.innerHeight * 2;
+    let hero: HTMLElement | null = null;
+    const measure = () => { span = hero ? hero.offsetHeight - window.innerHeight : window.innerHeight * 2; };
     const onScroll = () => {
       if (raf) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
         const cur = window.scrollY;
-        setY(cur);
-        if (Math.abs(cur - last.current) > 2) setDir(cur > last.current ? "down" : "up");
-        if (heroMode) {
-          const hero = document.querySelector(heroSelector) as HTMLElement | null;
-          const span = hero ? hero.offsetHeight - window.innerHeight : window.innerHeight * 2;
-          setP(Math.min(1, Math.max(0, cur / Math.max(1, span))));
-        }
-        last.current = cur;
+        if (Math.abs(cur - last) > 2) direction = cur > last ? "down" : "up";
+        // Pending/error/404 content has no hero even on a hero-enabled URL.
+        const pastHero = heroMode && hero ? cur / Math.max(1, span) > 0.992 : true;
+        const solid = pastHero ? 1 : 0;
+        const hidden = heroMode ? cur >= 8 && !pastHero && direction !== "up" : direction === "down" && cur > 120;
+        setAppearance(previous => previous.pathname === pathname && previous.heroMode === heroMode && previous.solid === solid && previous.hidden === hidden ? previous : { pathname, heroMode, solid, hidden });
+        last = cur;
       });
     };
+    const onResize = () => { measure(); onScroll(); };
+    const observer = new ResizeObserver(onResize);
+    const findHero = () => {
+      const next = heroMode ? document.querySelector<HTMLElement>(heroSelector) : null;
+      if (next === hero) return;
+      observer.disconnect();
+      hero = next;
+      if (hero) observer.observe(hero);
+      measure();
+      onScroll();
+    };
+    // Route content can arrive after the persistent layout (streamed loading
+    // boundaries), and retry can replace it without changing the pathname.
+    const contentObserver = new MutationObserver(() => {
+      if (!hero || !hero.isConnected) findHero();
+    });
+    if (heroMode) contentObserver.observe(document.body, { childList: true, subtree: true });
+    findHero();
+    measure(); window.addEventListener("resize", onResize);
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
-  }, [heroMode, heroSelector]);
-
-  const atTop = y < 8;
-  const pastHero = heroMode ? p > 0.992 : true;
-  let solid: number, hidden: boolean;
-  if (heroMode) {
-    solid = pastHero ? 1 : 0;
-    hidden = !atTop && !pastHero && dir !== "up";
-  } else {
-    solid = 1;
-    hidden = dir === "down" && y > 120;
-  }
+    return () => { cancelAnimationFrame(raf); observer.disconnect(); contentObserver.disconnect(); window.removeEventListener("resize", onResize); window.removeEventListener("scroll", onScroll); };
+  }, [pathname, heroMode, heroSelector]);
 
   const market_ = market === "local" ? { ship: "Sri Lanka", cur: "LKR" } : { ship: "International", cur: "USD" };
 

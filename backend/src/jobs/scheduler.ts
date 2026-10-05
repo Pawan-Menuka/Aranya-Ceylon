@@ -2,7 +2,10 @@ import cron from 'node-cron';
 import { prisma } from '../lib/prisma.js';
 import { sendLowStockAlert, sendAbandonedCartEmail } from '../services/email.service.js';
 import { revalidateFrontend } from '../lib/revalidate.js';
-import { cancelOrderAndReleaseStock } from '../controllers/webhook.controller.js';
+import { cancelPendingOrder, isPastForceCancelAge, pendingOrderTtlMs } from '../services/pending-order.service.js';
+import { outboxEnabled } from '../lib/outbox.js';
+import { distributedJobsEnabled } from './jobLease.js';
+import { startLeasedJobs, runBoundedLowStock, runBoundedAbandonedCarts, runBoundedRetention } from './leasedScheduler.js';
 
 // --- Job 1: Publish scheduled blog posts ---
 // Runs every minute. Checks for posts where scheduledAt <= now
@@ -19,7 +22,7 @@ export function startScheduledPostsJob() {
 
             if (due.length === 0) return;
 
-            await Promise.all(
+            const publications = await Promise.allSettled(
                 due.map((blog) =>
                     prisma.blog.update({
                         where: { id: blog.id },
@@ -28,19 +31,23 @@ export function startScheduledPostsJob() {
                 ),
             );
 
+            const published = due.filter((_blog, index) => publications[index]!.status === 'fulfilled');
+
             // P3-4: revalidate each newly published post so it appears immediately
-            await Promise.all(
-                due.flatMap((blog) => [
-                    revalidateFrontend(`/journal/${blog.slug}`),
-                    revalidateFrontend('/journal'),
-                ]),
-            );
+            // Match the endpoint's 32-path batch bound, leaving room for the
+            // shared home/list/search dependencies in every batch.
+            for (let offset = 0; offset < published.length; offset += 29) {
+                await revalidateFrontend(['/', '/journal', '/search', ...published.slice(offset, offset + 29).map(blog => `/journal/${blog.slug}`)]);
+            }
+
+            const failure = publications.find(result => result.status === 'rejected');
+            if (failure?.status === 'rejected') throw failure.reason;
 
             console.log(`📝 Published ${due.length} scheduled blog post(s)`);
         } catch (err) {
             console.error('[CRON] Scheduled posts job failed:', err);
         }
-    });
+    }, { noOverlap: true });
 }
 
 // --- Job 2: Expire guest carts ---
@@ -60,7 +67,7 @@ export function startCartExpiryJob() {
         } catch (err) {
             console.error('[CRON] Cart expiry job failed:', err);
         }
-    });
+    }, { noOverlap: true });
 }
 
 // --- Job 3: Low stock alert ---
@@ -71,6 +78,7 @@ export function startCartExpiryJob() {
 // directly unit-testable without faking node-cron (same reasoning as
 // runAbandonedCartRecovery below).
 export async function runLowStockAlert(): Promise<number> {
+    if (outboxEnabled()) return runBoundedLowStock();
     const threshold = Number(process.env.LOW_STOCK_THRESHOLD ?? 10);
 
     const lowStock = await prisma.variant.findMany({
@@ -99,22 +107,23 @@ export function startLowStockAlertJob() {
         } catch (err) {
             console.error('[CRON] Low stock alert job failed:', err);
         }
-    });
+    }, { noOverlap: true });
 }
 
 // --- Job 4: Cancel stale unpaid orders ---
-// Runs hourly. Cancels orders stuck in PENDING for more than 24h — a failed or
-// abandoned checkout. This is the real cancellation path now that the payment
-// webhooks no longer cancel on a single failed attempt (#16), since the same
-// PaymentIntent / PayHere order can be retried.
+// Runs every 10 minutes. Cancels orders stuck in PENDING for longer than the
+// pending-order TTL (pending-order.service.ts, default 60 minutes) — a failed
+// or abandoned checkout. This is the real cancellation path now that the
+// payment webhooks no longer cancel on a single failed attempt (#16), since
+// the same PaymentIntent / PayHere order can be retried.
 //
-// Goes through cancelOrderAndReleaseStock (one order at a time, not a bulk
+// Goes through cancelPendingOrder (one order at a time, not a bulk
 // updateMany) because each stale order reserved real stock at checkout-intent
 // creation (roadmap: stock reservation at checkout) that must be released
-// back — a bulk status flip would silently leak that stock forever. The
-// per-order `status: 'PENDING'` guard inside it is still race-safe against a
-// payment that completes in the gap between this query and the cancel call.
-const STALE_ORDER_HOURS = 24;
+// back — a bulk status flip would silently leak that stock forever — and its
+// Stripe PaymentIntent must be closed first so it can't be paid afterwards.
+// The per-order `status: 'PENDING'` guard inside the cancel is still race-safe
+// against a payment that completes in the gap between this query and the call.
 // Caps how many stale orders one hourly run will process (perf audit #7):
 // each is its own transaction on its own pooled connection, so an unbounded
 // backlog (e.g. after an outage) could otherwise open hundreds of
@@ -124,24 +133,29 @@ const STALE_ORDER_HOURS = 24;
 const STALE_ORDER_BATCH_LIMIT = 200;
 
 export function startStaleOrderCancellationJob() {
-    cron.schedule('0 * * * *', async () => {
+    cron.schedule('*/10 * * * *', async () => {
         try {
-            const cutoff = new Date(Date.now() - STALE_ORDER_HOURS * 60 * 60 * 1000);
+            const cutoff = new Date(Date.now() - pendingOrderTtlMs());
             const stale = await prisma.order.findMany({
                 where: { status: 'PENDING', createdAt: { lt: cutoff } },
-                select: { id: true },
+                select: { id: true, paymentIntentId: true, createdAt: true },
+                orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
                 take: STALE_ORDER_BATCH_LIMIT,
             });
 
+            let cancelled = 0;
             for (const o of stale) {
-                await cancelOrderAndReleaseStock(o.id, `Cancelled — stale PENDING order older than ${STALE_ORDER_HOURS}h.`);
+                const done = await cancelPendingOrder(o, 'Cancelled — unpaid order past its reservation window.', {
+                    force: isPastForceCancelAge(o.createdAt),
+                });
+                if (done) cancelled++;
             }
 
-            if (stale.length > 0) console.log(`🛒 Cancelled ${stale.length} stale unpaid order(s)`);
+            if (cancelled > 0) console.log(`🛒 Cancelled ${cancelled} stale unpaid order(s)`);
         } catch (err) {
             console.error('[CRON] Stale order cancellation job failed:', err);
         }
-    });
+    }, { noOverlap: true });
 }
 
 // --- Job 5: Prune expired / used refresh tokens ---
@@ -157,7 +171,7 @@ export function startTokenPruningJob() {
         } catch (err) {
             console.error('[CRON] Token pruning job failed:', err);
         }
-    });
+    }, { noOverlap: true });
 }
 
 // --- Job 6: Abandoned-cart recovery ---
@@ -173,6 +187,7 @@ const ABANDONED_CART_HOURS = 3;
 // Extracted from the cron callback so the actual targeting/sending logic is
 // directly unit-testable without faking node-cron.
 export async function runAbandonedCartRecovery(): Promise<number> {
+    if (outboxEnabled()) return runBoundedAbandonedCarts();
     const cutoff = new Date(Date.now() - ABANDONED_CART_HOURS * 60 * 60 * 1000);
     const carts = await prisma.cart.findMany({
         where: {
@@ -187,16 +202,23 @@ export async function runAbandonedCartRecovery(): Promise<number> {
         },
     });
 
+    let sent = 0;
     for (const cart of carts) {
         if (!cart.user?.email) continue;
-        await sendAbandonedCartEmail({
-            to: cart.user.email,
-            items: cart.items.map((item) => ({ name: item.product.name, quantity: item.quantity })),
-        }).catch((err) => console.error(`[CRON] Abandoned-cart email failed for cart ${cart.id}:`, err));
+        try {
+            await sendAbandonedCartEmail({
+                to: cart.user.email,
+                items: cart.items.map((item) => ({ name: item.product.name, quantity: item.quantity })),
+            });
+        } catch (err) {
+            console.error(`[CRON] Abandoned-cart email failed for cart ${cart.id}:`, err);
+            continue;
+        }
         await prisma.cart.update({ where: { id: cart.id }, data: { abandonedEmailSentAt: new Date() } });
+        sent++;
     }
 
-    return carts.length;
+    return sent;
 }
 
 export function startAbandonedCartRecoveryJob() {
@@ -207,16 +229,48 @@ export function startAbandonedCartRecoveryJob() {
         } catch (err) {
             console.error('[CRON] Abandoned-cart recovery job failed:', err);
         }
-    });
+    }, { noOverlap: true });
 }
 
-// Start all jobs
+// --- Job 7: Data retention ---
+// Runs hourly (45 past). Deletes one page each of webhook payloads and
+// delivered outbox rows older than 90 days; see runBoundedRetention.
+export function startRetentionJob() {
+    cron.schedule('45 * * * *', async () => {
+        try {
+            const removed = await runBoundedRetention();
+            if (removed > 0) console.log(`🧹 Removed ${removed} expired webhook / outbox row(s)`);
+        } catch (err) {
+            console.error('[CRON] Retention job failed:', err);
+        }
+    }, { noOverlap: true });
+}
+
+// Set to false on every API replica except the designated scheduler runner.
+// This is a deployment control, not distributed leader election: the deployment
+// must ensure exactly one enabled runner before adding another API replica.
+let jobsStarted = false;
 export function startAllJobs() {
+    const setting = process.env.SCHEDULED_JOBS_ENABLED?.trim().toLowerCase();
+    if (setting !== undefined && setting !== 'true' && setting !== 'false') {
+        throw new Error('SCHEDULED_JOBS_ENABLED must be true or false');
+    }
+    if (setting === 'false') {
+        console.log('⏰ Cron jobs disabled on this API instance');
+        return;
+    }
+    if (jobsStarted) return;
+    jobsStarted = true;
+    if (outboxEnabled() || distributedJobsEnabled()) {
+        startLeasedJobs();
+        return;
+    }
     startScheduledPostsJob();
     startCartExpiryJob();
     startLowStockAlertJob();
     startStaleOrderCancellationJob();
     startTokenPruningJob();
     startAbandonedCartRecoveryJob();
+    startRetentionJob();
     console.log('⏰ Cron jobs started');
 }

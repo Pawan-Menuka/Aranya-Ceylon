@@ -63,9 +63,19 @@ const envSchema = z
 
         // Payment gateways — required only when PAYMENTS_MODE=live (see superRefine).
         STRIPE_SECRET_KEY: z.string().optional(),
+        // Handed to the browser with each PaymentIntent so Stripe Elements can
+        // mount. Unset, the card form never loads and the Pay button stays
+        // disabled — after the order and its stock reservation already exist.
+        STRIPE_PUBLISHABLE_KEY: z.string().optional(),
         STRIPE_WEBHOOK_SECRET: z.string().optional(),
         PAYHERE_MERCHANT_ID: z.string().optional(),
         PAYHERE_MERCHANT_SECRET: z.string().optional(),
+        // Which PayHere host local-market shoppers are sent to. Must be stated
+        // explicitly in live mode (see superRefine): the service used to fall
+        // back to the sandbox, so a deploy that forgot it took real customers
+        // to a test gateway — and, with sandbox credentials, marked their
+        // orders PAID for no money.
+        PAYHERE_MODE: z.enum(['sandbox', 'live']).optional(),
     })
     // Unknown keys (Cloudinary, Resend, etc.) pass through untouched — this
     // validator owns only the security-critical surface, not every var.
@@ -95,6 +105,7 @@ const envSchema = z
         if (env.PAYMENTS_MODE === 'live') {
             const liveKeys = [
                 'STRIPE_SECRET_KEY',
+                'STRIPE_PUBLISHABLE_KEY',
                 'STRIPE_WEBHOOK_SECRET',
                 'PAYHERE_MERCHANT_ID',
                 'PAYHERE_MERCHANT_SECRET',
@@ -107,6 +118,16 @@ const envSchema = z
                         message: `${key} is required when PAYMENTS_MODE=live`,
                     });
                 }
+            }
+
+            // No default: 'sandbox' (staging with test merchants) and 'live' are
+            // both legitimate with PAYMENTS_MODE=live, so the deploy has to say.
+            if (!env.PAYHERE_MODE) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ['PAYHERE_MODE'],
+                    message: 'PAYHERE_MODE must be set to "live" or "sandbox" when PAYMENTS_MODE=live (it no longer defaults to sandbox).',
+                });
             }
 
             // The PayHere notify_url is built from API_URL; unset would send live

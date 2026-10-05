@@ -1,7 +1,7 @@
 // Aranya Ceylon — API read models (mirrors backend spec §8).
 
 export type Currency = "LKR" | "USD" | "EUR" | "GBP";
-export type VariantMarket = "LOCAL" | "INTERNATIONAL" | "BOTH";
+type VariantMarket = "LOCAL" | "INTERNATIONAL" | "BOTH";
 export type Market = "intl" | "local";
 
 /** Backend market token <-> UI market token. */
@@ -17,14 +17,14 @@ export interface Variant {
   currency: Currency;
 }
 
-export interface ProductImage {
+interface ProductImage {
   id: string;
   url: string;
   altText?: string;
   position: number;
 }
 
-export interface Review {
+interface Review {
   id: string;
   rating: number;
   title: string;
@@ -54,6 +54,33 @@ export interface Product {
   createdAt: string;
 }
 
+/** Public catalog cards omit detail text and review bodies. */
+export type ProductCard = Omit<Product, "description" | "status" | "reviews">;
+
+export interface ProductCardPage extends Paginated<ProductCard> {
+  total: number;
+  facets: FacetVocab;
+  featured: ProductCard[];
+  market: BackendMarket;
+}
+
+export interface CategorySummary {
+  groups: { name: string; count: number; spices: ProductCard[] }[];
+  facets: { flavour: { name: string; count: number; sample: ProductCard | null }[] };
+}
+
+export interface CatalogPage extends Omit<ProductCardPage, "items" | "featured"> {
+  items: CatalogSpice[];
+  featured: CatalogSpice[];
+  demo?: boolean;
+}
+
+export interface CatalogCategoryGroup {
+  name: string;
+  count: number;
+  spices: CatalogSpice[];
+}
+
 export interface Category {
   id: string;
   name: string;
@@ -75,13 +102,13 @@ export interface Blog {
   seoDesc?: string;
 }
 
-export interface OrderItem {
+interface OrderItem {
   quantity: number;
   unitPrice: string;
   product: { id?: string; name: string; slug: string };
   variant: { id?: string; weight: number };
 }
-export interface OrderTimelineEntry {
+interface OrderTimelineEntry {
   status: string;
   note?: string;
   createdAt: string;
@@ -138,6 +165,8 @@ export interface Paginated<T> {
 // so every ported component renders unchanged whether data is live or demo.
 export interface Spice {
   slug?: string;
+  imageSrc?: string;
+  imageSources?: string[];
   name: string;
   latin: string;
   origin: string;
@@ -180,4 +209,18 @@ export interface FacetVocab {
   form: string[];
   origin: string[];
   flavour: string[];
+}
+
+// Search uses the public card/list projections; article bodies and product
+// descriptions/reviews are intentionally absent from result payloads.
+export type SearchSort = "relevance" | "price-asc" | "price-desc" | "rating";
+export type SearchResource = "all" | "products" | "journal";
+export interface SearchResultPage<T> { items: T[]; total: number; nextCursor: string | null; hasNextPage: boolean }
+interface JournalSearchMetadata {
+  id: string; title: string; slug: string; tags: string[];
+  publishedAt: string | null; seoDesc: string | null; viewCount: number;
+}
+export interface SearchResults {
+  q: string; sort: SearchSort; market: BackendMarket;
+  products: SearchResultPage<ProductCard>; journal: SearchResultPage<JournalSearchMetadata>;
 }

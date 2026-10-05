@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
+import { IntentLink as Link } from "../IntentLink";
 import type { Spice } from "@/lib/types";
 import { Reveal } from "../primitives/Reveal";
 import { Eyebrow } from "../primitives/Motif";

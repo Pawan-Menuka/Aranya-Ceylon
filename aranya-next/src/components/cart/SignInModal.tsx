@@ -4,6 +4,7 @@ import * as React from "react";
 import { Seal } from "../primitives/Seal";
 import { useCart } from "../CartContext";
 import { useAuth } from "../AuthContext";
+import { useDialogFocus } from "./use-dialog-focus";
 
 // Sign-in / register modal (ported from cart-ui.jsx SignInModal). Open state is
 // owned by the cart context (openSignIn/closeSignIn); the form is wired to the
@@ -21,12 +22,8 @@ export function SignInModal() {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    if (open) document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const dialog = React.useRef<HTMLDivElement>(null);
+  useDialogFocus(dialog, open, onClose);
 
   if (!open) return null;
 
@@ -66,7 +63,7 @@ export function SignInModal() {
 
   return (
     <div className="aranya" onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 130, background: "rgba(20,16,12,.5)", backdropFilter: "blur(3px)", display: "grid", placeItems: "center", padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: "min(420px, 100%)", background: "var(--bg)", borderRadius: 14, boxShadow: "var(--shadow-lg)", overflow: "hidden" }}>
+      <div ref={dialog} role="dialog" aria-label="Sign in" aria-modal="true" tabIndex={-1} onClick={(e) => e.stopPropagation()} style={{ width: "min(420px, 100%)", background: "var(--bg)", borderRadius: 14, boxShadow: "var(--shadow-lg)", overflow: "hidden" }}>
         <div style={{ background: "var(--brand)", padding: "26px 30px 24px", textAlign: "center", color: "#FDFAF5" }}>
           <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}><Seal size={48} tone="light" /></div>
           <h2 className="disp" style={{ fontSize: 27, margin: 0 }}>{mode === "in" ? "Welcome back" : "Create your account"}</h2>

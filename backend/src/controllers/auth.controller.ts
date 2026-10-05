@@ -1,14 +1,29 @@
 import type { Request, Response } from 'express';
+import { outboxEnabled } from '../lib/outbox.js';
+import { enqueueAuthEmail } from '../services/token.service.js';
 import { hash, verify } from '@node-rs/bcrypt';
+import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { issueTokenPair, rotateRefreshToken, revokeTokenFamily, revokeAllUserTokens, issueEmailVerificationToken, verifyEmailToken, issuePasswordResetToken, resetPasswordWithToken } from '../services/token.service.js';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../services/email.service.js';
 import { writeAuditLog } from '../services/audit.service.js';
-import type { RegisterInput, LoginInput, ForgotPasswordInput, ResetPasswordInput } from '@aranya/shared';
+import { verifySecondFactor } from '../services/two-factor.service.js';
+import { SecretBoxUnavailableError } from '../lib/secret-box.js';
+import { emailSchema, type RegisterInput, type LoginInput, type ForgotPasswordInput, type ResetPasswordInput } from '@aranya/shared';
 
 const BCRYPT_ROUNDS = 12;
+
+// Hash of a random secret nobody knows, compared against when a sign-in names
+// an unknown email (see login). Created once, on first use, at the same cost
+// as real password hashes; a failed attempt is simply retried next time.
+let unknownEmailHashPromise: Promise<string> | undefined;
+function unknownEmailHash(): Promise<string> {
+    unknownEmailHashPromise ??= hash(randomBytes(32).toString('hex'), BCRYPT_ROUNDS)
+        .catch((err: unknown) => { unknownEmailHashPromise = undefined; throw err; });
+    return unknownEmailHashPromise;
+}
 const REFRESH_COOKIE_NAME = 'refreshToken';
 // Scope the refresh cookie to /auth (not /auth/refresh) so the browser also
 // sends it to POST /auth/logout — otherwise logout never receives the cookie
@@ -34,6 +49,30 @@ const refreshCookieOptions = {
     path: REFRESH_COOKIE_PATH, // sent to /auth/* (refresh + logout)
 };
 
+// Readable companion to the HttpOnly refresh cookie. It carries no secret and
+// grants nothing — it only tells the storefront "this browser may have a
+// session", so an anonymous visitor's page load can skip POST /auth/refresh
+// entirely instead of spending a rate-limited request to learn it has none.
+// Same lifetime as the refresh cookie; set and cleared alongside it.
+const SESSION_HINT_COOKIE_NAME = 'aranya_session';
+const sessionHintCookieOptions = {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+    maxAge: refreshCookieOptions.maxAge,
+    path: '/',
+};
+
+function setSessionCookies(res: Response, refreshTokenPlaintext: string) {
+    res.cookie(REFRESH_COOKIE_NAME, refreshTokenPlaintext, refreshCookieOptions);
+    res.cookie(SESSION_HINT_COOKIE_NAME, '1', sessionHintCookieOptions);
+}
+
+function clearSessionCookies(res: Response) {
+    res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
+    res.clearCookie(SESSION_HINT_COOKIE_NAME, { path: sessionHintCookieOptions.path });
+}
+
 // --- Register ---
 // Returns the SAME neutral response whether or not the email already exists,
 // so an attacker can't enumerate registered accounts (#9). No token is issued
@@ -49,7 +88,7 @@ export async function register(req: Request, res: Response) {
     const passwordHash = await hash(password, BCRYPT_ROUNDS);
 
     try {
-        const user = await prisma.user.create({
+        const createUser = (tx: Prisma.TransactionClient) => tx.user.create({
             data: {
                 name,
                 email,
@@ -59,12 +98,19 @@ export async function register(req: Request, res: Response) {
             },
         });
 
+        const durable = outboxEnabled();
+        const user = durable ? await prisma.$transaction(async tx => {
+            const created = await createUser(tx);
+            if (!created.verified) await enqueueAuthEmail(tx, created, 'EMAIL_VERIFY');
+            return created;
+        }) : await createUser(prisma);
+
         // Send the verification email for accounts that aren't auto-verified.
         // Fire-and-forget: keeping it OUT of the awaited path preserves both the
         // response latency and the neutral, timing-flat anti-enumeration profile
         // (a slow mail send must not make "new email" distinguishable). Failures
         // are logged, never surfaced — registration still succeeds.
-        if (user && !user.verified) {
+        if (!durable && user && !user.verified) {
             void (async () => {
                 try {
                     const token = await issueEmailVerificationToken(user.id);
@@ -107,11 +153,18 @@ export async function verifyEmail(req: Request, res: Response) {
 // Neutral response (anti-enumeration): always 200 with the same message whether
 // or not the email exists or is already verified. A new link is only actually
 // issued + sent for a real, still-unverified account. Rate-limited at the route.
-const resendVerificationSchema = z.object({ email: z.string().email() });
+const resendVerificationSchema = z.object({ email: emailSchema });
 const NEUTRAL_RESEND_MESSAGE = 'If that account exists and still needs verifying, a new link has been sent.';
 export async function resendVerification(req: Request, res: Response) {
     const { email } = resendVerificationSchema.parse(req.body); // ZodError → 400
 
+    if (outboxEnabled()) {
+        await prisma.$transaction(async tx => {
+            const user = await tx.user.findUnique({ where: { email } });
+            if (user && !user.verified) await enqueueAuthEmail(tx, user, 'EMAIL_VERIFY');
+        });
+        return res.status(200).json({ message: NEUTRAL_RESEND_MESSAGE });
+    }
     const user = await prisma.user.findUnique({ where: { email } });
     if (user && !user.verified) {
         // Fire-and-forget, mirroring register(): keep the response fast + timing-flat.
@@ -138,6 +191,13 @@ const NEUTRAL_FORGOT_PASSWORD_MESSAGE = 'If that email is registered, a password
 export async function forgotPassword(req: Request, res: Response) {
     const { email } = req.body as ForgotPasswordInput;
 
+    if (outboxEnabled()) {
+        await prisma.$transaction(async tx => {
+            const user = await tx.user.findUnique({ where: { email } });
+            if (user) await enqueueAuthEmail(tx, user, 'PASSWORD_RESET');
+        });
+        return res.status(200).json({ message: NEUTRAL_FORGOT_PASSWORD_MESSAGE });
+    }
     const user = await prisma.user.findUnique({ where: { email } });
     if (user) {
         void (async () => {
@@ -172,12 +232,15 @@ export async function resetPassword(req: Request, res: Response) {
 
 // --- Login ---
 export async function login(req: Request, res: Response) {
-    const { email, password } = req.body as LoginInput;
+    const { email, password, totpCode, recoveryCode } = req.body as LoginInput;
 
     const user = await prisma.user.findUnique({ where: { email } });
 
-    // Always hash even if user not found — prevents timing-based enumeration
-    const passwordHash = user?.passwordHash ?? '$2b$12$invalidhashfortimingprotection';
+    // Always run a full bcrypt comparison, even when the email is unknown, so
+    // response time doesn't reveal which emails are registered. The stand-in
+    // must be a REAL hash at the same cost: the old literal placeholder was not
+    // valid bcrypt and was rejected in ~0 ms versus ~200 ms for a real account.
+    const passwordHash = user?.passwordHash ?? await unknownEmailHash();
     const isValid = await verify(password, passwordHash);
 
     if (!user || !isValid) {
@@ -194,6 +257,34 @@ export async function login(req: Request, res: Response) {
         });
     }
 
+    // Checked after the password so an attacker learns nothing about an account
+    // they cannot sign in to.
+    if (user.suspendedAt) {
+        return res.status(403).json({ error: 'This account has been suspended. Please contact support.', code: 'ACCOUNT_SUSPENDED' });
+    }
+
+    // Second factor, for admin accounts that turned it on. Checked only after the
+    // password (so it reveals nothing to someone without credentials) and before
+    // any token exists.
+    if (user.twoFactorEnabled && (user.role === 'ADMIN' || user.role === 'SUPERADMIN')) {
+        if (!totpCode && !recoveryCode) {
+            return res.status(403).json({ error: 'A two-factor code is required to sign in.', code: 'TWO_FACTOR_REQUIRED' });
+        }
+        let ok: boolean;
+        try {
+            ok = await verifySecondFactor(user, { totpCode, recoveryCode });
+        } catch (err) {
+            // Fail closed: without the key the code cannot be checked, so nobody gets in on a guess.
+            if (err instanceof SecretBoxUnavailableError) {
+                return res.status(503).json({ error: 'Two-factor sign-in is temporarily unavailable.', code: 'TWO_FACTOR_UNAVAILABLE' });
+            }
+            throw err;
+        }
+        if (!ok) {
+            return res.status(401).json({ error: 'That verification code is not valid.', code: 'INVALID_TWO_FACTOR_CODE' });
+        }
+    }
+
     const { accessToken, refreshTokenPlaintext } = await issueTokenPair(user);
 
     if (user.role === 'ADMIN' || user.role === 'SUPERADMIN') {
@@ -207,7 +298,7 @@ export async function login(req: Request, res: Response) {
         });
     }
 
-    res.cookie(REFRESH_COOKIE_NAME, refreshTokenPlaintext, refreshCookieOptions);
+    setSessionCookies(res, refreshTokenPlaintext);
 
     return res.json({
         accessToken,
@@ -220,13 +311,15 @@ export async function refresh(req: Request, res: Response) {
     const token = req.cookies?.[REFRESH_COOKIE_NAME];
 
     if (!token) {
+        // Drop a stale hint so the storefront stops asking on every page load.
+        clearSessionCookies(res);
         return res.status(401).json({ error: 'No refresh token' });
     }
 
     try {
         const { accessToken, refreshTokenPlaintext, user } = await rotateRefreshToken(token);
 
-        res.cookie(REFRESH_COOKIE_NAME, refreshTokenPlaintext, refreshCookieOptions);
+        setSessionCookies(res, refreshTokenPlaintext);
 
         return res.json({
             accessToken,
@@ -234,7 +327,7 @@ export async function refresh(req: Request, res: Response) {
         });
     } catch (err: unknown) {
         // Clear cookie on any token error
-        res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
+        clearSessionCookies(res);
 
         const message = err instanceof Error ? err.message : '';
         if (message === 'TOKEN_REUSE_DETECTED') {
@@ -254,14 +347,14 @@ export async function logout(req: Request, res: Response) {
         await revokeTokenFamily(token);
     }
 
-    res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
+    clearSessionCookies(res);
     return res.json({ message: 'Logged out successfully' });
 }
 
 // --- Logout everywhere (all devices) ---
 export async function logoutAll(req: Request, res: Response) {
     await revokeAllUserTokens(req.user!.userId);
-    res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
+    clearSessionCookies(res);
     return res.json({ message: 'Logged out on all devices' });
 }
 

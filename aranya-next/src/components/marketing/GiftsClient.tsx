@@ -2,18 +2,20 @@
 
 import * as React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import type { Market, Spice } from "@/lib/types";
-import { GIFTS, GIFT_OCCASIONS, type GiftSet, giftCatalog, giftPrice, giftFmt, giftAlaCarte, giftSavePct } from "@/lib/gifts-data";
-// gifts prop: live data from backend; falls back to static GIFTS when null
+import { GIFT_OCCASIONS, type GiftSet, giftCatalog, giftPrice, giftFmt, giftAlaCarte, giftSavePct } from "@/lib/gifts-data";
+// gifts prop: live data from backend, or the page's server-side demo fallback
 import { Reveal } from "../primitives/Reveal";
 import { Liyawel, Eyebrow } from "../primitives/Motif";
 import { Seal } from "../primitives/Seal";
 import { ImageSlot } from "../primitives/ImageSlot";
 import { useMarket } from "../MarketContext";
 import { useCart } from "../CartContext";
+import { giftImage } from "@/lib/image-assets";
 
 // Gift Sets page (ported from gifts.jsx). Curated bundles priced from CATALOG;
-// GiftBox is a styled top-down "ribboned box" placeholder. Adds a set to the
+// GiftBox uses generated set photography where available. Adds a set to the
 // shared cart as a single line.
 
 function GIcon({ name, size = 22, stroke = "var(--brand)", w = 1.6 }: { name: string; size?: number; stroke?: string; w?: number }) {
@@ -35,6 +37,12 @@ function GiftBadge({ kind }: { kind: string }) {
 }
 
 function GiftBox({ set, ratio = "4 / 3" }: { set: GiftSet; ratio?: string }) {
+  const src = giftImage(set.id);
+  if (src) {
+    return <div style={{ position: "relative", width: "100%", aspectRatio: ratio, overflow: "hidden" }}>
+      <Image src={src} alt="" fill sizes="(max-width: 720px) calc(100vw - 80px), (max-width: 1024px) calc(50vw - 50px), (max-width: 1280px) calc(33vw - 43px), 380px" style={{ objectFit: "cover" }} />
+    </div>;
+  }
   const dots = set.contents.map((nm) => (giftCatalog(nm) || ({} as { color?: string })).color || set.color);
   return (
     <div className="grain" style={{ position: "relative", width: "100%", aspectRatio: ratio, overflow: "hidden", background: `radial-gradient(120% 120% at 50% 0%, ${set.surface} 0%, ${set.surface} 46%, rgba(0,0,0,.06) 100%)` }}>
@@ -89,7 +97,7 @@ function GiftPrice({ set, market, size = 30 }: { set: GiftSet; market: Market; s
 function useGiftAdd() {
   const cart = useCart();
   return React.useCallback((set: GiftSet) => {
-    cart.add(set as unknown as Spice, "Gift box", "Set", 1);
+    cart.add({ ...set, imageSrc: giftImage(set.id) } as unknown as Spice, "Gift box", "Set", 1);
     cart.openCart();
   }, [cart]);
 }
@@ -98,7 +106,7 @@ function GiftHero({ market, onShop }: { market: Market; onShop: () => void }) {
   const btn = market === "local" ? "btn btn-local" : "btn btn-intl";
   return (
     <header data-hero style={{ position: "relative", minHeight: "90vh", background: "#161412", color: "#FDFAF5", overflow: "hidden", display: "flex", alignItems: "flex-end" }}>
-      <ImageSlot id="gift-hero" shape="rect" fit="cover" placeholder="Drop a gifting photo — ribboned spice boxes, a wrapped gift being handed over" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
+      <ImageSlot id="gift-hero" shape="rect" fit="cover" priority sizes="100vw" placeholder="Drop a gifting photo — ribboned spice boxes, a wrapped gift being handed over" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(150deg, rgba(15,110,86,.34), rgba(11,16,13,.6))", mixBlendMode: "multiply", pointerEvents: "none" }} />
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(10,8,6,.5) 0%, transparent 28%, transparent 46%, rgba(10,8,6,.84) 100%)", pointerEvents: "none" }} />
       <div className="home-section-pad" style={{ position: "relative", maxWidth: 1280, margin: "0 auto", padding: "0 40px 84px", width: "100%" }}>
@@ -134,7 +142,7 @@ function GiftHero({ market, onShop }: { market: Market; onShop: () => void }) {
   );
 }
 
-function FeaturedSet({ gifts, market, gridRef }: { gifts: GiftSet[]; market: Market; gridRef: React.RefObject<HTMLElement> }) {
+function FeaturedSet({ gifts, market, gridRef }: { gifts: GiftSet[]; market: Market; gridRef: React.RefObject<HTMLElement | null> }) {
   const set = gifts.find((g) => g.featured) || gifts[0];
   const [added, setAdded] = React.useState(false);
   const giftAdd = useGiftAdd();
@@ -224,7 +232,7 @@ function BuildYourOwn() {
   );
 }
 
-function GiftGrid({ gifts, market, gridRef }: { gifts: GiftSet[]; market: Market; gridRef: React.RefObject<HTMLElement> }) {
+function GiftGrid({ gifts, market, gridRef }: { gifts: GiftSet[]; market: Market; gridRef: React.RefObject<HTMLElement | null> }) {
   const sets = gifts.filter((g) => !g.featured);
   return (
     <section ref={gridRef as React.RefObject<HTMLDivElement>} id="sets" style={{ background: "var(--bg)", padding: "20px 0 100px", scrollMarginTop: 90 }}>
@@ -333,9 +341,8 @@ function GiftCorporate({ market }: { market: Market }) {
   );
 }
 
-export function GiftsClient({ gifts: liveGifts }: { gifts?: GiftSet[] }) {
+export function GiftsClient({ gifts }: { gifts: GiftSet[] }) {
   const { market } = useMarket();
-  const gifts = liveGifts ?? GIFTS;
   const gridRef = React.useRef<HTMLElement>(null);
   const scrollToGrid = () => { if (gridRef.current) gridRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); };
   return (

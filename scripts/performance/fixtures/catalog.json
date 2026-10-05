@@ -1,0 +1,2057 @@
+{
+  "capturedAt": "2026-09-30T13:14:38.027Z",
+  "source": "read-only public database snapshot",
+  "products": [
+    {
+      "id": "cmq5ldg1w000zygtxeadq5gwx",
+      "name": "Black Peppercorns",
+      "slug": "black-peppercorns",
+      "color": "#3C3A36",
+      "latin": "Piper nigrum",
+      "_count": {
+        "reviews": 0,
+        "orderItems": 0
+      },
+      "images": [
+        {
+          "id": "cmq5ldg6m0016ygtxtnkdgyy1",
+          "url": "https://res.cloudinary.com/aranya/image/upload/products/black-peppercorns.jpg",
+          "altText": "Black Peppercorns",
+          "position": 0,
+          "publicId": null,
+          "createdAt": "2026-06-08T19:16:20.909",
+          "productId": "cmq5ldg1w000zygtxeadq5gwx"
+        }
+      ],
+      "market": "BOTH",
+      "status": "ACTIVE",
+      "flavour": [],
+      "category": {
+        "id": "cmq5lddtg0000ygtxd114mgi5",
+        "name": "Whole Spices",
+        "slug": "whole-spices"
+      },
+      "featured": true,
+      "variants": [
+        {
+          "id": "cmq5ldg440010ygtxq5agdu11",
+          "sku": "BPC-50-LK",
+          "price": "882.00",
+          "stock": 120,
+          "market": "LOCAL",
+          "weight": 50,
+          "currency": "LKR",
+          "productId": "cmq5ldg1w000zygtxeadq5gwx",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldg440011ygtxcu2tp9py",
+          "sku": "BPC-50-INT",
+          "price": "5.94",
+          "stock": 120,
+          "market": "INTERNATIONAL",
+          "weight": 50,
+          "currency": "USD",
+          "productId": "cmq5ldg1w000zygtxeadq5gwx",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldg440012ygtxnlv9l3ts",
+          "sku": "BPC-100-LK",
+          "price": "1470.00",
+          "stock": 90,
+          "market": "LOCAL",
+          "weight": 100,
+          "currency": "LKR",
+          "productId": "cmq5ldg1w000zygtxeadq5gwx",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldg440013ygtxdqifd1m5",
+          "sku": "BPC-100-INT",
+          "price": "9.90",
+          "stock": 90,
+          "market": "INTERNATIONAL",
+          "weight": 100,
+          "currency": "USD",
+          "productId": "cmq5ldg1w000zygtxeadq5gwx",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldg440014ygtxc1n6m62c",
+          "sku": "BPC-250-LK",
+          "price": "3381.00",
+          "stock": 40,
+          "market": "LOCAL",
+          "weight": 250,
+          "currency": "LKR",
+          "productId": "cmq5ldg1w000zygtxeadq5gwx",
+          "packagingDesc": "Large resealable foil bag — value pack",
+          "packagingType": "foil_bag"
+        },
+        {
+          "id": "cmq5ldg440015ygtxqbrl2028",
+          "sku": "BPC-250-INT",
+          "price": "22.77",
+          "stock": 40,
+          "market": "INTERNATIONAL",
+          "weight": 250,
+          "currency": "USD",
+          "productId": "cmq5ldg1w000zygtxeadq5gwx",
+          "packagingDesc": "Premium gift tin with ribbon and branded card",
+          "packagingType": "gift_tin"
+        }
+      ],
+      "createdAt": "2026-06-08T19:16:20.909",
+      "ratingAvg": 0,
+      "updatedAt": "2026-06-17T02:07:02.202",
+      "categoryId": "cmq5lddtg0000ygtxd114mgi5",
+      "description": "Classic Ceylon black peppercorns grown at Hill Country altitude. Bold, bright heat with subtle citrus notes — far more complex than the supermarket staple.",
+      "originLabel": "Hill Country, Sri Lanka",
+      "searchVector": null,
+      "certifications": [
+        "BESTSELLER"
+      ]
+    },
+    {
+      "id": "cmq5ldhc9001nygtxrk794d9z",
+      "name": "Ceylon Cinnamon, Ground",
+      "slug": "ceylon-cinnamon-ground",
+      "color": "#A85A1B",
+      "latin": "Cinnamomum verum",
+      "_count": {
+        "reviews": 0,
+        "orderItems": 0
+      },
+      "images": [
+        {
+          "id": "cmq5ldhh7001uygtxlyn5r21e",
+          "url": "https://res.cloudinary.com/aranya/image/upload/products/ceylon-cinnamon-ground.jpg",
+          "altText": "Ceylon Cinnamon, Ground",
+          "position": 0,
+          "publicId": null,
+          "createdAt": "2026-06-08T19:16:22.607",
+          "productId": "cmq5ldhc9001nygtxrk794d9z"
+        }
+      ],
+      "market": "BOTH",
+      "status": "ACTIVE",
+      "flavour": [],
+      "category": {
+        "id": "cmq5lddya0001ygtx8uspa3h9",
+        "name": "Ground",
+        "slug": "ground"
+      },
+      "featured": false,
+      "variants": [
+        {
+          "id": "cmq5ldheq001oygtxsbspph1l",
+          "sku": "CCG-50-LK",
+          "price": "1158.00",
+          "stock": 120,
+          "market": "LOCAL",
+          "weight": 50,
+          "currency": "LKR",
+          "productId": "cmq5ldhc9001nygtxrk794d9z",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldheq001pygtxvwbwxbn8",
+          "sku": "CCG-50-INT",
+          "price": "7.80",
+          "stock": 120,
+          "market": "INTERNATIONAL",
+          "weight": 50,
+          "currency": "USD",
+          "productId": "cmq5ldhc9001nygtxrk794d9z",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldheq001qygtx6tbvw2vv",
+          "sku": "CCG-100-LK",
+          "price": "1930.00",
+          "stock": 90,
+          "market": "LOCAL",
+          "weight": 100,
+          "currency": "LKR",
+          "productId": "cmq5ldhc9001nygtxrk794d9z",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldheq001rygtxf79au4z9",
+          "sku": "CCG-100-INT",
+          "price": "13.00",
+          "stock": 90,
+          "market": "INTERNATIONAL",
+          "weight": 100,
+          "currency": "USD",
+          "productId": "cmq5ldhc9001nygtxrk794d9z",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldheq001sygtxvqv4ajpb",
+          "sku": "CCG-250-LK",
+          "price": "4439.00",
+          "stock": 40,
+          "market": "LOCAL",
+          "weight": 250,
+          "currency": "LKR",
+          "productId": "cmq5ldhc9001nygtxrk794d9z",
+          "packagingDesc": "Large resealable foil bag — value pack",
+          "packagingType": "foil_bag"
+        },
+        {
+          "id": "cmq5ldheq001tygtxv0dhg2sg",
+          "sku": "CCG-250-INT",
+          "price": "29.90",
+          "stock": 40,
+          "market": "INTERNATIONAL",
+          "weight": 250,
+          "currency": "USD",
+          "productId": "cmq5ldhc9001nygtxrk794d9z",
+          "packagingDesc": "Premium gift tin with ribbon and branded card",
+          "packagingType": "gift_tin"
+        }
+      ],
+      "createdAt": "2026-06-08T19:16:22.607",
+      "ratingAvg": 0,
+      "updatedAt": "2026-06-08T19:16:22.607",
+      "categoryId": "cmq5lddya0001ygtx8uspa3h9",
+      "description": "Stone-ground from Matale Hills Ceylon cinnamon. The same true cinnamon, milled fine for seamless blending in bakes, curries, and warming drinks.",
+      "originLabel": "Matale Hills, Sri Lanka",
+      "searchVector": null,
+      "certifications": [
+        "CEYLON_GI"
+      ]
+    },
+    {
+      "id": "cmq5ldebf0003ygtx7hz9wyp9",
+      "name": "Ceylon Cinnamon Quills",
+      "slug": "ceylon-cinnamon-quills",
+      "color": "#B5651D",
+      "latin": "Cinnamomum verum",
+      "_count": {
+        "reviews": 0,
+        "orderItems": 1
+      },
+      "images": [
+        {
+          "id": "cmq5ldegc000aygtxmnphbh90",
+          "url": "https://res.cloudinary.com/aranya/image/upload/products/ceylon-cinnamon-quills.jpg",
+          "altText": "Ceylon Cinnamon Quills",
+          "position": 0,
+          "publicId": null,
+          "createdAt": "2026-06-08T19:16:18.616",
+          "productId": "cmq5ldebf0003ygtx7hz9wyp9"
+        }
+      ],
+      "market": "BOTH",
+      "status": "ACTIVE",
+      "flavour": [],
+      "category": {
+        "id": "cmq5lddtg0000ygtxd114mgi5",
+        "name": "Whole Spices",
+        "slug": "whole-spices"
+      },
+      "featured": true,
+      "variants": [
+        {
+          "id": "cmq5ldee40004ygtx45569u1k",
+          "sku": "CCQ-50-LK",
+          "price": "1290.00",
+          "stock": 120,
+          "market": "LOCAL",
+          "weight": 50,
+          "currency": "LKR",
+          "productId": "cmq5ldebf0003ygtx7hz9wyp9",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldee40005ygtxeqr4o1no",
+          "sku": "CCQ-50-INT",
+          "price": "8.70",
+          "stock": 120,
+          "market": "INTERNATIONAL",
+          "weight": 50,
+          "currency": "USD",
+          "productId": "cmq5ldebf0003ygtx7hz9wyp9",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldee40006ygtx3ae187sq",
+          "sku": "CCQ-100-LK",
+          "price": "2150.00",
+          "stock": 90,
+          "market": "LOCAL",
+          "weight": 100,
+          "currency": "LKR",
+          "productId": "cmq5ldebf0003ygtx7hz9wyp9",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldee40007ygtxxprh0lrh",
+          "sku": "CCQ-100-INT",
+          "price": "14.50",
+          "stock": 89,
+          "market": "INTERNATIONAL",
+          "weight": 100,
+          "currency": "USD",
+          "productId": "cmq5ldebf0003ygtx7hz9wyp9",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldee40008ygtxnh3rd23h",
+          "sku": "CCQ-250-LK",
+          "price": "4945.00",
+          "stock": 40,
+          "market": "LOCAL",
+          "weight": 250,
+          "currency": "LKR",
+          "productId": "cmq5ldebf0003ygtx7hz9wyp9",
+          "packagingDesc": "Large resealable foil bag — value pack",
+          "packagingType": "foil_bag"
+        },
+        {
+          "id": "cmq5ldee50009ygtxutxvhumw",
+          "sku": "CCQ-250-INT",
+          "price": "33.35",
+          "stock": 40,
+          "market": "INTERNATIONAL",
+          "weight": 250,
+          "currency": "USD",
+          "productId": "cmq5ldebf0003ygtx7hz9wyp9",
+          "packagingDesc": "Premium gift tin with ribbon and branded card",
+          "packagingType": "gift_tin"
+        }
+      ],
+      "createdAt": "2026-06-08T19:16:18.616",
+      "ratingAvg": 0,
+      "updatedAt": "2026-06-08T19:16:18.616",
+      "categoryId": "cmq5lddtg0000ygtxd114mgi5",
+      "description": "Hand-rolled true cinnamon quills from the Matale Hills. Thin, delicate, and layered — unmistakably Ceylon. Fragrant, sweet, and entirely coumarin-free.",
+      "originLabel": "Matale Hills, Sri Lanka",
+      "searchVector": null,
+      "certifications": [
+        "CEYLON_GI",
+        "BESTSELLER"
+      ]
+    },
+    {
+      "id": "cmq5ldimx002bygtx8gz1t7tw",
+      "name": "Ceylon Curry Powder",
+      "slug": "ceylon-curry-powder",
+      "color": "#9A5B22",
+      "latin": "Roasted estate blend",
+      "_count": {
+        "reviews": 0,
+        "orderItems": 0
+      },
+      "images": [
+        {
+          "id": "cmq5ldirl002iygtxamqcdzbs",
+          "url": "https://res.cloudinary.com/aranya/image/upload/products/ceylon-curry-powder.jpg",
+          "altText": "Ceylon Curry Powder",
+          "position": 0,
+          "publicId": null,
+          "createdAt": "2026-06-08T19:16:24.276",
+          "productId": "cmq5ldimx002bygtx8gz1t7tw"
+        }
+      ],
+      "market": "BOTH",
+      "status": "ACTIVE",
+      "flavour": [],
+      "category": {
+        "id": "cmq5lde2i0002ygtxj91ifmu8",
+        "name": "Blends",
+        "slug": "blends"
+      },
+      "featured": true,
+      "variants": [
+        {
+          "id": "cmq5ldipf002cygtxsiov2hs4",
+          "sku": "CCP-50-LK",
+          "price": "1224.00",
+          "stock": 120,
+          "market": "LOCAL",
+          "weight": 50,
+          "currency": "LKR",
+          "productId": "cmq5ldimx002bygtx8gz1t7tw",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldipf002dygtxeoowsrlu",
+          "sku": "CCP-50-INT",
+          "price": "8.25",
+          "stock": 120,
+          "market": "INTERNATIONAL",
+          "weight": 50,
+          "currency": "USD",
+          "productId": "cmq5ldimx002bygtx8gz1t7tw",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldipf002eygtxrrbxrq2c",
+          "sku": "CCP-100-LK",
+          "price": "2040.00",
+          "stock": 90,
+          "market": "LOCAL",
+          "weight": 100,
+          "currency": "LKR",
+          "productId": "cmq5ldimx002bygtx8gz1t7tw",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldipf002fygtxcpkzdq0z",
+          "sku": "CCP-100-INT",
+          "price": "13.75",
+          "stock": 90,
+          "market": "INTERNATIONAL",
+          "weight": 100,
+          "currency": "USD",
+          "productId": "cmq5ldimx002bygtx8gz1t7tw",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldipf002gygtxdt27shbe",
+          "sku": "CCP-250-LK",
+          "price": "4692.00",
+          "stock": 40,
+          "market": "LOCAL",
+          "weight": 250,
+          "currency": "LKR",
+          "productId": "cmq5ldimx002bygtx8gz1t7tw",
+          "packagingDesc": "Large resealable foil bag — value pack",
+          "packagingType": "foil_bag"
+        },
+        {
+          "id": "cmq5ldipf002hygtxjue9r0y8",
+          "sku": "CCP-250-INT",
+          "price": "31.62",
+          "stock": 40,
+          "market": "INTERNATIONAL",
+          "weight": 250,
+          "currency": "USD",
+          "productId": "cmq5ldimx002bygtx8gz1t7tw",
+          "packagingDesc": "Premium gift tin with ribbon and branded card",
+          "packagingType": "gift_tin"
+        }
+      ],
+      "createdAt": "2026-06-08T19:16:24.276",
+      "ratingAvg": 0,
+      "updatedAt": "2026-06-08T19:16:24.276",
+      "categoryId": "cmq5lde2i0002ygtxj91ifmu8",
+      "description": "A roasted estate blend crafted in Kandy. Earthy, warm, and pungent — balanced the traditional way, with proportions refined over three generations.",
+      "originLabel": "Blended in Kandy, Sri Lanka",
+      "searchVector": null,
+      "certifications": [
+        "BESTSELLER"
+      ]
+    },
+    {
+      "id": "cmn6znsdf0003g0txjuv7vttb",
+      "name": "Ceylon True Cinnamon",
+      "slug": "ceylon-true-cinnamon",
+      "color": null,
+      "latin": null,
+      "_count": {
+        "reviews": 0,
+        "orderItems": 0
+      },
+      "images": [
+        {
+          "id": "cmn6znsir0008g0txepgi3ngj",
+          "url": "https://res.cloudinary.com/demo/image/upload/cinnamon.jpg",
+          "altText": "Ceylon cinnamon sticks",
+          "position": 0,
+          "publicId": null,
+          "createdAt": "2026-03-26T04:44:57.126",
+          "productId": "cmn6znsdf0003g0txjuv7vttb"
+        }
+      ],
+      "market": "BOTH",
+      "status": "ACTIVE",
+      "flavour": [],
+      "category": {
+        "id": "cmn6znqxa0000g0txv4b5m8c7",
+        "name": "Spices",
+        "slug": "spices"
+      },
+      "featured": true,
+      "variants": [
+        {
+          "id": "cmn6znsg90004g0txcgrlfg42",
+          "sku": "CIN-100-LK",
+          "price": "650.00",
+          "stock": 85,
+          "market": "LOCAL",
+          "weight": 100,
+          "currency": "LKR",
+          "productId": "cmn6znsdf0003g0txjuv7vttb",
+          "packagingDesc": "Quality kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmn6znsg90006g0tx3treh3po",
+          "sku": "CIN-100-INT",
+          "price": "14.90",
+          "stock": 85,
+          "market": "INTERNATIONAL",
+          "weight": 100,
+          "currency": "USD",
+          "productId": "cmn6znsdf0003g0txjuv7vttb",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmn6znsg90005g0txxssf98j5",
+          "sku": "CIN-250-LK",
+          "price": "1400.00",
+          "stock": 40,
+          "market": "LOCAL",
+          "weight": 250,
+          "currency": "LKR",
+          "productId": "cmn6znsdf0003g0txjuv7vttb",
+          "packagingDesc": "Large resealable foil bag — value pack",
+          "packagingType": "foil_bag"
+        },
+        {
+          "id": "cmn6znsga0007g0txtq2exqda",
+          "sku": "CIN-250-INT",
+          "price": "32.00",
+          "stock": 40,
+          "market": "INTERNATIONAL",
+          "weight": 250,
+          "currency": "USD",
+          "productId": "cmn6znsdf0003g0txjuv7vttb",
+          "packagingDesc": "Premium gift tin with ribbon and branded card",
+          "packagingType": "gift_tin"
+        }
+      ],
+      "createdAt": "2026-03-26T04:44:57.126",
+      "ratingAvg": 0,
+      "updatedAt": "2026-03-26T04:44:57.126",
+      "categoryId": "cmn6znqxa0000g0txv4b5m8c7",
+      "description": "The world's finest cinnamon, grown in the lowlands of Sri Lanka. Delicate, sweet, and complex — nothing like the cassia sold in supermarkets.",
+      "originLabel": null,
+      "searchVector": null,
+      "certifications": [
+        "ORGANIC",
+        "CEYLON_GI",
+        "FAIR_TRADE"
+      ]
+    },
+    {
+      "id": "cmq5ldeqy000bygtxeds1xq0m",
+      "name": "Green Cardamom Pods",
+      "slug": "green-cardamom-pods",
+      "color": "#7C9A5A",
+      "latin": "Elettaria cardamomum",
+      "_count": {
+        "reviews": 0,
+        "orderItems": 0
+      },
+      "images": [
+        {
+          "id": "cmq5ldevw000iygtxtqih5ro3",
+          "url": "https://res.cloudinary.com/aranya/image/upload/products/green-cardamom-pods.jpg",
+          "altText": "Green Cardamom Pods",
+          "position": 0,
+          "publicId": null,
+          "createdAt": "2026-06-08T19:16:19.239",
+          "productId": "cmq5ldeqy000bygtxeds1xq0m"
+        }
+      ],
+      "market": "BOTH",
+      "status": "ACTIVE",
+      "flavour": [],
+      "category": {
+        "id": "cmq5lddtg0000ygtxd114mgi5",
+        "name": "Whole Spices",
+        "slug": "whole-spices"
+      },
+      "featured": true,
+      "variants": [
+        {
+          "id": "cmq5ldeth000cygtxx3ormbwm",
+          "sku": "GCP-50-LK",
+          "price": "1608.00",
+          "stock": 120,
+          "market": "LOCAL",
+          "weight": 50,
+          "currency": "LKR",
+          "productId": "cmq5ldeqy000bygtxeds1xq0m",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldeth000dygtxcvaz0r8f",
+          "sku": "GCP-50-INT",
+          "price": "10.80",
+          "stock": 120,
+          "market": "INTERNATIONAL",
+          "weight": 50,
+          "currency": "USD",
+          "productId": "cmq5ldeqy000bygtxeds1xq0m",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldeth000eygtxssqz9qs4",
+          "sku": "GCP-100-LK",
+          "price": "2680.00",
+          "stock": 90,
+          "market": "LOCAL",
+          "weight": 100,
+          "currency": "LKR",
+          "productId": "cmq5ldeqy000bygtxeds1xq0m",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldeth000fygtxhfa0x0qq",
+          "sku": "GCP-100-INT",
+          "price": "18.00",
+          "stock": 90,
+          "market": "INTERNATIONAL",
+          "weight": 100,
+          "currency": "USD",
+          "productId": "cmq5ldeqy000bygtxeds1xq0m",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldeth000gygtxidc1i7qo",
+          "sku": "GCP-250-LK",
+          "price": "6164.00",
+          "stock": 40,
+          "market": "LOCAL",
+          "weight": 250,
+          "currency": "LKR",
+          "productId": "cmq5ldeqy000bygtxeds1xq0m",
+          "packagingDesc": "Large resealable foil bag — value pack",
+          "packagingType": "foil_bag"
+        },
+        {
+          "id": "cmq5ldeti000hygtxm496y19b",
+          "sku": "GCP-250-INT",
+          "price": "41.40",
+          "stock": 40,
+          "market": "INTERNATIONAL",
+          "weight": 250,
+          "currency": "USD",
+          "productId": "cmq5ldeqy000bygtxeds1xq0m",
+          "packagingDesc": "Premium gift tin with ribbon and branded card",
+          "packagingType": "gift_tin"
+        }
+      ],
+      "createdAt": "2026-06-08T19:16:19.239",
+      "ratingAvg": 0,
+      "updatedAt": "2026-06-08T19:16:19.239",
+      "categoryId": "cmq5lddtg0000ygtxd114mgi5",
+      "description": "Plump, intensely aromatic pods from Kandy's high-altitude gardens. GI-certified and hand-sorted — use whole in rice, crush for chai, or grind for pastry.",
+      "originLabel": "Kandy District, Sri Lanka",
+      "searchVector": null,
+      "certifications": [
+        "CEYLON_GI"
+      ]
+    },
+    {
+      "id": "cmq5ldi7m0023ygtxvnviyd7m",
+      "name": "Ground Ginger",
+      "slug": "ground-ginger",
+      "color": "#C99A4E",
+      "latin": "Zingiber officinale",
+      "_count": {
+        "reviews": 0,
+        "orderItems": 0
+      },
+      "images": [
+        {
+          "id": "cmq5ldic3002aygtxqd7kdd6o",
+          "url": "https://res.cloudinary.com/aranya/image/upload/products/ground-ginger.jpg",
+          "altText": "Ground Ginger",
+          "position": 0,
+          "publicId": null,
+          "createdAt": "2026-06-08T19:16:23.715",
+          "productId": "cmq5ldi7m0023ygtxvnviyd7m"
+        }
+      ],
+      "market": "BOTH",
+      "status": "ACTIVE",
+      "flavour": [],
+      "category": {
+        "id": "cmq5lddya0001ygtx8uspa3h9",
+        "name": "Ground",
+        "slug": "ground"
+      },
+      "featured": false,
+      "variants": [
+        {
+          "id": "cmq5ldia50024ygtxssyroas3",
+          "sku": "GGI-50-LK",
+          "price": "912.00",
+          "stock": 120,
+          "market": "LOCAL",
+          "weight": 50,
+          "currency": "LKR",
+          "productId": "cmq5ldi7m0023ygtxvnviyd7m",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldia50025ygtxel2nbvm0",
+          "sku": "GGI-50-INT",
+          "price": "6.15",
+          "stock": 120,
+          "market": "INTERNATIONAL",
+          "weight": 50,
+          "currency": "USD",
+          "productId": "cmq5ldi7m0023ygtxvnviyd7m",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldia50026ygtxio7d731r",
+          "sku": "GGI-100-LK",
+          "price": "1520.00",
+          "stock": 90,
+          "market": "LOCAL",
+          "weight": 100,
+          "currency": "LKR",
+          "productId": "cmq5ldi7m0023ygtxvnviyd7m",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldia50027ygtxlswnapni",
+          "sku": "GGI-100-INT",
+          "price": "10.25",
+          "stock": 90,
+          "market": "INTERNATIONAL",
+          "weight": 100,
+          "currency": "USD",
+          "productId": "cmq5ldi7m0023ygtxvnviyd7m",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldia50028ygtxi7hstn9v",
+          "sku": "GGI-250-LK",
+          "price": "3496.00",
+          "stock": 40,
+          "market": "LOCAL",
+          "weight": 250,
+          "currency": "LKR",
+          "productId": "cmq5ldi7m0023ygtxvnviyd7m",
+          "packagingDesc": "Large resealable foil bag — value pack",
+          "packagingType": "foil_bag"
+        },
+        {
+          "id": "cmq5ldia50029ygtxfibl48ml",
+          "sku": "GGI-250-INT",
+          "price": "23.58",
+          "stock": 40,
+          "market": "INTERNATIONAL",
+          "weight": 250,
+          "currency": "USD",
+          "productId": "cmq5ldi7m0023ygtxvnviyd7m",
+          "packagingDesc": "Premium gift tin with ribbon and branded card",
+          "packagingType": "gift_tin"
+        }
+      ],
+      "createdAt": "2026-06-08T19:16:23.715",
+      "ratingAvg": 0,
+      "updatedAt": "2026-06-08T19:16:23.715",
+      "categoryId": "cmq5lddya0001ygtx8uspa3h9",
+      "description": "Gampaha District ginger, dried and stone-milled. Punchy, warming, and fiercely aromatic — ideal for spiced bakes, marinades, and golden teas.",
+      "originLabel": "Gampaha District, Sri Lanka",
+      "searchVector": null,
+      "certifications": []
+    },
+    {
+      "id": "cmq5ldhru001vygtxuq7ekpzh",
+      "name": "Ground Turmeric",
+      "slug": "ground-turmeric",
+      "color": "#D99A1C",
+      "latin": "Curcuma longa",
+      "_count": {
+        "reviews": 0,
+        "orderItems": 0
+      },
+      "images": [
+        {
+          "id": "cmq5ldhwq0022ygtx6xr855sf",
+          "url": "https://res.cloudinary.com/aranya/image/upload/products/ground-turmeric.jpg",
+          "altText": "Ground Turmeric",
+          "position": 0,
+          "publicId": null,
+          "createdAt": "2026-06-08T19:16:23.172",
+          "productId": "cmq5ldhru001vygtxuq7ekpzh"
+        }
+      ],
+      "market": "BOTH",
+      "status": "ACTIVE",
+      "flavour": [],
+      "category": {
+        "id": "cmq5lddya0001ygtx8uspa3h9",
+        "name": "Ground",
+        "slug": "ground"
+      },
+      "featured": false,
+      "variants": [
+        {
+          "id": "cmq5ldhul001wygtxxfl77t82",
+          "sku": "GTU-50-LK",
+          "price": "756.00",
+          "stock": 120,
+          "market": "LOCAL",
+          "weight": 50,
+          "currency": "LKR",
+          "productId": "cmq5ldhru001vygtxuq7ekpzh",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldhul001xygtxrgpaolch",
+          "sku": "GTU-50-INT",
+          "price": "5.10",
+          "stock": 120,
+          "market": "INTERNATIONAL",
+          "weight": 50,
+          "currency": "USD",
+          "productId": "cmq5ldhru001vygtxuq7ekpzh",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldhul001yygtxjrj97vig",
+          "sku": "GTU-100-LK",
+          "price": "1260.00",
+          "stock": 90,
+          "market": "LOCAL",
+          "weight": 100,
+          "currency": "LKR",
+          "productId": "cmq5ldhru001vygtxuq7ekpzh",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldhul001zygtxt19a4lit",
+          "sku": "GTU-100-INT",
+          "price": "8.50",
+          "stock": 90,
+          "market": "INTERNATIONAL",
+          "weight": 100,
+          "currency": "USD",
+          "productId": "cmq5ldhru001vygtxuq7ekpzh",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldhul0020ygtxqpmlmmsd",
+          "sku": "GTU-250-LK",
+          "price": "2898.00",
+          "stock": 40,
+          "market": "LOCAL",
+          "weight": 250,
+          "currency": "LKR",
+          "productId": "cmq5ldhru001vygtxuq7ekpzh",
+          "packagingDesc": "Large resealable foil bag — value pack",
+          "packagingType": "foil_bag"
+        },
+        {
+          "id": "cmq5ldhul0021ygtxwz08ps5z",
+          "sku": "GTU-250-INT",
+          "price": "19.55",
+          "stock": 40,
+          "market": "INTERNATIONAL",
+          "weight": 250,
+          "currency": "USD",
+          "productId": "cmq5ldhru001vygtxuq7ekpzh",
+          "packagingDesc": "Premium gift tin with ribbon and branded card",
+          "packagingType": "gift_tin"
+        }
+      ],
+      "createdAt": "2026-06-08T19:16:23.172",
+      "ratingAvg": 0,
+      "updatedAt": "2026-06-08T19:16:23.172",
+      "categoryId": "cmq5lddya0001ygtx8uspa3h9",
+      "description": "Deep-orange GI-certified turmeric from Sri Lanka's Southern Province. High curcumin content, earthy-warm flavour, and an aroma that transforms any dish.",
+      "originLabel": "Southern Province, Sri Lanka",
+      "searchVector": null,
+      "certifications": [
+        "CEYLON_GI",
+        "BESTSELLER"
+      ]
+    },
+    {
+      "id": "cmq5ldj2h002jygtxttlvopmu",
+      "name": "Kandyan Garam Masala",
+      "slug": "kandyan-garam-masala",
+      "color": "#7A3E22",
+      "latin": "Hand-ground blend",
+      "_count": {
+        "reviews": 0,
+        "orderItems": 2
+      },
+      "images": [
+        {
+          "id": "cmq5ldj8b002qygtxp8z9gk55",
+          "url": "https://res.cloudinary.com/aranya/image/upload/products/kandyan-garam-masala.jpg",
+          "altText": "Kandyan Garam Masala",
+          "position": 0,
+          "publicId": null,
+          "createdAt": "2026-06-08T19:16:24.837",
+          "productId": "cmq5ldj2h002jygtxttlvopmu"
+        }
+      ],
+      "market": "BOTH",
+      "status": "ACTIVE",
+      "flavour": [],
+      "category": {
+        "id": "cmq5lde2i0002ygtxj91ifmu8",
+        "name": "Blends",
+        "slug": "blends"
+      },
+      "featured": false,
+      "variants": [
+        {
+          "id": "cmq5ldj52002kygtxz8u36ga5",
+          "sku": "KGM-50-LK",
+          "price": "1380.00",
+          "stock": 120,
+          "market": "LOCAL",
+          "weight": 50,
+          "currency": "LKR",
+          "productId": "cmq5ldj2h002jygtxttlvopmu",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldj52002lygtxkmsu1m5b",
+          "sku": "KGM-50-INT",
+          "price": "9.30",
+          "stock": 117,
+          "market": "INTERNATIONAL",
+          "weight": 50,
+          "currency": "USD",
+          "productId": "cmq5ldj2h002jygtxttlvopmu",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldj52002mygtxzai7nia1",
+          "sku": "KGM-100-LK",
+          "price": "2300.00",
+          "stock": 90,
+          "market": "LOCAL",
+          "weight": 100,
+          "currency": "LKR",
+          "productId": "cmq5ldj2h002jygtxttlvopmu",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldj52002nygtxe5hf72x7",
+          "sku": "KGM-100-INT",
+          "price": "15.50",
+          "stock": 90,
+          "market": "INTERNATIONAL",
+          "weight": 100,
+          "currency": "USD",
+          "productId": "cmq5ldj2h002jygtxttlvopmu",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldj52002oygtx5y0iem6c",
+          "sku": "KGM-250-LK",
+          "price": "5290.00",
+          "stock": 40,
+          "market": "LOCAL",
+          "weight": 250,
+          "currency": "LKR",
+          "productId": "cmq5ldj2h002jygtxttlvopmu",
+          "packagingDesc": "Large resealable foil bag — value pack",
+          "packagingType": "foil_bag"
+        },
+        {
+          "id": "cmq5ldj52002pygtxx3x77tis",
+          "sku": "KGM-250-INT",
+          "price": "35.65",
+          "stock": 40,
+          "market": "INTERNATIONAL",
+          "weight": 250,
+          "currency": "USD",
+          "productId": "cmq5ldj2h002jygtxttlvopmu",
+          "packagingDesc": "Premium gift tin with ribbon and branded card",
+          "packagingType": "gift_tin"
+        }
+      ],
+      "createdAt": "2026-06-08T19:16:24.837",
+      "ratingAvg": 0,
+      "updatedAt": "2026-06-21T13:44:23.66",
+      "categoryId": "cmq5lde2i0002ygtxj91ifmu8",
+      "description": "Hand-ground Kandyan-style garam masala. Sweeter and more floral than North Indian versions, built around Ceylon cinnamon, cardamom, and clove.",
+      "originLabel": "Blended in Kandy, Sri Lanka",
+      "searchVector": null,
+      "certifications": [
+        "NEW"
+      ]
+    },
+    {
+      "id": "cmn6znsvy0009g0txlgmo5m5b",
+      "name": "Malabar Black Pepper",
+      "slug": "malabar-black-pepper",
+      "color": null,
+      "latin": null,
+      "_count": {
+        "reviews": 0,
+        "orderItems": 0
+      },
+      "images": [
+        {
+          "id": "cmn6znt0t000gg0txl8353yz9",
+          "url": "https://res.cloudinary.com/demo/image/upload/pepper.jpg",
+          "altText": "Malabar black pepper",
+          "position": 0,
+          "publicId": null,
+          "createdAt": "2026-03-26T04:44:57.819",
+          "productId": "cmn6znsvy0009g0txlgmo5m5b"
+        }
+      ],
+      "market": "BOTH",
+      "status": "ACTIVE",
+      "flavour": [],
+      "category": {
+        "id": "cmn6znqxa0000g0txv4b5m8c7",
+        "name": "Spices",
+        "slug": "spices"
+      },
+      "featured": true,
+      "variants": [
+        {
+          "id": "cmn6znsyh000ag0txvcoapzy0",
+          "sku": "BPP-50-LK",
+          "price": "320.00",
+          "stock": 200,
+          "market": "LOCAL",
+          "weight": 50,
+          "currency": "LKR",
+          "productId": "cmn6znsvy0009g0txlgmo5m5b",
+          "packagingDesc": "Quality kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmn6znsyh000dg0txq6q9s5h7",
+          "sku": "BPP-50-INT",
+          "price": "6.99",
+          "stock": 200,
+          "market": "INTERNATIONAL",
+          "weight": 50,
+          "currency": "USD",
+          "productId": "cmn6znsvy0009g0txlgmo5m5b",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmn6znsyh000bg0txjwo1u2gy",
+          "sku": "BPP-100-LK",
+          "price": "580.00",
+          "stock": 150,
+          "market": "LOCAL",
+          "weight": 100,
+          "currency": "LKR",
+          "productId": "cmn6znsvy0009g0txlgmo5m5b",
+          "packagingDesc": "Quality kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmn6znsyh000eg0txt06r49au",
+          "sku": "BPP-100-INT",
+          "price": "11.99",
+          "stock": 150,
+          "market": "INTERNATIONAL",
+          "weight": 100,
+          "currency": "USD",
+          "productId": "cmn6znsvy0009g0txlgmo5m5b",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmn6znsyh000cg0txm1gqgo5y",
+          "sku": "BPP-250-LK",
+          "price": "1250.00",
+          "stock": 60,
+          "market": "LOCAL",
+          "weight": 250,
+          "currency": "LKR",
+          "productId": "cmn6znsvy0009g0txlgmo5m5b",
+          "packagingDesc": "Large resealable foil bag — value pack",
+          "packagingType": "foil_bag"
+        },
+        {
+          "id": "cmn6znsyh000fg0tx69x2a2lx",
+          "sku": "BPP-250-INT",
+          "price": "24.99",
+          "stock": 60,
+          "market": "INTERNATIONAL",
+          "weight": 250,
+          "currency": "USD",
+          "productId": "cmn6znsvy0009g0txlgmo5m5b",
+          "packagingDesc": "Premium gift tin with ribbon and branded card",
+          "packagingType": "gift_tin"
+        }
+      ],
+      "createdAt": "2026-03-26T04:44:57.819",
+      "ratingAvg": 0,
+      "updatedAt": "2026-03-26T04:44:57.819",
+      "categoryId": "cmn6znqxa0000g0txv4b5m8c7",
+      "description": "Bold, aromatic black pepper harvested at peak ripeness. Sun-dried to develop full pungency and complex floral notes.",
+      "originLabel": null,
+      "searchVector": null,
+      "certifications": [
+        "ORGANIC",
+        "FAIR_TRADE"
+      ]
+    },
+    {
+      "id": "cmn6zntcc000hg0txtx5kd422",
+      "name": "Single Estate Ceylon Black Tea",
+      "slug": "single-estate-ceylon-black-tea",
+      "color": null,
+      "latin": null,
+      "_count": {
+        "reviews": 0,
+        "orderItems": 2
+      },
+      "images": [
+        {
+          "id": "cmn6znthc000og0tx6pzy3qcg",
+          "url": "https://res.cloudinary.com/demo/image/upload/tea.jpg",
+          "altText": "Ceylon black tea",
+          "position": 0,
+          "publicId": null,
+          "createdAt": "2026-03-26T04:44:58.402",
+          "productId": "cmn6zntcc000hg0txtx5kd422"
+        }
+      ],
+      "market": "BOTH",
+      "status": "ACTIVE",
+      "flavour": [],
+      "category": {
+        "id": "cmn6znrp90001g0txvok1h91x",
+        "name": "Teas",
+        "slug": "teas"
+      },
+      "featured": true,
+      "variants": [
+        {
+          "id": "cmn6znteq000ig0txe4end333",
+          "sku": "TEA-50-LK",
+          "price": "450.00",
+          "stock": 95,
+          "market": "LOCAL",
+          "weight": 50,
+          "currency": "LKR",
+          "productId": "cmn6zntcc000hg0txtx5kd422",
+          "packagingDesc": "Quality kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmn6znteq000lg0txga95zl1w",
+          "sku": "TEA-50-INT",
+          "price": "9.99",
+          "stock": 95,
+          "market": "INTERNATIONAL",
+          "weight": 50,
+          "currency": "USD",
+          "productId": "cmn6zntcc000hg0txtx5kd422",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmn6znteq000jg0tx24admfd0",
+          "sku": "TEA-100-LK",
+          "price": "850.00",
+          "stock": 70,
+          "market": "LOCAL",
+          "weight": 100,
+          "currency": "LKR",
+          "productId": "cmn6zntcc000hg0txtx5kd422",
+          "packagingDesc": "Quality kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmn6znteq000mg0txkz9s8wbt",
+          "sku": "TEA-100-INT",
+          "price": "17.99",
+          "stock": 70,
+          "market": "INTERNATIONAL",
+          "weight": 100,
+          "currency": "USD",
+          "productId": "cmn6zntcc000hg0txtx5kd422",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmn6znteq000kg0tx9urwfa14",
+          "sku": "TEA-250-LK",
+          "price": "1900.00",
+          "stock": 25,
+          "market": "LOCAL",
+          "weight": 250,
+          "currency": "LKR",
+          "productId": "cmn6zntcc000hg0txtx5kd422",
+          "packagingDesc": "Large resealable foil bag — value pack",
+          "packagingType": "foil_bag"
+        },
+        {
+          "id": "cmn6znteq000ng0tx88x5wxtn",
+          "sku": "TEA-250-INT",
+          "price": "38.99",
+          "stock": 25,
+          "market": "INTERNATIONAL",
+          "weight": 250,
+          "currency": "USD",
+          "productId": "cmn6zntcc000hg0txtx5kd422",
+          "packagingDesc": "Premium gift tin with ribbon and branded card",
+          "packagingType": "gift_tin"
+        }
+      ],
+      "createdAt": "2026-03-26T04:44:58.402",
+      "ratingAvg": 0,
+      "updatedAt": "2026-03-26T04:44:58.402",
+      "categoryId": "cmn6znrp90001g0txvok1h91x",
+      "description": "High-grown from the Uva highlands at 5,000ft. Bright, brisk, and distinctively floral. Served in the finest hotels worldwide.",
+      "originLabel": null,
+      "searchVector": null,
+      "certifications": [
+        "ORGANIC",
+        "CEYLON_GI",
+        "HACCP"
+      ]
+    },
+    {
+      "id": "cmq5ldgh70017ygtx2vhikkgr",
+      "name": "White Peppercorns",
+      "slug": "white-peppercorns",
+      "color": "#B8B0A0",
+      "latin": "Piper nigrum",
+      "_count": {
+        "reviews": 0,
+        "orderItems": 0
+      },
+      "images": [
+        {
+          "id": "cmq5ldglz001eygtxud2dpsvg",
+          "url": "https://res.cloudinary.com/aranya/image/upload/products/white-peppercorns.jpg",
+          "altText": "White Peppercorns",
+          "position": 0,
+          "publicId": null,
+          "createdAt": "2026-06-08T19:16:21.477",
+          "productId": "cmq5ldgh70017ygtx2vhikkgr"
+        }
+      ],
+      "market": "BOTH",
+      "status": "ACTIVE",
+      "flavour": [],
+      "category": {
+        "id": "cmq5lddtg0000ygtxd114mgi5",
+        "name": "Whole Spices",
+        "slug": "whole-spices"
+      },
+      "featured": false,
+      "variants": [
+        {
+          "id": "cmq5ldgjo0018ygtx9lvop83m",
+          "sku": "WPC-50-LK",
+          "price": "1104.00",
+          "stock": 120,
+          "market": "LOCAL",
+          "weight": 50,
+          "currency": "LKR",
+          "productId": "cmq5ldgh70017ygtx2vhikkgr",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldgjo0019ygtxlv2yg7z2",
+          "sku": "WPC-50-INT",
+          "price": "7.44",
+          "stock": 120,
+          "market": "INTERNATIONAL",
+          "weight": 50,
+          "currency": "USD",
+          "productId": "cmq5ldgh70017ygtx2vhikkgr",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldgjo001aygtxfoi1vq4m",
+          "sku": "WPC-100-LK",
+          "price": "1840.00",
+          "stock": 90,
+          "market": "LOCAL",
+          "weight": 100,
+          "currency": "LKR",
+          "productId": "cmq5ldgh70017ygtx2vhikkgr",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldgjo001bygtxelzqk1nk",
+          "sku": "WPC-100-INT",
+          "price": "12.40",
+          "stock": 90,
+          "market": "INTERNATIONAL",
+          "weight": 100,
+          "currency": "USD",
+          "productId": "cmq5ldgh70017ygtx2vhikkgr",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldgjo001cygtxcf8ujfuh",
+          "sku": "WPC-250-LK",
+          "price": "4232.00",
+          "stock": 40,
+          "market": "LOCAL",
+          "weight": 250,
+          "currency": "LKR",
+          "productId": "cmq5ldgh70017ygtx2vhikkgr",
+          "packagingDesc": "Large resealable foil bag — value pack",
+          "packagingType": "foil_bag"
+        },
+        {
+          "id": "cmq5ldgjo001dygtx9qboz8lw",
+          "sku": "WPC-250-INT",
+          "price": "28.52",
+          "stock": 40,
+          "market": "INTERNATIONAL",
+          "weight": 250,
+          "currency": "USD",
+          "productId": "cmq5ldgh70017ygtx2vhikkgr",
+          "packagingDesc": "Premium gift tin with ribbon and branded card",
+          "packagingType": "gift_tin"
+        }
+      ],
+      "createdAt": "2026-06-08T19:16:21.477",
+      "ratingAvg": 0,
+      "updatedAt": "2026-06-08T19:16:21.477",
+      "categoryId": "cmq5lddtg0000ygtxd114mgi5",
+      "description": "Ripe pepper berries, water-processed to remove the outer hull. Milder heat, distinctly earthy — the traditional choice for white sauces and clear broths.",
+      "originLabel": "Hill Country, Sri Lanka",
+      "searchVector": null,
+      "certifications": []
+    },
+    {
+      "id": "cmq5ldf6h000jygtxyvyfpo0u",
+      "name": "Whole Cloves",
+      "slug": "whole-cloves",
+      "color": "#6B4226",
+      "latin": "Syzygium aromaticum",
+      "_count": {
+        "reviews": 0,
+        "orderItems": 0
+      },
+      "images": [
+        {
+          "id": "cmq5ldfba000qygtxhak0haa1",
+          "url": "https://res.cloudinary.com/aranya/image/upload/products/whole-cloves.jpg",
+          "altText": "Whole Cloves",
+          "position": 0,
+          "publicId": null,
+          "createdAt": "2026-06-08T19:16:19.788",
+          "productId": "cmq5ldf6h000jygtxyvyfpo0u"
+        }
+      ],
+      "market": "BOTH",
+      "status": "ACTIVE",
+      "flavour": [],
+      "category": {
+        "id": "cmq5lddtg0000ygtxd114mgi5",
+        "name": "Whole Spices",
+        "slug": "whole-spices"
+      },
+      "featured": false,
+      "variants": [
+        {
+          "id": "cmq5ldf8r000kygtxnskbsw0d",
+          "sku": "CLV-50-LK",
+          "price": "1002.00",
+          "stock": 120,
+          "market": "LOCAL",
+          "weight": 50,
+          "currency": "LKR",
+          "productId": "cmq5ldf6h000jygtxyvyfpo0u",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldf8r000lygtx2g4qdd0b",
+          "sku": "CLV-50-INT",
+          "price": "6.75",
+          "stock": 120,
+          "market": "INTERNATIONAL",
+          "weight": 50,
+          "currency": "USD",
+          "productId": "cmq5ldf6h000jygtxyvyfpo0u",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldf8r000mygtxc620auct",
+          "sku": "CLV-100-LK",
+          "price": "1670.00",
+          "stock": 90,
+          "market": "LOCAL",
+          "weight": 100,
+          "currency": "LKR",
+          "productId": "cmq5ldf6h000jygtxyvyfpo0u",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldf8r000nygtxfwagv3uo",
+          "sku": "CLV-100-INT",
+          "price": "11.25",
+          "stock": 90,
+          "market": "INTERNATIONAL",
+          "weight": 100,
+          "currency": "USD",
+          "productId": "cmq5ldf6h000jygtxyvyfpo0u",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldf8r000oygtxvxbafkkq",
+          "sku": "CLV-250-LK",
+          "price": "3841.00",
+          "stock": 40,
+          "market": "LOCAL",
+          "weight": 250,
+          "currency": "LKR",
+          "productId": "cmq5ldf6h000jygtxyvyfpo0u",
+          "packagingDesc": "Large resealable foil bag — value pack",
+          "packagingType": "foil_bag"
+        },
+        {
+          "id": "cmq5ldf8r000pygtxol2ftt1i",
+          "sku": "CLV-250-INT",
+          "price": "25.87",
+          "stock": 40,
+          "market": "INTERNATIONAL",
+          "weight": 250,
+          "currency": "USD",
+          "productId": "cmq5ldf6h000jygtxyvyfpo0u",
+          "packagingDesc": "Premium gift tin with ribbon and branded card",
+          "packagingType": "gift_tin"
+        }
+      ],
+      "createdAt": "2026-06-08T19:16:19.788",
+      "ratingAvg": 0,
+      "updatedAt": "2026-06-08T19:16:19.788",
+      "categoryId": "cmq5lddtg0000ygtxd114mgi5",
+      "description": "Dark and oily Kegalle cloves — a sign of peak volatile oil content. Intensely warm and pungent, these are the backbone of Ceylon's spice heritage.",
+      "originLabel": "Kegalle, Sri Lanka",
+      "searchVector": null,
+      "certifications": []
+    },
+    {
+      "id": "cmq5ldfm1000rygtx1ybuwr5m",
+      "name": "Whole Nutmeg",
+      "slug": "whole-nutmeg",
+      "color": "#A9683C",
+      "latin": "Myristica fragrans",
+      "_count": {
+        "reviews": 0,
+        "orderItems": 0
+      },
+      "images": [
+        {
+          "id": "cmq5ldfqs000yygtxoz0nxkem",
+          "url": "https://res.cloudinary.com/aranya/image/upload/products/whole-nutmeg.jpg",
+          "altText": "Whole Nutmeg",
+          "position": 0,
+          "publicId": null,
+          "createdAt": "2026-06-08T19:16:20.356",
+          "productId": "cmq5ldfm1000rygtx1ybuwr5m"
+        }
+      ],
+      "market": "BOTH",
+      "status": "ACTIVE",
+      "flavour": [],
+      "category": {
+        "id": "cmq5lddtg0000ygtxd114mgi5",
+        "name": "Whole Spices",
+        "slug": "whole-spices"
+      },
+      "featured": false,
+      "variants": [
+        {
+          "id": "cmq5ldfok000sygtxcd83m5hz",
+          "sku": "WNT-50-LK",
+          "price": "1494.00",
+          "stock": 120,
+          "market": "LOCAL",
+          "weight": 50,
+          "currency": "LKR",
+          "productId": "cmq5ldfm1000rygtx1ybuwr5m",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldfok000tygtxs88erm8t",
+          "sku": "WNT-50-INT",
+          "price": "10.05",
+          "stock": 120,
+          "market": "INTERNATIONAL",
+          "weight": 50,
+          "currency": "USD",
+          "productId": "cmq5ldfm1000rygtx1ybuwr5m",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldfok000uygtx8mni80aa",
+          "sku": "WNT-100-LK",
+          "price": "2490.00",
+          "stock": 90,
+          "market": "LOCAL",
+          "weight": 100,
+          "currency": "LKR",
+          "productId": "cmq5ldfm1000rygtx1ybuwr5m",
+          "packagingDesc": "Kraft stand-up resealable pouch",
+          "packagingType": "kraft_pouch"
+        },
+        {
+          "id": "cmq5ldfok000vygtxdin2jvo5",
+          "sku": "WNT-100-INT",
+          "price": "16.75",
+          "stock": 90,
+          "market": "INTERNATIONAL",
+          "weight": 100,
+          "currency": "USD",
+          "productId": "cmq5ldfm1000rygtx1ybuwr5m",
+          "packagingDesc": "Premium glass jar with embossed lid and wax seal",
+          "packagingType": "glass_jar_premium"
+        },
+        {
+          "id": "cmq5ldfok000wygtxauc1w0gj",
+          "sku": "WNT-250-LK",
+          "price": "5727.00",
+          "stock": 40,
+          "market": "LOCAL",
+          "weight": 250,
+          "currency": "LKR",
+          "productId": "cmq5ldfm1000rygtx1ybuwr5m",
+          "packagingDesc": "Large resealable foil bag — value pack",
+          "packagingType": "foil_bag"
+        },
+        {
+          "id": "cmq5ldfok000xygtxmsfvxe8a",
+          "sku": "WNT-250-INT",
+          "price": "38.53",
+          "stock": 40,
+          "market": "INTERNATIONAL",
+          "weight": 250,
+          "currency": "USD",
+          "productId": "cmq5ldfm1000rygtx1ybuwr5m",
+          "packagingDesc": "Premium gift tin with ribbon and branded card",
+          "packagingType": "gift_tin"
+        }
+      ],
+      "createdAt": "2026-06-08T19:16:20.356",
+      "ratingAvg": 0,
+      "updatedAt": "2026-06-08T19:16:20.356",
+      "categoryId": "cmq5lddtg0000ygtxd114mgi5",
+      "description": "Solid, fragrant nutmeg from Sabaragamuwa's forest gardens. Grate fresh over bechamel, rice pudding, or slow-braised lamb — the difference is immediate.",
+      "originLabel": "Sabaragamuwa, Sri Lanka",
+      "searchVector": null,
+      "certifications": []
+    }
+  ],
+  "blogs": [
+    {
+      "id": "cmn6znuvc000qg0txnnyybvrn",
+      "slug": "why-ceylon-cinnamon-is-different",
+      "tags": [
+        "cinnamon"
+      ],
+      "title": "Why Ceylon Cinnamon Is Completely Different From What You Buy at the Supermarket",
+      "status": "PUBLISHED",
+      "content": "# The Two Cinnamons\n\nMost cinnamon sold globally is **cassia** (*Cinnamomum cassia*), grown in China and Indonesia...",
+      "seoDesc": "Discover why Ceylon true cinnamon is prized worldwide and how it differs from the cassia you find in supermarkets.",
+      "seoTitle": "Ceylon vs Cassia Cinnamon: The Complete Guide",
+      "viewCount": 3,
+      "publishedAt": "2026-03-26T04:45:00.395"
+    }
+  ],
+  "recipes": [
+    {
+      "id": "cmqknck4kartghsf",
+      "dek": "The deep, almost-burnt backbone of a hill-country curry comes from roasting whole spices until they're dark as coffee. Smoky, rich and unmistakably Ceylon.",
+      "slot": "rec-blackpork",
+      "slug": "black-pork-curry",
+      "tips": [
+        "Roasting the spice past golden is the point — take it darker than feels comfortable, then trust it.",
+        "No tamarind? A squeeze of lime at the end lifts the richness just as well.",
+        "Better the next day: the black masala keeps deepening overnight."
+      ],
+      "intro": "Black curry gets its name from the colour of the roasted spice, not the meat. The trick is to dry-roast the whole spices well past golden, then grind and bloom them. Don't rush the roast; it is the entire dish.",
+      "title": "Sri Lankan Black Pork Curry",
+      "accent": "#3C3A36",
+      "course": "Curries & Mains",
+      "method": [
+        "Dry-roast the curry powder, peppercorns, cloves, cinnamon and rice in a heavy pan over medium heat, stirring constantly, until the mix turns the colour of dark coffee and smells nutty — 6–8 minutes. Cool, then grind to a powder.",
+        "Toss the pork with the turmeric and a good pinch of salt; set aside while you build the base.",
+        "Heat the oil and fry the onion with the curry leaves and lemongrass until deep golden, 8–10 minutes. Add the garlic and ginger and cook another minute.",
+        "Stir in the black roasted spice and cook for 30 seconds until fragrant, then add the pork and turn to coat in the dark masala.",
+        "Pour in the coconut milk plus a splash of water to barely cover. Bring to a gentle simmer, cover, and cook low for 60–75 minutes until the pork is spoon-tender.",
+        "Uncover for the last 15 minutes to reduce to a clinging sauce. Sharpen with a little tamarind, check the salt, and rest 10 minutes before serving with rice."
+      ],
+      "serves": 4,
+      "spices": [
+        "Ceylon Curry Powder",
+        "Black Peppercorns",
+        "Whole Cloves",
+        "Ceylon Cinnamon Quills",
+        "Ground Turmeric"
+      ],
+      "status": "PUBLISHED",
+      "cookMins": 75,
+      "featured": true,
+      "prepMins": 25,
+      "createdAt": "2026-06-19T08:08:11.491",
+      "updatedAt": "2026-06-19T08:08:11.491",
+      "difficulty": "Medium",
+      "ingredients": [
+        {
+          "group": "For the black spice",
+          "items": [
+            "3 tbsp Ceylon curry powder",
+            "1 tbsp black peppercorns",
+            "6 whole cloves",
+            "1 quill Ceylon cinnamon, snapped",
+            "2 tsp raw rice (optional, for body)"
+          ]
+        },
+        {
+          "group": "For the curry",
+          "items": [
+            "800g pork shoulder, in 4cm cubes",
+            "1 tsp ground turmeric",
+            "2 onions, finely sliced",
+            "4 garlic cloves, minced",
+            "Thumb of ginger, minced",
+            "1 sprig curry leaves",
+            "1 stalk lemongrass, bruised",
+            "400ml coconut milk",
+            "2 tbsp coconut or vegetable oil",
+            "Tamarind paste & salt, to taste"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cmqknckulbkpj0ro",
+      "dek": "Soft, pull-apart rolls with a true-cinnamon filling that perfumes rather than just heats — finished with a whisper of cardamom and nutmeg.",
+      "slot": "rec-cinnamonrolls",
+      "slug": "ceylon-cinnamon-rolls",
+      "tips": [
+        "Grind the cardamom fresh from pods just before mixing — pre-ground loses its lift fast.",
+        "A cream-cheese glaze suits the floral cinnamon better than a heavy sugar icing."
+      ],
+      "intro": "Most cinnamon rolls lean on hard cassia for a blunt heat. Swap in ground Ceylon cinnamon and the whole tray changes — honeyed, floral, almost citrus, with the warmth in the background where it belongs.",
+      "title": "Ceylon Cinnamon Rolls",
+      "accent": "#B5651D",
+      "course": "Sweet & Bakes",
+      "method": [
+        "Mix the flour, yeast, sugar, salt and ground cardamom. Add the warm milk, egg and butter, then knead 8–10 minutes to a smooth, soft dough.",
+        "Cover and prove until doubled, about 1 hour.",
+        "Beat the filling ingredients to a spreadable paste. Roll the dough into a large rectangle, about 30 × 40cm.",
+        "Spread the filling to the edges, roll up tightly from the long side, and cut into 12 even pieces.",
+        "Nestle the rolls into a lined tin, cover, and prove 30–40 minutes until puffy.",
+        "Bake at 180°C for 22–25 minutes until golden. Cool slightly, then glaze or dust as you like."
+      ],
+      "serves": 12,
+      "spices": [
+        "Ceylon Cinnamon, Ground",
+        "Green Cardamom Pods",
+        "Whole Nutmeg"
+      ],
+      "status": "PUBLISHED",
+      "cookMins": 25,
+      "featured": false,
+      "prepMins": 30,
+      "createdAt": "2026-06-19T08:08:11.491",
+      "updatedAt": "2026-06-19T08:08:11.491",
+      "difficulty": "Medium",
+      "ingredients": [
+        {
+          "group": "Dough",
+          "items": [
+            "500g strong white flour",
+            "7g instant yeast",
+            "60g caster sugar",
+            "250ml warm milk",
+            "1 egg",
+            "60g soft butter",
+            "1 tsp salt",
+            "Seeds of 4 cardamom pods, ground"
+          ]
+        },
+        {
+          "group": "Filling",
+          "items": [
+            "100g soft butter",
+            "120g soft brown sugar",
+            "2 tbsp ground Ceylon cinnamon",
+            "A few rasps of fresh nutmeg"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cmqkncl0rqh8n7jr",
+      "dek": "Cardamom and clove lead, cinnamon and ginger follow, a single peppercorn keeps it honest. Built on strong Ceylon tea, the way the hill country takes it.",
+      "slot": "rec-chai",
+      "slug": "ceylon-masala-chai",
+      "tips": [
+        "Bruising the whole spices first releases far more aroma than adding them whole.",
+        "Jaggery (kithul or palm) instead of sugar gives a rounder, more caramel note."
+      ],
+      "intro": "A proper chai is decocted, not steeped — the whole spices and tea simmered hard with milk so the oils actually come out. Bruise the cardamom, crack the cinnamon, and give it time on the heat.",
+      "title": "Ceylon Masala Chai",
+      "accent": "#7C9A5A",
+      "course": "Drinks",
+      "method": [
+        "Crush the cardamom, cloves, cinnamon and peppercorn lightly in a mortar to open them up.",
+        "Simmer the spices in the water for 5 minutes to build a fragrant decoction.",
+        "Add the tea and simmer 2 minutes more, then pour in the milk and your sweetener.",
+        "Bring back to a rolling simmer and let it climb the pan once or twice — this is what makes it chai.",
+        "Strain into cups and serve scalding hot."
+      ],
+      "serves": 4,
+      "spices": [
+        "Green Cardamom Pods",
+        "Whole Cloves",
+        "Ceylon Cinnamon Quills",
+        "Ground Ginger",
+        "Black Peppercorns"
+      ],
+      "status": "PUBLISHED",
+      "cookMins": 12,
+      "featured": false,
+      "prepMins": 5,
+      "createdAt": "2026-06-19T08:08:11.491",
+      "updatedAt": "2026-06-19T08:08:11.491",
+      "difficulty": "Easy",
+      "ingredients": [
+        {
+          "items": [
+            "6 green cardamom pods, bruised",
+            "4 whole cloves",
+            "1 quill Ceylon cinnamon, snapped",
+            "1 tsp ground ginger (or a thumb, sliced)",
+            "1 black peppercorn",
+            "3 tsp strong Ceylon black tea",
+            "500ml water",
+            "300ml milk",
+            "Sugar or jaggery, to taste"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cmqknckmllltyjwi",
+      "dek": "A whole chicken rubbed with hand-ground garam masala and turmeric, roasted until the skin is lacquered and the spice has soaked into every joint.",
+      "slot": "rec-roastchicken",
+      "slug": "garam-masala-roast-chicken",
+      "tips": [
+        "Salt the bird and apply the rub a few hours ahead (or overnight) for the deepest flavour.",
+        "Spoon the spiced pan juices over rice or roast potatoes — none of it should go to waste."
+      ],
+      "intro": "Proof that Ceylon spice belongs well beyond the curry pot. The garam masala — warm with clove, cardamom and cinnamon — turns a humble roast into something that perfumes the whole house.",
+      "title": "Kandyan Garam Masala Roast Chicken",
+      "accent": "#7A3E22",
+      "course": "Curries & Mains",
+      "method": [
+        "Heat the oven to 200°C (180°C fan). Pat the chicken thoroughly dry.",
+        "Mash the garam masala, turmeric, pepper and a good pinch of salt into the soft butter to make a paste.",
+        "Loosen the skin over the breast and push half the spiced butter underneath; rub the rest all over the outside.",
+        "Put the lemon halves and garlic in the cavity, tie the legs, and set the bird breast-up in a roasting tin.",
+        "Roast for 75–85 minutes, basting once halfway, until the juices run clear and the skin is deep amber.",
+        "Rest, loosely covered, for 15 minutes before carving — the spice settles and the juices redistribute."
+      ],
+      "serves": 4,
+      "spices": [
+        "Kandyan Garam Masala",
+        "Ground Turmeric",
+        "Black Peppercorns"
+      ],
+      "status": "PUBLISHED",
+      "cookMins": 80,
+      "featured": false,
+      "prepMins": 15,
+      "createdAt": "2026-06-19T08:08:11.491",
+      "updatedAt": "2026-06-19T08:08:11.491",
+      "difficulty": "Easy",
+      "ingredients": [
+        {
+          "items": [
+            "1 whole chicken, about 1.6kg",
+            "2 tbsp Kandyan garam masala",
+            "1 tsp ground turmeric",
+            "1 tsp coarsely cracked black pepper",
+            "3 tbsp softened butter or ghee",
+            "1 lemon, halved",
+            "4 garlic cloves, smashed",
+            "Sea salt"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cmqknckxyrvnxhuq",
+      "dek": "Turmeric needs fat and a pinch of pepper to give up its gold. A five-minute evening ritual worth getting right.",
+      "slot": "rec-goldenmilk",
+      "slug": "golden-milk",
+      "tips": [
+        "The pinch of pepper isn't optional — it's what makes the turmeric worth drinking.",
+        "A little fat (coconut oil, ghee, or whole milk) noticeably improves absorption and texture."
+      ],
+      "intro": "The science is simple: curcumin, the active compound in turmeric, is fat-soluble and far better absorbed alongside piperine from black pepper. So the two old kitchen habits — simmer in milk, add a pinch of pepper — turn out to be exactly right.",
+      "title": "Golden Milk, Done Properly",
+      "accent": "#D99A1C",
+      "course": "Drinks",
+      "method": [
+        "Warm the milk in a small pan with the turmeric, pepper, ginger and cinnamon quill.",
+        "Bring to a bare simmer and let it steep, whisking, for 4–5 minutes — don't let it boil hard.",
+        "Take off the heat, stir in the fat if using, and sweeten to taste.",
+        "Discard the cinnamon quill, froth if you like, and pour. Best sipped slowly, warm."
+      ],
+      "serves": 2,
+      "spices": [
+        "Ground Turmeric",
+        "Black Peppercorns",
+        "Ceylon Cinnamon Quills",
+        "Ground Ginger"
+      ],
+      "status": "PUBLISHED",
+      "cookMins": 6,
+      "featured": false,
+      "prepMins": 3,
+      "createdAt": "2026-06-19T08:08:11.491",
+      "updatedAt": "2026-06-19T08:08:11.491",
+      "difficulty": "Easy",
+      "ingredients": [
+        {
+          "items": [
+            "400ml milk of choice",
+            "1 tsp ground turmeric",
+            "Small pinch of freshly ground black pepper",
+            "1/2 tsp ground ginger",
+            "1 small quill Ceylon cinnamon",
+            "1–2 tsp honey or maple, to taste",
+            "1 tsp coconut oil or ghee (optional)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cmqkncl3eaya065h",
+      "dek": "The dark, toasty house blend behind every Sri Lankan curry — made in ten minutes from whole spices you already trust. A kitchen basic worth owning.",
+      "slot": "rec-currypowder",
+      "slug": "roasted-ceylon-curry-powder",
+      "tips": [
+        "Roast in small batches and grind fresh — the whole point is aroma you can't buy pre-ground.",
+        "Take it darker than you think for a true 'black curry' base; keep it lighter for vegetables and fish."
+      ],
+      "intro": "Sri Lankan curry powder is roasted dark, which sets it apart from the pale Indian blends. Toast the whole seeds until properly browned, grind, and you'll have a jar that makes everything taste like the hill country. Makes about one small jar.",
+      "title": "Roasted Ceylon Curry Powder, From Scratch",
+      "accent": "#9A5B22",
+      "course": "Sides & Basics",
+      "method": [
+        "Put a dry, heavy pan over medium heat and add the coriander, cumin, fennel, peppercorns, cloves and cinnamon.",
+        "Stir constantly as the seeds pale, then tan, then turn a deep, even brown and smell toasty — 8–10 minutes. If using curry leaves, add them for the last minute to crisp.",
+        "Tip out onto a plate to stop the cooking and cool completely.",
+        "Grind to a fine powder, then stir through the ground turmeric off the heat.",
+        "Store in an airtight jar away from light; use within a couple of months for the best aroma."
+      ],
+      "serves": 0,
+      "spices": [
+        "Black Peppercorns",
+        "Whole Cloves",
+        "Ceylon Cinnamon Quills",
+        "Ground Turmeric"
+      ],
+      "status": "PUBLISHED",
+      "cookMins": 10,
+      "featured": false,
+      "prepMins": 5,
+      "createdAt": "2026-06-19T08:08:11.491",
+      "updatedAt": "2026-06-19T08:08:11.491",
+      "difficulty": "Easy",
+      "ingredients": [
+        {
+          "items": [
+            "4 tbsp coriander seeds",
+            "2 tbsp cumin seeds",
+            "1 tbsp fennel seeds",
+            "1 tsp black peppercorns",
+            "6 whole cloves",
+            "1 quill Ceylon cinnamon, snapped",
+            "10 fresh curry leaves (optional)",
+            "1 tsp ground turmeric (added after roasting)"
+          ]
+        }
+      ]
+    }
+  ],
+  "gifts": [
+    {
+      "id": "cmqkny8cfe5rixru",
+      "jar": "50g",
+      "lkr": 5450,
+      "usd": 36,
+      "base": "#D06A2E",
+      "deep": "#8F3A14",
+      "name": "The Baker's Box",
+      "slug": "baker",
+      "badge": "New",
+      "blurb": "Ground cinnamon, whole nutmeg, delicate mace and green cardamom — the quiet backbone of every good bake, from spiced loaves to festive puddings.",
+      "color": "#C0531F",
+      "status": "PUBLISHED",
+      "surface": "#F4E0D2",
+      "tagline": "Warm, sweet spices for the oven",
+      "contents": [
+        "Ceylon Cinnamon, Ground",
+        "Whole Nutmeg",
+        "Mace Blades",
+        "Green Cardamom Pods"
+      ],
+      "featured": false,
+      "createdAt": "2026-06-19T08:25:02.081",
+      "updatedAt": "2026-07-04T03:19:48.557"
+    },
+    {
+      "id": "cmqkny7wi6kv97gc",
+      "jar": "50g",
+      "lkr": 4250,
+      "usd": 28.5,
+      "base": "#C2772E",
+      "deep": "#7E481A",
+      "name": "The Ceylon Classic",
+      "slug": "classic",
+      "badge": "Bestselling gift",
+      "blurb": "Hand-rolled cinnamon, hill-country cardamom, Kegalle cloves and estate peppercorns — the spices every Ceylon kitchen is built on, presented in our signature ribboned box.",
+      "color": "#B5651D",
+      "status": "PUBLISHED",
+      "surface": "#F3E7D4",
+      "tagline": "The four cornerstones of a Sri Lankan pantry",
+      "contents": [
+        "Ceylon Cinnamon Quills",
+        "Green Cardamom Pods",
+        "Whole Cloves",
+        "Black Peppercorns"
+      ],
+      "featured": true,
+      "createdAt": "2026-06-19T08:25:02.081",
+      "updatedAt": "2026-07-04T03:19:48.557"
+    },
+    {
+      "id": "cmqkny8fdmb1qdjl",
+      "jar": "50g",
+      "lkr": 7400,
+      "usd": 49,
+      "base": "#7A4A2A",
+      "deep": "#462914",
+      "name": "The Connoisseur",
+      "slug": "connoisseur",
+      "badge": "Limited",
+      "blurb": "A larger keepsake box for the serious cook — six of our most prized lots, from rare mace blades to the bestselling roasted curry powder, each traceable to its estate.",
+      "color": "#6B4226",
+      "status": "PUBLISHED",
+      "surface": "#EBDDCD",
+      "tagline": "Six single-origin spices, at their finest",
+      "contents": [
+        "Ceylon Cinnamon Quills",
+        "Green Cardamom Pods",
+        "Mace Blades",
+        "Whole Nutmeg",
+        "Black Peppercorns",
+        "Ceylon Curry Powder"
+      ],
+      "featured": false,
+      "createdAt": "2026-06-19T08:25:02.081",
+      "updatedAt": "2026-07-04T03:19:48.557"
+    },
+    {
+      "id": "cmqkny84rahg6rpr",
+      "jar": "50g",
+      "lkr": 3800,
+      "usd": 25.5,
+      "base": "#AC6C2D",
+      "deep": "#6E3F16",
+      "name": "The Curry Night",
+      "slug": "curry",
+      "badge": null,
+      "blurb": "Our roasted Ceylon curry powder and Kandyan garam masala, with turmeric and ginger to round the pot — a full night's cooking, boxed.",
+      "color": "#9A5B22",
+      "status": "PUBLISHED",
+      "surface": "#EFE2CE",
+      "tagline": "Everything for a proper black-curry table",
+      "contents": [
+        "Ceylon Curry Powder",
+        "Kandyan Garam Masala",
+        "Ground Turmeric",
+        "Ground Ginger"
+      ],
+      "featured": false,
+      "createdAt": "2026-06-19T08:25:02.081",
+      "updatedAt": "2026-07-04T03:19:48.557"
+    },
+    {
+      "id": "cmqkny8hwjw2gl9k",
+      "jar": "50g",
+      "lkr": 2600,
+      "usd": 17.5,
+      "base": "#E2A62B",
+      "deep": "#A8740F",
+      "name": "The Taster",
+      "slug": "taster",
+      "badge": null,
+      "blurb": "Three icons to begin with — sweet Ceylon cinnamon, golden turmeric and hill-country pepper. The easiest way to send someone down the rabbit hole.",
+      "color": "#D99A1C",
+      "status": "PUBLISHED",
+      "surface": "#F6E9C9",
+      "tagline": "A first taste of the forest",
+      "contents": [
+        "Ceylon Cinnamon Quills",
+        "Ground Turmeric",
+        "Black Peppercorns"
+      ],
+      "featured": false,
+      "createdAt": "2026-06-19T08:25:02.081",
+      "updatedAt": "2026-07-04T03:19:48.557"
+    }
+  ]
+}

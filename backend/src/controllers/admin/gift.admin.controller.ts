@@ -1,8 +1,10 @@
+import { adminContentPageSchema } from '@aranya/shared';
+import { listAdminPage } from '../../services/admin-page.service.js';
 import type { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
-import { writeAuditLog } from '../../services/audit.service.js';
-import { revalidateFrontend } from '../../lib/revalidate.js';
+import { auditPublicMutation } from '../../lib/audit-public-mutation.js';
+import { enqueueRevalidation } from '../../lib/public-mutation.js';
 import { z } from 'zod';
 
 type Tx = Prisma.TransactionClient;
@@ -57,6 +59,17 @@ async function ensureBackingProduct(
     const totalGrams = gift.contents.length * jarGrams;
     const slug = backingSlug(gift.slug);
 
+    // A gift set with this slug existed before and was deleted. Its backing
+    // product is archived, not removed (orders may reference it), and used to
+    // block this slug forever with a unique-constraint "already exists".
+    // Revive it with the new gift set's details instead.
+    const previous = await tx.product.findUnique({ where: { slug }, select: { id: true } });
+    if (previous) {
+        await tx.product.update({ where: { id: previous.id }, data: { status: 'DRAFT', featured: gift.featured, color: gift.color } });
+        await syncBackingProduct(tx, gift.slug, gift);
+        return tx.product.findUniqueOrThrow({ where: { id: previous.id }, include: { variants: true } });
+    }
+
     return tx.product.create({
         data: {
             name: gift.name,
@@ -87,15 +100,18 @@ async function ensureBackingProduct(
 async function syncBackingProduct(
     tx: Tx,
     oldSlug: string,
-    gift: { slug: string; jar: string; contents: string[]; usd: Prisma.Decimal | number; lkr: Prisma.Decimal | number },
+    gift: { slug: string; name: string; blurb: string; jar: string; contents: string[]; usd: Prisma.Decimal | number; lkr: Prisma.Decimal | number },
 ) {
     const product = await tx.product.findUnique({ where: { slug: backingSlug(oldSlug) }, include: { variants: true } });
     if (!product) return;
 
+    // Name and description too: the backing product's name is what order
+    // lines, emails and the admin order view show for this gift set.
     const newSlug = backingSlug(gift.slug);
-    if (newSlug !== product.slug) {
-        await tx.product.update({ where: { id: product.id }, data: { slug: newSlug } });
-    }
+    await tx.product.update({
+        where: { id: product.id },
+        data: { name: gift.name, description: gift.blurb, ...(newSlug !== product.slug && { slug: newSlug }) },
+    });
 
     const jarGrams = parseInt(gift.jar, 10) || 50;
     const totalGrams = gift.contents.length * jarGrams;
@@ -108,7 +124,8 @@ async function syncBackingProduct(
     }
 }
 
-export async function listGifts(_req: Request, res: Response) {
+export async function listGifts(req: Request, res: Response) {
+    if (req.query.view === 'page') return res.json(await listAdminPage('gifts', adminContentPageSchema.parse(req.query)));
     const gifts = await prisma.giftSet.findMany({
         orderBy: [{ featured: 'desc' }, { createdAt: 'asc' }],
         take: 500, // bound an otherwise unlimited load (PERF-07)
@@ -135,6 +152,7 @@ export async function createGift(req: Request, res: Response) {
         gift = await prisma.$transaction(async (tx) => {
             const created = await tx.giftSet.create({ data: { ...data, badge: data.badge ?? null } });
             await ensureBackingProduct(tx, created);
+            await enqueueRevalidation(tx, data.status === 'PUBLISHED' ? ['/gifts', '/search', '/categories'] : []);
             return created;
         });
     } catch (err) {
@@ -144,15 +162,10 @@ export async function createGift(req: Request, res: Response) {
         throw err;
     }
 
-    await writeAuditLog({
+    await auditPublicMutation({
         req, event: 'GIFT_CREATE',
         targetType: 'GiftSet', targetId: gift.id,
-    });
-
-    // P3-4: revalidate when a gift set is published immediately on create
-    if (data.status === 'PUBLISHED') {
-        await revalidateFrontend('/gifts');
-    }
+    }, data.status === 'PUBLISHED' ? ['/gifts', '/search', '/categories'] : []);
 
     res.status(201).json({ gift });
 }
@@ -176,6 +189,7 @@ export async function updateGift(req: Request, res: Response) {
             // request only touched some fields (e.g. contents changed but
             // usd/lkr didn't, or vice versa).
             await syncBackingProduct(tx, existing.slug, updated);
+            await enqueueRevalidation(tx, ['/gifts', '/search', '/categories']);
             return updated;
         });
     } catch (err) {
@@ -186,13 +200,11 @@ export async function updateGift(req: Request, res: Response) {
     }
 
     // P3-3: audit log for updates (was missing)
-    await writeAuditLog({
+    await auditPublicMutation({
         req, event: 'GIFT_UPDATE',
         targetType: 'GiftSet', targetId: id,
         diff: { before: existing, after: gift },
-    });
-
-    await revalidateFrontend('/gifts');
+    }, ['/gifts', '/search', '/categories']);
 
     res.json({ gift });
 }
@@ -203,15 +215,19 @@ export async function deleteGift(req: Request, res: Response) {
     const existing = await prisma.giftSet.findUnique({ where: { id } });
     if (!existing) { res.status(404).json({ error: 'Gift set not found' }); return; }
 
-    await prisma.giftSet.delete({ where: { id } });
-
-    await writeAuditLog({
-        req, event: 'GIFT_DELETE',
-        targetType: 'GiftSet', targetId: id,
+    // Archive the hidden backing product in the same transaction: left as a
+    // DRAFT it stayed purchasable by id, and its slug blocked re-creating this
+    // gift set. Archived (not deleted) because orders may reference it.
+    await prisma.$transaction(async (tx) => {
+        await tx.giftSet.delete({ where: { id } });
+        await tx.product.updateMany({ where: { slug: backingSlug(existing.slug) }, data: { status: 'ARCHIVED' } });
+        await enqueueRevalidation(tx, ['/gifts', '/search']);
     });
 
-    // P3-4: revalidate on delete
-    await revalidateFrontend('/gifts');
+    await auditPublicMutation({
+        req, event: 'GIFT_DELETE',
+        targetType: 'GiftSet', targetId: id,
+    }, ['/gifts', '/search']);
 
     res.json({ ok: true });
 }

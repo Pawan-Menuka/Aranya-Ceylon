@@ -3,12 +3,10 @@ import type { Variant } from "@/lib/types";
 import { formatMoney } from "@/lib/money";
 
 // Server-side only — called from Next.js server components.
-// Falls back gracefully when backend is unavailable so ISR/SSG never fails.
-
-// Standardise on NEXT_PUBLIC_API_URL (see api/recipes.ts). BACKEND_URL kept only
-// as a legacy fallback so a deploy per .env.example doesn't silently hit
-// localhost and serve static demo gifts forever (BUG-17).
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? process.env.BACKEND_URL ?? "http://localhost:4000";
+// Dynamic SSR shares verified-market public data. Backing product mutations
+// invalidate these reads too; production transport failures offer retry.
+import { publicApiFetch } from "./public";
+import { rethrowReadFailure } from "./read-failure";
 
 interface ApiGiftSet {
   id: string;
@@ -62,26 +60,11 @@ function toGiftSet(g: ApiGiftSet): GiftSet {
 export async function fetchGifts(featured?: boolean): Promise<GiftSet[] | null> {
   try {
     const qs = featured ? "?featured=true" : "";
-    const res = await fetch(`${API_BASE}/gifts${qs}`, {
-      next: { revalidate: 3600 },
-    });
-    if (!res.ok) return null;
-    const data = await res.json() as { gifts: ApiGiftSet[] };
+    const data = await publicApiFetch<{ gifts: ApiGiftSet[] }>(`/gifts${qs}`, { revalidate: 3600 });
     return data.gifts.map(toGiftSet);
-  } catch {
+  } catch (error) {
+    rethrowReadFailure(error);
     return null;
   }
 }
 
-export async function fetchGiftBySlug(slug: string): Promise<GiftSet | null> {
-  try {
-    const res = await fetch(`${API_BASE}/gifts/${encodeURIComponent(slug)}`, {
-      next: { revalidate: 3600 },
-    });
-    if (!res.ok) return null;
-    const data = await res.json() as { gift: ApiGiftSet };
-    return toGiftSet(data.gift);
-  } catch {
-    return null;
-  }
-}

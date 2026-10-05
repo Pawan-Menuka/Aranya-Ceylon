@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { emailSchema } from './auth.schema.js';
 
 export const addToCartSchema = z.object({
     productId: z.string().min(1),
@@ -17,21 +18,27 @@ export const applyCouponSchema = z.object({
 
 export const checkoutSchema = z.object({
     // Required for guest checkout; ignored (user email used) when authenticated
-    guestEmail: z.string().email().optional(),
-    customerPhone: z.string().min(1).optional(),
+    // Normalised like account emails so a guest's orders and a later account
+    // with the same address match regardless of case.
+    guestEmail: emailSchema.optional(),
+    // Upper bounds: these are stored on the order and sent to PayHere, and
+    // were otherwise limited only by the 512 KB request body.
+    customerPhone: z.string().min(1).max(30).optional(),
     shippingAddress: z.object({
-        firstName: z.string().min(1),
-        lastName: z.string().min(1),
-        line1: z.string().min(1),
-        line2: z.string().optional(),
-        city: z.string().min(1),
-        region: z.string().optional(),
-        postalCode: z.string().optional(),
+        firstName: z.string().min(1).max(100),
+        lastName: z.string().min(1).max(100),
+        line1: z.string().min(1).max(200),
+        line2: z.string().max(200).optional(),
+        city: z.string().min(1).max(100),
+        region: z.string().max(100).optional(),
+        postalCode: z.string().max(20).optional(),
         country: z.string().min(2).max(2).transform((v) => v.toUpperCase()), // ISO 3166-1 alpha-2
     }),
     shippingMethod: z.enum(['STANDARD', 'EXPRESS']),
     saveAddress: z.boolean().default(false),
-    couponCode: z.string().optional(),
+    // Upper-cased like applyCouponSchema.code: the same code used to work on
+    // one endpoint and be "not valid" on the other depending on its case.
+    couponCode: z.string().trim().max(50).toUpperCase().optional(),
     giftWrap: z.boolean().default(false),
     giftNote: z.string().max(500).optional(),
 });

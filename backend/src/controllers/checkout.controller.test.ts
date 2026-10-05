@@ -26,6 +26,7 @@ const store = vi.hoisted(() => ({
     // so tests can simulate a race: the cache says available, live stock
     // doesn't. Keyed by variantId.
     variantStock: {} as Record<string, number>,
+    addressFails: false,
 }));
 
 const couponStore = vi.hoisted(() => ({
@@ -52,7 +53,7 @@ vi.mock('../lib/prisma.js', () => ({
             update: async () => store.createdOrder,
             findUnique: async () => store.createdOrder,
         },
-        address: { create: async () => ({}) },
+        address: { create: async () => { if (store.addressFails) throw new Error('db failed'); return {}; } },
         user: { findUnique: async () => ({ name: 'Test', email: 't@e.com' }) },
         // Models the real atomic reserve-then-create transaction: each
         // tx.variant.updateMany call decrements live stock only if enough is
@@ -115,20 +116,29 @@ vi.mock('../services/payhere.service.js', () => ({
     PAYHERE_CHECKOUT_URL: 'https://sandbox.payhere.lk/pay/checkout',
 }));
 vi.mock('../services/cart.service.js', () => ({
-    // Real calculateCartTotal reads the coupon persisted on the cart — mirror
+    // Real calculateTotalsForLines applies the coupon it is handed — mirror
     // that here so tests can drive it via couponStore.coupon, same object the
     // coupon-code pre-check and the tx.coupon reservation mock above share.
-    calculateCartTotal: vi.fn(async () => ({
+    calculateTotalsForLines: vi.fn(async () => ({
         totalInCents: 10000, total: 100, shippingCost: 4.99,
         discount: couponStore.coupon ? 20 : 0,
         couponId: couponStore.coupon?.id ?? null,
         currency: 'USD',
     })),
+    // The store/currency rule has its own tests in cart.service.test.ts.
+    couponAppliesToCurrency: vi.fn(() => true),
+}));
+vi.mock('../services/pending-order.service.js', () => ({
+    supersedePendingOrders: vi.fn(async () => 0),
+    cancelPendingOrder: vi.fn(async () => true),
 }));
 vi.mock('./webhook.controller.js', () => ({ confirmOrderPaid: vi.fn() }));
 
 import { createIntent, stubComplete } from './checkout.controller.js';
 import { confirmOrderPaid } from './webhook.controller.js';
+import { calculateTotalsForLines } from '../services/cart.service.js';
+import { supersedePendingOrders, cancelPendingOrder } from '../services/pending-order.service.js';
+import { createPaymentIntent } from '../services/stripe.service.js';
 
 const mockRes = () => responseDouble<{ items: unknown; orderId: string; error: string; provider: string; clientSecret: string }>();
 
@@ -175,6 +185,7 @@ beforeEach(() => {
     store.cart = cartWith({ market: 'INTERNATIONAL', currency: 'USD' });
     store.lastOrderData = null;
     store.variantStock = { v1: 10, v2: 10 };
+    store.addressFails = false;
     couponStore.coupon = null;
     couponStore.cartUpdated = null;
     vi.unstubAllEnvs(); // default → stub payments
@@ -196,6 +207,18 @@ describe('createIntent — #19 market re-validation', () => {
         const res = mockRes();
         await createIntent(userReq(), res);
         expect(res.statusCode).toBe(409);
+    });
+
+    // Final audit #29: archived products stayed purchasable through carts
+    // that already held them.
+    it('rejects a product archived after it was added to the cart', async () => {
+        store.cart = cartWith({ market: 'INTERNATIONAL', currency: 'USD' });
+        (store.cart.items[0]!.product as { id: string; status?: string }).status = 'ARCHIVED';
+        const res = mockRes();
+        await createIntent(userReq(), res);
+        expect(res.statusCode).toBe(409);
+        expect(res.body.items).toEqual([{ productId: 'p1', variantId: 'v1' }]);
+        expect(store.lastOrderData).toBeNull();
     });
 
     it('lets a matching INTERNATIONAL/USD cart through', async () => {
@@ -254,6 +277,37 @@ describe('createIntent — payment mode routing', () => {
         const res = mockRes();
         await createIntent(userReq({ market: 'LOCAL', body: { shippingAddress: { ...intlAddress, country: 'LK' } } }), res);
         expect(res.body.provider).toBe('payhere');
+    });
+});
+
+// Final audit #15: once the order is committed, a later failure used to return
+// a 500 and leave the order holding its stock until the sweep.
+describe('createIntent — failures after the order is committed', () => {
+    it('releases the order and reports 502 when Stripe cannot create the intent', async () => {
+        vi.stubEnv('PAYMENTS_MODE', 'live');
+        vi.mocked(createPaymentIntent).mockRejectedValueOnce(new Error('stripe down'));
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const res = mockRes();
+        await createIntent(userReq(), res);
+
+        expect(res.statusCode).toBe(502);
+        expect(res.body.error).toMatch(/payment provider/i);
+        expect(cancelPendingOrder).toHaveBeenCalledWith(
+            { id: 'order_1', paymentIntentId: null },
+            expect.stringContaining('Stripe'),
+            { force: true },
+        );
+    });
+
+    it('still completes checkout when saving the address to the address book fails', async () => {
+        store.addressFails = true;
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const res = mockRes();
+        await createIntent(userReq({ body: { saveAddress: true } }), res);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body.orderId).toBe('order_1');
+        expect(cancelPendingOrder).not.toHaveBeenCalled();
     });
 });
 
@@ -370,6 +424,54 @@ describe('createIntent — coupon-usage reservation at checkout (coupon-reuse fi
         await createIntent(userReq(), res);
         expect(res.statusCode).toBe(200);
         expect(couponStore.coupon).toBeNull();
+    });
+});
+
+// Final audit #2: the order's lines and its total used to come from two
+// separate cart reads, so a quantity change between them produced an order for
+// more units than were charged.
+describe('createIntent — total is priced from the lines it orders', () => {
+    it('prices exactly the loaded cart lines instead of re-reading the cart', async () => {
+        store.cart = multiItemCart();
+        const res = mockRes();
+        await createIntent(userReq(), res);
+        expect(res.statusCode).toBe(200);
+        expect(calculateTotalsForLines).toHaveBeenCalledTimes(1);
+        expect(calculateTotalsForLines).toHaveBeenCalledWith(store.cart.items, null, 'INTERNATIONAL', 'STANDARD', false);
+    });
+
+    it('prices with the coupon submitted at checkout, not a stale cart coupon', async () => {
+        store.cart = { ...cartWith({ market: 'INTERNATIONAL', currency: 'USD' }), couponId: 'coupon_old' };
+        couponStore.coupon = { id: 'coupon_new', usageLimit: null, usageCount: 0 };
+        await createIntent(userReq({ body: { couponCode: 'NEW10' } }), mockRes());
+        expect(vi.mocked(calculateTotalsForLines).mock.calls[0]![1]).toBe('coupon_new');
+    });
+});
+
+// Final audit #3: each attempt used to leave its own unpaid order holding
+// stock for a day, so a retry on the last unit was refused by the shopper's
+// own earlier attempt.
+describe('createIntent — earlier unpaid orders for the basket are released first', () => {
+    it('supersedes open orders for this cart before reserving stock', async () => {
+        await createIntent(userReq(), mockRes());
+        expect(supersedePendingOrders).toHaveBeenCalledWith('cart_1');
+    });
+
+    it('lets a retry on the last unit through once the earlier reservation is released', async () => {
+        // The first attempt reserved the only unit: the cart read still shows 0.
+        store.cart = cartWith({ market: 'INTERNATIONAL', currency: 'USD' });
+        store.cart.items[0]!.variant.stock = 0;
+        store.variantStock = { v1: 0 };
+        vi.mocked(supersedePendingOrders).mockImplementationOnce(async () => {
+            // Releasing the earlier order returns its unit to live stock.
+            store.variantStock.v1 = 1;
+            store.cart!.items[0]!.variant.stock = 1;
+            return 1;
+        });
+        const res = mockRes();
+        await createIntent(userReq(), res);
+        expect(res.statusCode).toBe(200);
+        expect(store.variantStock.v1).toBe(0); // reserved again by the new order
     });
 });
 

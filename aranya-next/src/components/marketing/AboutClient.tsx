@@ -13,7 +13,7 @@ import { useMarket } from "../MarketContext";
 function AboutHero() {
   return (
     <header data-hero style={{ position: "relative", minHeight: "100vh", background: "#161412", color: "#FDFAF5", overflow: "hidden", display: "flex", alignItems: "flex-end" }}>
-      <ImageSlot id="about-hero" shape="rect" fit="cover" placeholder="Drop a hero forest / estate photo" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
+      <ImageSlot id="about-hero" shape="rect" fit="cover" priority sizes="100vw" placeholder="Drop a hero forest / estate photo" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }} />
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(150deg, rgba(15,110,86,.34), rgba(11,16,13,.6))", mixBlendMode: "multiply", pointerEvents: "none" }} />
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(10,8,6,.5) 0%, transparent 26%, transparent 48%, rgba(10,8,6,.82) 100%)", pointerEvents: "none" }} />
       <div style={{ position: "relative", maxWidth: 1280, margin: "0 auto", padding: "0 40px 92px", width: "100%" }}>

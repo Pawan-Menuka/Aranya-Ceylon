@@ -32,15 +32,33 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 }
 
 // --- requireRole: rejects requests from users without required role ---
+// The role in the access token is only a claim made when it was issued, up to
+// 15 minutes ago. A demoted or deleted admin kept full console access until it
+// expired, so the role is re-read from the database on every request that
+// reaches this check (one primary-key lookup; only admin routes use it).
 export function requireRole(...roles: string[]) {
     return (req: Request, res: Response, next: NextFunction) => {
         if (!req.user) {
             return res.status(401).json({ error: 'Authentication required' });
         }
+        // Cheap reject first: a token that never claimed the role can't have it.
         if (!roles.includes(req.user.role)) {
             return res.status(403).json({ error: 'Insufficient permissions' });
         }
-        next();
+        const claimed = req.user;
+        prisma.user.findUnique({ where: { id: claimed.userId }, select: { role: true, suspendedAt: true } })
+            .then((current) => {
+                if (!current || !roles.includes(current.role)) {
+                    return res.status(403).json({ error: 'Insufficient permissions' });
+                }
+                // A suspended admin loses console access immediately, not when the token expires.
+                if (current.suspendedAt) {
+                    return res.status(403).json({ error: 'This account has been suspended.', code: 'ACCOUNT_SUSPENDED' });
+                }
+                claimed.role = current.role;
+                next();
+            })
+            .catch(next);
     };
 }
 

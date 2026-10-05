@@ -3,14 +3,13 @@ import 'dotenv/config';
 // if a required secret is missing/weak, before any server or DB setup runs.
 import { env } from './config/env.js';
 import express from 'express';
-import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
-import { SHARED_VERSION } from '@aranya/shared';
 import { ZodError } from 'zod';
 import authRoutes from './routes/auth.routes.js';
 import productRoutes from './routes/product.routes.js';
+import searchRoutes from './routes/search.routes.js';
 import blogRoutes from './routes/blog.routes.js';
 import categoryRoutes from './routes/category.routes.js';
 import marketRoutes from './routes/market.routes.js';
@@ -24,17 +23,64 @@ import webhookRoutes from './routes/webhook.routes.js';
 import { resolveMarket } from './middleware/market.js';
 import { globalLimiter } from './middleware/rateLimit.js';
 import { requestTimeout } from './middleware/timeout.js';
+import { publicReadPolicy } from './middleware/publicReadPolicy.js';
+import { browserCors } from './middleware/browserCors.js';
+import { requestMetricsFromEnv } from './middleware/requestMetrics.js';
+import { bffClientIdentityFromEnv } from './middleware/bffClientIdentity.js';
+import { apiListenHostFromEnv } from './lib/listenHost.js';
 import adminRoutes from './routes/admin.routes.js';
 import contactRoutes from './routes/contact.routes.js';
 import wholesaleRoutes from './routes/wholesale.routes.js';
 import devSeedRoutes from './routes/dev-seed.routes.js';
 import { startAllJobs } from './jobs/scheduler.js';
-import { isOriginAllowed } from './config/cors.js';
 import { prisma } from './lib/prisma.js';
+import { outboxEnabled } from './lib/outbox.js';
+import { distributedJobsEnabled } from './jobs/jobLease.js';
+import { outboxWorkerEnabled } from './jobs/outboxWorker.js';
+import { dashboardRollupsEnabled } from './services/dashboard-rollups.js';
+import { secretBoxConfigured } from './lib/secret-box.js';
 
+
+// Backstop for a promise nobody awaited or caught. Node's default is to
+// terminate the process, which turns one stray rejection (a fire-and-forget
+// send, a handler missing asyncHandler) into an outage for every customer.
+// Route handlers are still expected to be wrapped — this only keeps the API
+// up, and loud, if one is missed.
+process.on('unhandledRejection', (reason) => {
+    console.error('[UNHANDLED REJECTION]', reason);
+});
 
 const app = express();
 const PORT = process.env.PORT ?? 4000;
+// Validate the strict BFF rollout before opening the listener or connecting to the database.
+const bffClientIdentity = bffClientIdentityFromEnv(process.env);
+// Browsers reach this API only through the storefront's BFF, which strips
+// forwarded-IP headers. Unless that BFF signs the visitor's address (and this
+// API requires it), every shopper arrives from the storefront server's own IP
+// and shares ONE bucket per rate limiter — 10 sign-ins per 15 minutes for the
+// whole site. Not enforced, because the hosting topology decides how the
+// client IP reaches the BFF; see docs/operations/deployment-checklist.md.
+if (process.env.NODE_ENV === 'production' && process.env.BFF_CLIENT_IP_REQUIRED !== 'true') {
+    console.warn(
+        '⚠ BFF client identity is not enforced (BFF_CLIENT_IP_SECRET + BFF_CLIENT_IP_REQUIRED=true). '
+        + 'Rate limits and audit-log IPs will key on the storefront server, not on individual visitors.',
+    );
+}
+// Admin two-factor sign-in encrypts each secret with this key. Without it admins
+// cannot enrol, and anyone who already has two-factor on cannot sign in (it fails
+// closed), so say so loudly at boot instead of at the first sign-in.
+if (process.env.NODE_ENV === 'production' && !secretBoxConfigured()) {
+    console.warn(
+        '⚠ TWO_FACTOR_ENCRYPTION_KEY is missing or invalid (canonical base64 of 32 bytes: `openssl rand -base64 32`). '
+        + 'Admin two-factor sign-in is unavailable until it is set.',
+    );
+}
+const API_HOST = apiListenHostFromEnv(process.env);
+// Validate optional background features before any listener or database connection.
+const durableOutbox = outboxEnabled();
+if (distributedJobsEnabled() && !durableOutbox) throw new Error('Distributed jobs require OUTBOX_ENABLED');
+if (outboxWorkerEnabled()) throw new Error('Run the outbox worker in its dedicated process; disable OUTBOX_WORKER_ENABLED in the API');
+dashboardRollupsEnabled();
 
 // Behind a reverse proxy (Render/Railway/Fly/Nginx) the client IP arrives in
 // X-Forwarded-For. Trust the first hop so rate limiting keys on the real IP.
@@ -43,6 +89,9 @@ if (process.env.NODE_ENV === 'production') {
     // Cloudflare added = 2. Configurable so adding Cloudflare is a config change.
     app.set('trust proxy', env.TRUST_PROXY);
 }
+
+const requestMetrics = requestMetricsFromEnv(process.env);
+if (requestMetrics) app.use(requestMetrics);
 
 // ⚠ ORDERING IS INTENTIONAL — do not move. Webhook routes are mounted BEFORE
 // express.json() because Stripe signature verification needs the raw request
@@ -59,23 +108,14 @@ app.use(helmet());
 app.use(compression());
 // Fail CLOSED: only NODE_ENV === 'development' relaxes CORS. An unset or
 // misspelled NODE_ENV must behave like production, never like development.
-const isDev = process.env.NODE_ENV === 'development';
-const _allowedOrigins = (process.env.FRONTEND_URL ?? 'http://localhost:3000').split(',').map(s => s.trim());
-app.use(cors({
-    origin: (origin, cb) => {
-        if (isOriginAllowed(origin, _allowedOrigins, isDev)) return cb(null, true);
-        // Tag the error so the global handler returns 403 instead of 500. `expose`
-        // marks the message as safe to relay to the client (see error handler).
-        const err = new Error('CORS: origin not allowed') as Error & { status?: number; expose?: boolean };
-        err.status = 403;
-        err.expose = true;
-        cb(err);
-    },
-    credentials: true,
-}));
+app.use(browserCors());
+// Gateway webhooks above retain their own signature verification. Browser
+// attribution is checked before any rate-limit key or audit IP is resolved.
+if (bffClientIdentity) app.use(bffClientIdentity);
 app.use(express.json({ limit: '512kb' })); // 10kb was too small for admin blog/recipe bodies
 app.use(cookieParser());
 app.use(resolveMarket);
+app.use(publicReadPolicy);
 // 30s per-request inactivity timeout on all browser-facing routes. Mounted
 // AFTER the webhook routes (above) so gateway deliveries are never cut off.
 app.use(requestTimeout(30_000));
@@ -87,6 +127,7 @@ app.use(globalLimiter);
 // --- Routes ---
 app.use('/auth', authRoutes);
 app.use('/products', productRoutes);
+app.use('/search', searchRoutes);
 app.use('/blog', blogRoutes);
 app.use('/categories', categoryRoutes);
 app.use('/market', marketRoutes);
@@ -105,6 +146,8 @@ if (process.env.ENABLE_DEV_ROUTES === 'true') {
 }
 
 // --- Health check ---
+// Public and unauthenticated: reports only whether the API and its database are up, not which
+// environment or versions are running (final audit #46).
 app.get('/health', async (_req, res) => {
     try {
         await prisma.$queryRaw`SELECT 1`;
@@ -112,8 +155,6 @@ app.get('/health', async (_req, res) => {
             status: 'ok',
             timestamp: new Date().toISOString(),
             database: 'connected',
-            shared: SHARED_VERSION,
-            env: process.env.NODE_ENV ?? 'development',
         });
     } catch {
         res.status(503).json({ status: 'error', database: 'disconnected' });
@@ -125,6 +166,15 @@ app.use((_req, res) => {
 });
 
 app.use((err: Error & { status?: number; expose?: boolean }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    // The response is already gone — typically the 30s request timeout answered
+    // 503 and the handler failed afterwards. Writing again throws "headers
+    // already sent" inside this handler, so just record it. (Work that
+    // completes after the timeout still takes effect; the client was told to
+    // retry, which the idempotent order paths tolerate.)
+    if (res.headersSent) {
+        console.error('[ERROR after response sent]', err);
+        return;
+    }
     // Controllers that call schema.parse() directly (cart, checkout, contact,
     // wholesale, admin) throw a ZodError, which has no .status — without this
     // branch it would fall through to a 500 for what is really a 400. Surface
@@ -154,7 +204,7 @@ app.use((err: Error & { status?: number; expose?: boolean }, _req: express.Reque
     // Never leak internals (message/stack) outside development
     res.status(500).json({
         error: 'Internal server error',
-        ...(isDev && { details: err.message, stack: err.stack }),
+        ...(process.env.NODE_ENV === 'development' && { details: err.message, stack: err.stack }),
     });
 });
 
@@ -169,13 +219,13 @@ async function connectDB() {
 }
 
 connectDB().then(() => {
-    const server = app.listen(PORT, () => {
-        console.log(`🌿 Aranya Ceylon API running on http://localhost:${PORT}`);
-        // NOTE: cron jobs run in EVERY instance. Safe at one instance; before
-        // scaling horizontally, gate startAllJobs() behind a leader-election
-        // flag (e.g. only run on instance 0) so jobs don't double-fire.
+    const onListening = () => {
+        console.log(`🌿 Aranya Ceylon API running on ${API_HOST ?? 'default interfaces'}:${PORT}`);
+        // Scheduler startup requires the explicit instance-enable flag. Its
+        // noOverlap guard is local to this process, not a distributed lock.
         startAllJobs(); // Start after DB connection confirmed
-    });
+    };
+    const server = API_HOST ? app.listen(Number(PORT), API_HOST, onListening) : app.listen(PORT, onListening);
 
     // Connection-level timeouts (slow-loris / dead-peer protection).
     // keepAliveTimeout is raised above the typical proxy idle timeout so the

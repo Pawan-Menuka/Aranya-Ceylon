@@ -6,6 +6,7 @@ import type { Market } from "@/lib/types";
 import { Reveal } from "../primitives/Reveal";
 import { Eyebrow } from "../primitives/Motif";
 import { useMarket } from "../MarketContext";
+import { CONFIG, fmt } from "@/lib/cart";
 import { SupportHeader, SupportCTA, SIcon } from "./SupportCommon";
 
 // Shipping & Returns page (ported from shipping.jsx). Market-driven rate tables
@@ -15,7 +16,7 @@ interface RateCardProps {
   region: { name: string; icon: string };
   you: boolean;
   currencyNote: string;
-  freeLine: string;
+  freeLine?: string;
   rows: [string, string, string][];
   market: Market;
 }
@@ -46,24 +47,30 @@ function RateCard({ region, you, currencyNote, freeLine, rows, market }: RateCar
           </div>
         ))}
       </div>
+      {freeLine && (
       <div style={{ marginTop: "auto", display: "flex", alignItems: "center", gap: 9, padding: "16px 26px", background: local && highlight ? "rgba(15,110,86,.07)" : "var(--surface)", borderTop: "1px solid var(--line)" }}>
         <SIcon name="spark" size={17} stroke="var(--accent)" />
         <span style={{ fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>{freeLine}</span>
       </div>
+      )}
     </div>
   );
 }
 
 function ShipRates({ market }: { market: Market }) {
   const local = market === "local";
+  // Rates and the free-shipping line come from lib/cart.ts CONFIG, which
+  // mirrors what checkout actually charges — never hard-code them here.
+  const lk = CONFIG.local;
+  const us = CONFIG.intl;
   const domestic: RateCardProps = {
     region: { name: "Within Sri Lanka", icon: "pin" },
     currencyNote: "Dispatched from Kandy · priced in LKR",
     you: local,
-    freeLine: "Free standard delivery over Rs 5,000",
+    freeLine: lk.freeShip === null ? undefined : `Free standard delivery over ${fmt(lk.freeShip, "local")}`,
     rows: [
-      ["Standard · islandwide", "2–4 working days", "Rs 650"],
-      ["Express · Colombo & suburbs", "1–2 working days", "Rs 950"],
+      ["Standard · islandwide", "2–4 working days", fmt(lk.ship, "local")],
+      ["Express · Colombo & suburbs", "1–2 working days", fmt(lk.expressShip, "local")],
       ["Store collection · Kandy", "By appointment", "Free"],
     ],
     market,
@@ -72,10 +79,10 @@ function ShipRates({ market }: { market: Market }) {
     region: { name: "International", icon: "plane" },
     currencyNote: "Tracked & insured · priced in USD",
     you: !local,
-    freeLine: "Free standard shipping over $60",
+    freeLine: us.freeShip === null ? undefined : `Free standard shipping over $${us.freeShip}`,
     rows: [
-      ["Standard · tracked", "7–14 working days", "$8.50"],
-      ["Express · courier", "3–6 working days", "$24.00"],
+      ["Standard · tracked", "7–14 working days", fmt(us.ship, "intl")],
+      ["Express · courier", "3–6 working days", fmt(us.expressShip, "intl")],
       ["Remote / outlying zones", "Quoted at checkout", "Varies"],
     ],
     market,

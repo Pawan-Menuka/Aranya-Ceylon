@@ -29,10 +29,25 @@ export const loginLimiter = rateLimit({
     ...json429('Too many login attempts. Please try again in a few minutes.'),
 });
 
-// Broader limiter for the rest of the auth surface (register, refresh, etc.).
+// Broader limiter for the rest of the auth surface (register, logout, etc.).
 export const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 50,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    keyGenerator,
+    ...json429('Too many requests. Please slow down and try again shortly.'),
+});
+
+// Session refresh is not a guessing surface: it needs an unguessable 48-char
+// cookie, and reuse of a spent one already revokes the whole token family.
+// A signed-in shopper legitimately calls it on every full page load and every
+// 15 minutes, and many shoppers can sit behind one address (carrier NAT), so
+// it gets its own, much roomier bucket instead of sharing authLimiter's 50 —
+// exhausting that left signed-in visitors unable to restore their session.
+export const refreshLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 300,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     keyGenerator,
@@ -77,6 +92,32 @@ export const checkoutLimiter = rateLimit({
     legacyHeaders: false,
     keyGenerator,
     ...json429('Too many checkout attempts. Please wait a moment and try again.'),
+});
+
+// Applying a coupon is a yes/no oracle for whether a code exists, and it only
+// sat behind the global 120-per-minute limit, so codes could be guessed at
+// scale. A shopper needs a handful of attempts, not dozens. NOTE: until BFF
+// client identity is enforced (final audit #5) every visitor shares one IP
+// bucket, so this caps coupon attempts site-wide — kept generous for that.
+export const couponLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 30,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    keyGenerator,
+    ...json429('Too many coupon attempts. Please wait a few minutes and try again.'),
+});
+
+// Reviews are written by signed-in buyers, so the budget is per account (falling
+// back to the IP only if no user is attached): a handful of reviews an hour is
+// plenty, and one account cannot flood the moderation queue.
+export const reviewLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 10,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    keyGenerator: (req: Request) => (req.user ? `user:${req.user.userId}` : keyGenerator(req)),
+    ...json429('You are submitting reviews too quickly. Please try again later.'),
 });
 
 // Anti-spam limiter for the public, unauthenticated contact form.

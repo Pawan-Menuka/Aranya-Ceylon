@@ -1,4 +1,3 @@
-import DOMPurify from "isomorphic-dompurify";
 
 // Sanitises rich-text HTML before it is handed to dangerouslySetInnerHTML.
 //
@@ -8,20 +7,27 @@ import DOMPurify from "isomorphic-dompurify";
 // data, must not be able to inject <script>, event handlers, or javascript:
 // URLs. DOMPurify strips all of that while keeping the allowed tags below.
 //
-// isomorphic-dompurify runs on both the Node server (SSR) and the browser, so
-// the markup is cleaned before it ever reaches the initial HTML — not just on
-// the client.
+// Called at server page boundaries only. Clients receive sanitized strings,
+// keeping DOMPurify out of their bundles and avoiding work on each re-render.
+import { cachedContent } from "./content-cache";
+import type { SanitizedHtml } from "./sanitized-html";
 const ALLOWED_TAGS = [
     "p", "br", "b", "strong", "i", "em", "u",
     "a", "ul", "ol", "li", "blockquote", "span",
 ];
 const ALLOWED_ATTR = ["href", "title", "target", "rel"];
 
-export function sanitizeHtml(dirty: string): string {
+const cleanContent = cachedContent((dirty: string): string => {
+    const DOMPurify = require("isomorphic-dompurify") as typeof import("isomorphic-dompurify");
     return DOMPurify.sanitize(dirty, {
         ALLOWED_TAGS,
         ALLOWED_ATTR,
         // Block javascript:/data: URIs in href; allow normal links + mailto/tel.
         ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
     });
+});
+
+export function sanitizeHtml(dirty: string): SanitizedHtml {
+    if (typeof window !== "undefined") throw new Error("Rich text must be sanitized on the server.");
+    return cleanContent(dirty) as SanitizedHtml;
 }

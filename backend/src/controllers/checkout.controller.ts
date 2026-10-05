@@ -3,7 +3,8 @@ import { prisma } from '../lib/prisma.js';
 import { Currency } from '@prisma/client';
 import { createPaymentIntent } from '../services/stripe.service.js';
 import { buildPayHerePayload, PAYHERE_CHECKOUT_URL } from '../services/payhere.service.js';
-import { calculateCartTotal } from '../services/cart.service.js';
+import { calculateTotalsForLines, couponAppliesToCurrency } from '../services/cart.service.js';
+import { supersedePendingOrders, cancelPendingOrder } from '../services/pending-order.service.js';
 import { confirmOrderPaid } from './webhook.controller.js';
 import { checkoutSchema } from '@aranya/shared';
 
@@ -60,7 +61,7 @@ export async function createIntent(req: Request, res: Response) {
         return res.status(400).json({ error: 'No cart found. Add items before checking out.' });
     }
 
-    const cart = await prisma.cart.findUnique({
+    let cart = await prisma.cart.findUnique({
         where: cartWhere,
         include: { items: { include: { variant: true, product: true } } },
     });
@@ -69,13 +70,31 @@ export async function createIntent(req: Request, res: Response) {
         return res.status(400).json({ error: 'Cart is empty' });
     }
 
-    // Market re-validation: a variant's market can change while the cart sits.
-    // Re-check every line so we never charge a cross-market item.
+    // A basket has at most one open checkout. Every earlier unpaid order for
+    // this cart still holds the stock (and coupon use) it reserved, so without
+    // this a retry on the last unit is refused by the shopper's own previous
+    // attempt, and repeated attempts can hold stock without ever paying.
+    // Released reservations change live stock, so the cart is re-read to keep
+    // the pre-check below accurate.
+    if (await supersedePendingOrders(cart.id) > 0) {
+        cart = await prisma.cart.findUnique({
+            where: cartWhere,
+            include: { items: { include: { variant: true, product: true } } },
+        });
+        if (!cart || cart.items.length === 0) {
+            return res.status(400).json({ error: 'Cart is empty' });
+        }
+    }
+
+    // Market re-validation: a variant's market can change while the cart sits,
+    // and a product can be archived after it was added. Re-check every line so
+    // we never charge a cross-market or withdrawn item.
     const expectedCurrency = market === 'LOCAL' ? 'LKR' : 'USD';
     const wrongMarket = cart.items.filter(
         (item) =>
             (item.variant.market !== market && item.variant.market !== 'BOTH') ||
-            item.variant.currency !== expectedCurrency,
+            item.variant.currency !== expectedCurrency ||
+            item.product.status === 'ARCHIVED',
     );
     if (wrongMarket.length > 0) {
         return res.status(409).json({
@@ -103,11 +122,12 @@ export async function createIntent(req: Request, res: Response) {
     }
 
     // If the client submitted a coupon code at checkout, persist it to the cart
-    // so calculateCartTotal picks it up. Overrides any previously applied coupon.
+    // and price this order with it. Overrides any previously applied coupon.
     // This is only a fast pre-check for a friendly error message — it reads a
-    // possibly-stale usageCount, same as calculateCartTotal below. The
+    // possibly-stale usageCount, same as the totals calculation below. The
     // authoritative check-and-claim happens atomically inside the order-creation
     // transaction further down (see the coupon reservation block there).
+    let checkoutCouponId = cart.couponId;
     if (couponCode) {
         const coupon = await prisma.coupon.findUnique({ where: { code: couponCode } });
         if (!coupon) {
@@ -119,12 +139,19 @@ export async function createIntent(req: Request, res: Response) {
         if (coupon.usageLimit !== null && coupon.usageCount >= coupon.usageLimit) {
             return res.status(400).json({ error: 'That coupon has reached its usage limit.' });
         }
+        if (!couponAppliesToCurrency(coupon, expectedCurrency)) {
+            return res.status(400).json({ error: 'That coupon can\'t be used in this store.' });
+        }
         await prisma.cart.update({ where: { id: cart.id }, data: { couponId: coupon.id } });
+        checkoutCouponId = coupon.id;
     }
 
-    // Calculate total server-side (applies any coupon on the cart, and gift wrap pricing)
+    // Calculate total server-side (applies the coupon, and gift wrap pricing)
+    // from the SAME lines that are reserved and snapshotted onto the order
+    // below — never from a second read of the cart, which a concurrent
+    // quantity change could make disagree with the order's own line items.
     const { totalInCents, total, shippingCost, discount, couponId, currency }
-        = await calculateCartTotal(cart.id, market, shippingMethod, giftWrap);
+        = await calculateTotalsForLines(cart.items, checkoutCouponId, market, shippingMethod, giftWrap);
 
     // Reserve stock atomically and create the order together, in one
     // transaction: two concurrent checkouts for the last unit can no longer
@@ -254,18 +281,25 @@ export async function createIntent(req: Request, res: Response) {
         throw err;
     }
 
-    // Save address to the authenticated user's address book if requested
+    // Save address to the authenticated user's address book if requested.
+    // Best-effort: the order (and its stock reservation) is already committed,
+    // so a failed convenience write must not turn the checkout into a 500 the
+    // shopper would retry into a second order.
     if (saveAddress && userId) {
-        await prisma.address.create({
-            data: {
-                userId,
-                line1: shippingAddress.line1,
-                line2: shippingAddress.line2,
-                city: shippingAddress.city,
-                country: shippingAddress.country,
-                postalCode: shippingAddress.postalCode ?? '',
-            },
-        });
+        try {
+            await prisma.address.create({
+                data: {
+                    userId,
+                    line1: shippingAddress.line1,
+                    line2: shippingAddress.line2,
+                    city: shippingAddress.city,
+                    country: shippingAddress.country,
+                    postalCode: shippingAddress.postalCode ?? '',
+                },
+            });
+        } catch {
+            console.warn('[checkout] Could not save the shipping address to the address book.');
+        }
     }
 
     // Stub payment mode: skip real gateways during development
@@ -306,21 +340,41 @@ export async function createIntent(req: Request, res: Response) {
     }
 
     // INTERNATIONAL — Stripe PaymentIntent
-    const paymentIntent = await createPaymentIntent(
-        totalInCents,
-        currency,
-        { orderId: order.id, userId: userId ?? 'guest', market },
-    );
+    let paymentIntent;
+    try {
+        paymentIntent = await createPaymentIntent(
+            totalInCents,
+            currency,
+            { orderId: order.id, userId: userId ?? 'guest', market },
+        );
 
-    await prisma.order.update({
-        where: { id: order.id },
-        data: { paymentIntentId: paymentIntent.id },
-    });
+        await prisma.order.update({
+            where: { id: order.id },
+            data: { paymentIntentId: paymentIntent.id },
+        });
+    } catch (err) {
+        // The order exists but can never be paid: without an intent the
+        // shopper has nothing to pay against, and an intent we failed to
+        // record would be rejected by the webhook. Release the reservation
+        // now instead of holding stock until the sweep. A created-but-
+        // unrecorded intent is closed too, so it can't be paid into a void.
+        console.error(`[checkout] Stripe payment setup failed for order ${order.id}:`, err);
+        await cancelPendingOrder(
+            { id: order.id, paymentIntentId: paymentIntent?.id ?? null },
+            'Cancelled — payment could not be set up with Stripe.',
+            { force: true },
+        ).catch((releaseErr) => console.error(`[checkout] Could not release order ${order.id}:`, releaseErr));
+        return res.status(502).json({
+            error: 'We could not reach our payment provider. Your basket is unchanged — please try again in a moment.',
+            code: 'PAYMENT_SETUP_FAILED',
+        });
+    }
 
     return res.json({
         provider: 'stripe',
         orderId: order.id,
         clientSecret: paymentIntent.client_secret,
+        // Required at boot whenever PAYMENTS_MODE=live (config/env.ts).
         publishableKey: process.env.STRIPE_PUBLISHABLE_KEY ?? '',
     });
 }

@@ -13,20 +13,29 @@ export const MULT: Record<string, number> = { "50g": 0.6, "100g": 1, "250g": 2.3
 
 export interface MarketConfig {
   cur: "USD" | "LKR";
-  freeShip: number;
+  // Order value at which standard shipping becomes free; null = never free.
+  freeShip: number | null;
   ship: number;
+  expressShip: number;
   giftWrap: number;
   promo: Record<string, number>;
 }
 
-// commerce constants per market
+// commerce constants per market. Shipping MUST mirror what the API charges
+// (SHIPPING_RATES_CENTS / LOCAL_SHIPPING_RATES_CENTS in
+// backend/src/services/cart.service.ts) — these figures are shown to shoppers
+// before checkout. The API has no free-shipping threshold, so none is offered
+// here; setting `freeShip` restores the free-shipping UI everywhere once the
+// API applies the same threshold.
 export const CONFIG: Record<Market, MarketConfig> = {
-  intl: { cur: "USD", freeShip: 60, ship: 8.5, giftWrap: 4.5, promo: { CEYLON10: 0.1 } },
-  local: { cur: "LKR", freeShip: 5000, ship: 650, giftWrap: 400, promo: { CEYLON10: 0.1 } },
+  intl: { cur: "USD", freeShip: null, ship: 4.99, expressShip: 12.99, giftWrap: 4.5, promo: { CEYLON10: 0.1 } },
+  local: { cur: "LKR", freeShip: null, ship: 350, expressShip: 650, giftWrap: 400, promo: { CEYLON10: 0.1 } },
 };
 
 export interface CartLine {
   id: string;
+  slug?: string;
+  imageSrc?: string;
   name: string;
   latin: string;
   weight: string;
@@ -70,7 +79,7 @@ export function resolveVariant(
 }
 
 // Real per-unit prices for a weight in each market, drawn from live variants.
-export function variantUnitPrices(
+function variantUnitPrices(
   variants: Variant[] | undefined,
   weightStr: string,
 ): { unitUsd?: number; unitLkr?: number } {
@@ -98,13 +107,14 @@ export interface Totals {
   gift: number;
   ship: number;
   freeShip: boolean;
-  freeShipThreshold: number;
+  // null when no free-shipping threshold is offered in this market.
+  freeShipThreshold: number | null;
   remainingToFree: number;
   total: number;
   fmt: (n: number) => string;
 }
 
-export function num(p: string | number): number {
+function num(p: string | number): number {
   return typeof p === "number" ? p : parseFloat(String(p).replace(/[^0-9.]/g, "")) || 0;
 }
 
@@ -134,7 +144,7 @@ export function computeTotals(state: CartState, market: Market): Totals {
   const discount = subtotal * discountRate;
   const afterDisc = subtotal - discount;
   const gift = state.giftWrap ? cfg.giftWrap : 0;
-  const freeShip = afterDisc >= cfg.freeShip || state.items.length === 0;
+  const freeShip = (cfg.freeShip !== null && afterDisc >= cfg.freeShip) || state.items.length === 0;
   const ship = freeShip ? 0 : cfg.ship;
   const total = afterDisc + gift + ship;
   return {
@@ -147,7 +157,7 @@ export function computeTotals(state: CartState, market: Market): Totals {
     ship,
     freeShip,
     freeShipThreshold: cfg.freeShip,
-    remainingToFree: Math.max(0, cfg.freeShip - afterDisc),
+    remainingToFree: cfg.freeShip === null ? 0 : Math.max(0, cfg.freeShip - afterDisc),
     total,
     fmt: (n: number) => fmt(n, market),
   };
@@ -176,6 +186,8 @@ export function lineFromSpice(
   const id = variantId ? `v:${variantId}` : `${spice.name}|${weight}|${form}`;
   return {
     id,
+    ...(spice.slug ? { slug: spice.slug } : {}),
+    ...(spice.imageSrc ? { imageSrc: spice.imageSrc } : {}),
     name: spice.name,
     latin: spice.latin || "",
     weight,
@@ -203,6 +215,7 @@ export function lineFromServerItem(item: CartItem): CartLine {
   const isLkr = item.variant.currency === "LKR";
   return {
     id: `v:${item.variant.id}`,
+    slug: item.product.slug,
     name: item.product.name,
     latin: "",
     weight: `${item.variant.weight}g`,

@@ -1,15 +1,12 @@
-"use client";
-
 import * as React from "react";
 import type { Market, Spice } from "@/lib/types";
-import { Navbar } from "../Navbar";
-import { Footer } from "../Footer";
 import { HomeHero, MarketStrip } from "./HomeHero";
 import { SpiceTicker, FeaturedForest, CategoryAccordion } from "./Sections";
 import { StoryBand, Bestsellers } from "./StorySections";
 import { Heritage, Newsletter } from "./Heritage";
 
-// Homepage shell. CommerceProvider is mounted once in the root layout.
+// Homepage content. The storefront layout owns the persistent navbar/footer;
+// CommerceProvider is mounted once in the root layout.
 // `initialMarket` is kept for callsite compatibility but is unused here.
 export function HomePage({
   featured,
@@ -23,7 +20,6 @@ export function HomePage({
 }) {
   return (
     <>
-      <Navbar heroMode />
       <MarketStrip />
       <HomeHero dust />
       <SpiceTicker spices={ticker} />
@@ -33,7 +29,6 @@ export function HomePage({
       <Bestsellers spices={bestsellers} />
       <Heritage />
       <Newsletter />
-      <Footer />
     </>
   );
 }

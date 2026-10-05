@@ -9,6 +9,8 @@ export function responseDouble<T = unknown>() {
     const res = {
         statusCode: 200,
         body: undefined as T,
+        headers: {} as Record<string, string>,
+        setHeader(name: string, value: string) { this.headers[name.toLowerCase()] = value; return this; },
         status(code: number) { this.statusCode = code; return this; },
         json(body: T) { this.body = body; return this; },
         send(body: T) { this.body = body; return this; },

@@ -147,10 +147,37 @@ describe('rotateRefreshToken — THE #1 regression test', () => {
     it('detects reuse of a consumed token and nukes the whole family', async () => {
         const { refreshTokenPlaintext } = await issueTokenPair(testUser);
         await rotateRefreshToken(refreshTokenPlaintext); // legit rotation
+        rows[0]!.usedAt = new Date(Date.now() - 60_000); // consumed a minute ago
 
         // Replaying the OLD token = theft signal
         await expect(rotateRefreshToken(refreshTokenPlaintext)).rejects.toThrow('TOKEN_REUSE_DETECTED');
         expect(rows).toHaveLength(0); // entire family revoked
+    });
+
+    // Final audit #19: tabs that restore together send the same cookie; the
+    // second one used to be treated as theft, logging the whole browser out.
+    it('gives a concurrent refresh from another tab its own token instead of revoking the session', async () => {
+        const { refreshTokenPlaintext } = await issueTokenPair(testUser);
+        const first = await rotateRefreshToken(refreshTokenPlaintext);
+        const second = await rotateRefreshToken(refreshTokenPlaintext); // same cookie, a moment later
+
+        expect(second.refreshTokenPlaintext).not.toBe(first.refreshTokenPlaintext);
+        const family = rows[0]!.family;
+        expect(rows.filter((r) => r.family === family)).toHaveLength(3); // original + two successors
+        // Both tabs' tokens keep working.
+        await expect(rotateRefreshToken(first.refreshTokenPlaintext)).resolves.toBeTruthy();
+        await expect(rotateRefreshToken(second.refreshTokenPlaintext)).resolves.toBeTruthy();
+    });
+
+    it('treats losing the claim race as a concurrent refresh, not theft', async () => {
+        const { refreshTokenPlaintext } = await issueTokenPair(testUser);
+        const original = rows[0]!;
+        // The lookup reads the row as unused (it runs synchronously in the fake);
+        // a competing request's claim then lands before this one's.
+        const rotated = rotateRefreshToken(refreshTokenPlaintext);
+        original.usedAt = new Date();
+        await expect(rotated).resolves.toBeTruthy();
+        expect(rows.some((r) => r.family === original.family && r.usedAt === null)).toBe(true);
     });
 
     it('rejects an expired token with TOKEN_EXPIRED and deletes it', async () => {
@@ -159,6 +186,22 @@ describe('rotateRefreshToken — THE #1 regression test', () => {
 
         await expect(rotateRefreshToken(refreshTokenPlaintext)).rejects.toThrow('TOKEN_EXPIRED');
         expect(rows).toHaveLength(0);
+    });
+});
+
+describe('rotateRefreshToken — suspended accounts', () => {
+    it('refuses to renew a session for a suspended user and ends all of their sessions', async () => {
+        const first = await issueTokenPair(testUser);
+        await issueTokenPair(testUser); // a second device
+        expect(rows.length).toBeGreaterThanOrEqual(2);
+
+        testUser.suspendedAt = new Date();
+        try {
+            await expect(rotateRefreshToken(first.refreshTokenPlaintext)).rejects.toThrow('ACCOUNT_SUSPENDED');
+            expect(rows.filter((r) => r.userId === testUser.id && r.type === 'REFRESH')).toHaveLength(0);
+        } finally {
+            testUser.suspendedAt = null;
+        }
     });
 });
 
@@ -211,7 +254,8 @@ describe('resetPasswordWithToken', () => {
         expect(userUpdateCalls).toHaveLength(1);
         expect(userUpdateCalls[0]).toEqual({
             where: { id: testUser.id },
-            data: { passwordHash: '$2b$12$newhashvalue' },
+            // Following the emailed link proves the mailbox (final audit #23).
+            data: { passwordHash: '$2b$12$newhashvalue', verified: true },
         });
 
         const remaining = rows.filter((r) => r.type === 'REFRESH');

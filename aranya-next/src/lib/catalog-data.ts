@@ -1,4 +1,4 @@
-import type { CatalogSpice, FacetVocab, Product } from "./types";
+import type { CatalogSpice, FacetVocab, Product, ProductCard } from "./types";
 import { toSpice } from "./spice-data";
 
 // Catalog demo dataset (ported from catalog-data.js) — the SSG/ISR fallback for
@@ -63,27 +63,17 @@ export const CATALOG_FACETS: FacetVocab = {
   flavour: ["Sweet", "Warm", "Citrus", "Floral", "Pungent", "Earthy"],
 };
 
-// Sort options: [value, label]
-export const CATALOG_SORTS: [string, string][] = [
-  ["featured", "Featured"],
-  ["best", "Best-selling"],
-  ["price-asc", "Price: Low to High"],
-  ["price-desc", "Price: High to Low"],
-  ["rating", "Top-rated"],
-  ["new", "Newest"],
-];
-
 // Adapter: live Product -> CatalogSpice (spec §8). Adds the facet/sort fields on
 // top of the base Spice mapping so the ported filter UI works unchanged.
-function deriveForm(p: Product): string {
+function deriveForm(p: Product | ProductCard): string {
   return /ground|powder|masala|blend/i.test(`${p.name} ${p.category?.name ?? ""}`) ? "Ground" : "Whole";
 }
-function deriveCategory(p: Product): string {
+function deriveCategory(p: Product | ProductCard): string {
   if (p.category?.name) return p.category.name;
   return deriveForm(p) === "Ground" ? "Ground" : "Whole Spices";
 }
 
-export function toCatalogSpice(p: Product): CatalogSpice {
+export function toCatalogSpice(p: Product | ProductCard): CatalogSpice {
   const base = toSpice(p);
   return {
     ...base,

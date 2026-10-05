@@ -130,6 +130,7 @@ const AUDIT_ICON: Record<string, { icon: string; tone: string }> = {
   RECIPE_UPDATE: { icon: "star", tone: "slate" },
   GIFT_CREATE: { icon: "star", tone: "amber" },
   GIFT_UPDATE: { icon: "star", tone: "amber" },
+  EMAIL_SEND_FAILED: { icon: "alert", tone: "red" },
 };
 
 function MarketDonutCard({ live }: { live: DashboardData | null }) {

@@ -1,8 +1,12 @@
 import type { Request, Response } from 'express';
 import { constructWebhookEvent } from '../services/stripe.service.js';
 import { verifyPayHereNotification } from '../services/payhere.service.js';
-import { sendOrderConfirmation, sendNewOrderAdminNotification } from '../services/email.service.js';
+import { sendOrderConfirmation, sendNewOrderAdminNotification, sendPaymentForClosedOrderAlert, sendGatewayReversalAlert } from '../services/email.service.js';
+import type { OrderStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { outboxEnabled } from '../lib/outbox.js';
+import { enqueueEmail } from '../services/email.service.js';
+import type { JobLeaseHandle } from '../jobs/jobLease.js';
 
 // ── Webhook event log (roadmap: replay/dispute debugging) ───────────
 // Best-effort and outside any order transaction: a logging failure must never
@@ -137,6 +141,13 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
             await tx.cartItem.deleteMany({ where: { cartId: order.cartId } });
         }
 
+        if (outboxEnabled()) {
+            const common = { orderId, total: Number(order.total), currency: order.currency, market: order.market };
+            const recipient = order.user?.email ?? order.guestEmail;
+            if (recipient) await enqueueEmail(tx, `paid:${orderId}:customer`, () => sendOrderConfirmation({ ...common, to: recipient }));
+            await enqueueEmail(tx, `paid:${orderId}:merchant`, () => sendNewOrderAdminNotification({ ...common, itemCount: order.items.length }));
+        }
+
         // 6. Hand back what the confirmation email needs. Recipient is the
         //    account email, or the guest email for guest checkout (#17).
         return {
@@ -151,7 +162,7 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
     // Only log the transition on the FIRST flip — the transaction returns null
     // for an already-processed (or unknown) order, so logging unconditionally
     // claimed "marked PAID" on every duplicate webhook delivery (BUG-25).
-    if (confirmation) {
+    if (confirmation && !outboxEnabled()) {
         console.log(`✅ Order ${orderId} marked PAID via ${gateway}`);
 
         // Merchant-facing "you made a sale" alert — sent once (first PAID flip
@@ -170,7 +181,7 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
 
     // Order confirmation — sent once (first PAID flip only) and after commit,
     // so a slow/failed send never blocks the webhook ack or rolls back payment.
-    if (confirmation?.to) {
+    if (confirmation?.to && !outboxEnabled()) {
         await sendOrderConfirmation({
             to: confirmation.to,
             orderId,
@@ -183,17 +194,124 @@ export async function confirmOrderPaid(orderId: string, paymentRef: string, gate
     }
 }
 
+// ── A verified payment landed on an order that is no longer open ────
+// confirmOrderPaid only acts on PENDING orders, so a payment for an order
+// that was already cancelled (stale sweep, superseded checkout, PayHere
+// cancel, admin) or refunded used to be acked and dropped: the customer was
+// charged, the stock was back on sale, and nobody was told. Cancelling a
+// Stripe order now closes its PaymentIntent first (pending-order.service.ts),
+// but PayHere has no cancel API and a race is always possible — so the money
+// is recorded on the order's timeline and the merchant is alerted to refund
+// or reinstate it. Reported once per order: gateways retry deliveries.
+const CLOSED_ORDER_PAYMENT_NOTE = 'Payment received after the order was closed';
+const CLOSED_ORDER_STATUSES = ['CANCELLED', 'REFUNDED'];
+
+async function reportPaymentForClosedOrder(
+    order: { id: string; status: string; total: unknown; currency: string },
+    paymentRef: string,
+    gateway: string,
+) {
+    const reported = await prisma.orderEvent.findFirst({
+        where: { orderId: order.id, note: { startsWith: CLOSED_ORDER_PAYMENT_NOTE } },
+        select: { id: true },
+    });
+    if (reported) return;
+
+    await prisma.orderEvent.create({
+        data: {
+            orderId: order.id,
+            status: order.status as OrderStatus,
+            note: `${CLOSED_ORDER_PAYMENT_NOTE} (${gateway}, ref ${paymentRef}). The customer has been charged — refund or reinstate this order manually.`,
+        },
+    });
+    console.error(`⚠ Order ${order.id} is ${order.status} but a ${gateway} payment was received. Needs manual review.`);
+
+    await sendPaymentForClosedOrderAlert({
+        orderId: order.id,
+        status: order.status,
+        total: Number(order.total),
+        currency: order.currency,
+        gateway,
+        paymentRef,
+    }).catch((err) =>
+        console.error(`✉ Closed-order payment alert failed for ${order.id}:`, err),
+    );
+}
+
+// ── Money was taken back at the gateway, outside the admin console ──
+// A refund issued from the Stripe dashboard, a dispute, or a PayHere
+// chargeback used to be ignored: the order stayed PAID/SHIPPED, its stock was
+// never returned, and nobody knew. These are not resolved automatically — a
+// dispute can be won, a refund can be partial, the goods may already have
+// shipped — so the event is put on the order's timeline and the merchant is
+// alerted to reconcile it. Reported once per gateway reference.
+type ReversalKind = 'refund' | 'dispute' | 'chargeback';
+const REVERSAL_NOTE = 'Gateway reported a';
+
+async function reportGatewayReversal(
+    order: { id: string; status: string; total: unknown; currency: string } | null,
+    reversal: { gateway: string; kind: ReversalKind; reference: string; detail: string },
+) {
+    if (!order) return; // unrelated to any order we know
+    // A refund the admin console started is already recorded as REFUNDED and
+    // restocked by refundOrder — Stripe confirming it is not news.
+    if (reversal.kind === 'refund' && order.status === 'REFUNDED') return;
+
+    const marker = `${REVERSAL_NOTE} ${reversal.kind} (${reversal.gateway}, ref ${reversal.reference})`;
+    const reported = await prisma.orderEvent.findFirst({
+        where: { orderId: order.id, note: { startsWith: marker } },
+        select: { id: true },
+    });
+    if (reported) return;
+
+    await prisma.orderEvent.create({
+        data: {
+            orderId: order.id,
+            status: order.status as OrderStatus,
+            note: `${marker}: ${reversal.detail}. The order is still ${order.status} and its stock has not been returned — reconcile it manually.`,
+        },
+    });
+    console.error(`⚠ Order ${order.id}: ${reversal.gateway} ${reversal.kind} (${reversal.reference}). Needs manual review.`);
+
+    await sendGatewayReversalAlert({
+        orderId: order.id,
+        status: order.status,
+        total: Number(order.total),
+        currency: order.currency,
+        ...reversal,
+    }).catch((err) =>
+        console.error(`✉ Gateway ${reversal.kind} alert failed for ${order.id}:`, err),
+    );
+}
+
+// Stripe reports the intent either as an id or as an expanded object.
+function intentId(value: string | { id: string } | null | undefined): string | null {
+    if (!value) return null;
+    return typeof value === 'string' ? value : value.id;
+}
+
+// Smallest-unit amount → "25.00 USD", tolerant of a sparse event payload.
+function stripeMoney(amount: number | null | undefined, currency: string | null | undefined): string {
+    return `${((amount ?? 0) / 100).toFixed(2)} ${(currency ?? '').toUpperCase()}`.trim();
+}
+
+async function orderForIntent(paymentIntentId: string | null) {
+    return paymentIntentId ? prisma.order.findUnique({ where: { paymentIntentId } }) : null;
+}
+
 // ── Cancel a PENDING order and release its reserved stock ───────────
 // Stock for a regular line item is reserved (decremented) at checkout-intent
 // creation, not at payment time — see checkout.controller.ts. If the order
-// never gets paid (explicit gateway cancellation, or the stale-order cron
-// sweep after 24h), that reservation must be released back to real stock,
+// never gets paid (explicit gateway cancellation, a newer checkout attempt
+// for the same basket, or the stale-order cron sweep — callers go through
+// pending-order.service.ts), that reservation must be released back to real stock,
 // or it's gone forever. Idempotent and concurrency-safe the same way
 // confirmOrderPaid is: the PENDING→CANCELLED flip is a conditional
 // updateMany, so calling this twice (or racing a late successful payment)
 // can never release stock twice or cancel an order that just got paid.
-export async function cancelOrderAndReleaseStock(orderId: string, note: string) {
+export async function cancelOrderAndReleaseStock(orderId: string, note: string, lease?: JobLeaseHandle) {
     await prisma.$transaction(async (tx) => {
+        await lease?.assertOwned(tx);
         const claimed = await tx.order.updateMany({
             where: { id: orderId, status: 'PENDING' },
             data: { status: 'CANCELLED' },
@@ -283,6 +401,10 @@ export async function stripeWebhook(req: Request, res: Response) {
                 pi.currency?.toUpperCase() !== order.currency) {
                 return res.status(400).json({ error: 'Payment does not match the recorded order' });
             }
+            if (CLOSED_ORDER_STATUSES.includes(order.status)) {
+                await reportPaymentForClosedOrder(order, pi.id, 'Stripe');
+                break;
+            }
             await confirmOrderPaid(order.id, pi.id, 'Stripe');
             break;
         }
@@ -318,6 +440,27 @@ export async function stripeWebhook(req: Request, res: Response) {
             if (order) {
                 await cancelOrderAndReleaseStock(order.id, 'Cancelled via Stripe payment_intent.canceled.');
             }
+            break;
+        }
+        case 'charge.refunded': {
+            const charge = event.data.object;
+            const order = await orderForIntent(intentId(charge.payment_intent));
+            if (!order) break; // a charge unrelated to any order here
+            const full = charge.amount_refunded >= charge.amount;
+            await reportGatewayReversal(order, {
+                gateway: 'Stripe', kind: 'refund', reference: charge.id,
+                detail: `${full ? 'refunded in full' : 'partially refunded'} (${stripeMoney(charge.amount_refunded, charge.currency)})`,
+            });
+            break;
+        }
+        case 'charge.dispute.created': {
+            const dispute = event.data.object;
+            const order = await orderForIntent(intentId(dispute.payment_intent));
+            if (!order) break;
+            await reportGatewayReversal(order, {
+                gateway: 'Stripe', kind: 'dispute', reference: dispute.id,
+                detail: `the customer's bank opened a dispute (${dispute.reason ?? 'no reason given'}) for ${stripeMoney(dispute.amount, dispute.currency)} — respond in the Stripe dashboard before its deadline`,
+            });
             break;
         }
         default:
@@ -401,6 +544,11 @@ export async function payHereWebhook(req: Request, res: Response) {
             return res.status(400).send('Amount mismatch');
         }
 
+        if (CLOSED_ORDER_STATUSES.includes(order.status)) {
+            await reportPaymentForClosedOrder(order, payment_id, 'PayHere');
+            return res.send('OK');
+        }
+
         await confirmOrderPaid(order_id, payment_id, 'PayHere');
     } else if (status_code === '-1') {
         // Customer explicitly cancelled — cancel the order if still open and
@@ -423,6 +571,14 @@ export async function payHereWebhook(req: Request, res: Response) {
             });
         }
         console.log(`⚠ PayHere payment failed for order ${order_id} — left PENDING for retry`);
+    } else if (status_code === '-3') {
+        // Chargeback: the customer's bank reversed a payment we already
+        // confirmed. Never reverse the order automatically — flag it.
+        const order = await prisma.order.findUnique({ where: { id: order_id } });
+        await reportGatewayReversal(order, {
+            gateway: 'PayHere', kind: 'chargeback', reference: String(payment_id ?? order_id),
+            detail: `the payment of ${payhere_amount} ${payhere_currency} was charged back`,
+        });
     }
 
     // PayHere REQUIRES plain text "OK" — not JSON

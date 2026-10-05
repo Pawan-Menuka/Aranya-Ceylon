@@ -10,7 +10,7 @@ import { AIcon } from "./AdminPrimitives";
 
 type NavItem = { key: string; label: string; icon: string; count?: number; hot?: boolean };
 
-export const AD_NAV: NavItem[] = [
+const AD_NAV: NavItem[] = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard" },
   { key: "orders", label: "Orders", icon: "orders", count: 18, hot: true },
   { key: "products", label: "Products", icon: "products" },

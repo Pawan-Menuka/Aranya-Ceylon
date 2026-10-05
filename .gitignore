@@ -22,6 +22,12 @@ Thumbs.db
 .vscode/settings.json
 .idea/
 
-# Prisma (added in Step 2)
-prisma/migrations/
+# TypeScript incremental build info
 *.tsbuildinfo
+
+# Isolated performance builds, browser screenshots and raw measurements
+aranya-next/.performance-build/
+artifacts/performance/
+
+# Content-versioned copies are generated from public/images and public/hero at build.
+aranya-next/public/media/

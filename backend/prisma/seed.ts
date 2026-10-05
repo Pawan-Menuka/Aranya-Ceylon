@@ -18,6 +18,32 @@ const pool = new Pool({
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
+function productImages(slug: string, views: readonly string[], alt: string) {
+    return views.map((view, position) => ({
+        url: `/images/products/${slug}/${view}.webp`,
+        altText: `${alt} — ${view.replace(/^\d+-/, '').replace(/-/g, ' ')}`,
+        position,
+    }));
+}
+
+async function syncSeedImages(productId: string, slug: string, views: readonly string[], alt: string, oldUrl: string) {
+    const current = await prisma.productImage.findMany({ where: { productId }, orderBy: { position: 'asc' } });
+    const prefix = `/images/products/${slug}/`;
+    // Keep images uploaded by an admin. Only the old demo URL or generated
+    // local paths are eligible for replacement on a repeated seed.
+    if (current.some((image) => image.url !== oldUrl && !image.url.startsWith(prefix))) return;
+    for (const [position, view] of views.entries()) {
+        const url = `${prefix}${view}.webp`;
+        const altText = `${alt} — ${view.replace(/^\d+-/, '').replace(/-/g, ' ')}`;
+        const image = current.find((entry) => entry.position === position);
+        if (image && image.url !== url) {
+            await prisma.productImage.update({ where: { id: image.id }, data: { url, altText } });
+        } else if (!image) {
+            await prisma.productImage.create({ data: { productId, url, altText, position } });
+        }
+    }
+}
+
 async function main() {
 
     console.log('🌱 Seeding database...');
@@ -118,16 +144,11 @@ async function main() {
                 ],
             },
             images: {
-                create: [
-                    {
-                        url: 'https://res.cloudinary.com/demo/image/upload/cinnamon.jpg',
-                        altText: 'Ceylon cinnamon sticks',
-                        position: 0,
-                    },
-                ],
+                create: productImages('ceylon-true-cinnamon', ['01-primary', '02-detail', '03-milled', '04-packaging'], 'Ceylon true cinnamon'),
             },
         },
     });
+    await syncSeedImages(cinnamon.id, 'ceylon-true-cinnamon', ['01-primary', '02-detail', '03-milled', '04-packaging'], 'Ceylon true cinnamon', 'https://res.cloudinary.com/demo/image/upload/cinnamon.jpg');
 
     const blackPepper = await prisma.product.upsert({
         where: { slug: 'malabar-black-pepper' },
@@ -215,16 +236,11 @@ async function main() {
                 ],
             },
             images: {
-                create: [
-                    {
-                        url: 'https://res.cloudinary.com/demo/image/upload/pepper.jpg',
-                        altText: 'Malabar black pepper',
-                        position: 0,
-                    },
-                ],
+                create: productImages('malabar-black-pepper', ['01-primary', '02-detail', '03-cracked', '04-packaging'], 'Malabar black pepper'),
             },
         },
     });
+    await syncSeedImages(blackPepper.id, 'malabar-black-pepper', ['01-primary', '02-detail', '03-cracked', '04-packaging'], 'Malabar black pepper', 'https://res.cloudinary.com/demo/image/upload/pepper.jpg');
 
     const ceylonTea = await prisma.product.upsert({
         where: { slug: 'single-estate-ceylon-black-tea' },
@@ -312,16 +328,11 @@ async function main() {
                 ],
             },
             images: {
-                create: [
-                    {
-                        url: 'https://res.cloudinary.com/demo/image/upload/tea.jpg',
-                        altText: 'Ceylon black tea',
-                        position: 0,
-                    },
-                ],
+                create: productImages('single-estate-ceylon-black-tea', ['01-primary', '02-detail', '03-brewed', '04-packaging'], 'Single estate Ceylon black tea'),
             },
         },
     });
+    await syncSeedImages(ceylonTea.id, 'single-estate-ceylon-black-tea', ['01-primary', '02-detail', '03-brewed', '04-packaging'], 'Single estate Ceylon black tea', 'https://res.cloudinary.com/demo/image/upload/tea.jpg');
 
     console.log('✅ Products created:', cinnamon.name, blackPepper.name, ceylonTea.name);
 
@@ -330,7 +341,9 @@ async function main() {
     // ships in source (SEC-03). In production the password is mandatory; locally
     // a clearly-insecure default is used and printed so devs can log in.
     const isProd = process.env.NODE_ENV === 'production';
-    const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@aranyaceylon.com';
+    // Stored lower-case, like every account email: sign-in lower-cases what is
+    // typed, so a mixed-case seeded admin could otherwise never log in.
+    const adminEmail = (process.env.SEED_ADMIN_EMAIL ?? 'admin@aranyaceylon.com').trim().toLowerCase();
     const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? (isProd ? '' : 'dev-only-admin-change-me');
 
     if (!adminPassword) {

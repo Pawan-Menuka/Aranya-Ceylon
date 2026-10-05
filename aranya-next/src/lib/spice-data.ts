@@ -1,4 +1,4 @@
-import type { Spice, Product, Market } from "./types";
+import type { Spice, Product, ProductCard, Market } from "./types";
 
 // Demo data — the prototype's window.SPICES, typed. Used as the SSG/ISR
 // fallback when the backend is unreachable (acceptance criterion §11: "demo
@@ -72,14 +72,14 @@ export function paletteFor(slug: string, accent?: string): Pick<Spice, "color" |
 // Adapter: live Product -> prototype Spice view model (spec §8 "Adapter note").
 // Picks a representative variant per market for the headline price.
 // ----------------------------------------------------------------------------
-const BADGE_FROM_CERT = (p: Product): string => {
+const BADGE_FROM_CERT = (p: Product | ProductCard): string => {
   if (p._count?.orderItems && p._count.orderItems > 200) return "Bestseller";
   if (p.certifications?.some((c) => /gi|geograph/i.test(c))) return "GI Certified";
   if (p.featured) return "Bestseller";
   return "In Stock";
 };
 
-function headlinePrice(p: Product, market: Market): string {
+function headlinePrice(p: Product | ProductCard, market: Market): string {
   const want = market === "local" ? "LKR" : "USD";
   // Prefer a 100g variant, else the cheapest matching-currency variant. A
   // product with variants in only the OTHER market has none here — fall
@@ -97,17 +97,28 @@ function headlinePrice(p: Product, market: Market): string {
     : "$" + parseFloat(v.price).toFixed(2);
 }
 
-export function toSpice(p: Product): Spice {
+export function toSpice(p: Product | ProductCard): Spice {
   const pal = paletteFor(p.slug, p.color);
   const weights = Array.from(new Set(p.variants.map((v) => v.weight))).sort((a, b) => a - b);
+  const seededPlaceholder = `https://res.cloudinary.com/aranya/image/upload/products/${p.slug}.jpg`;
+  const demoPlaceholders = new Set([
+    'https://res.cloudinary.com/demo/image/upload/cinnamon.jpg',
+    'https://res.cloudinary.com/demo/image/upload/pepper.jpg',
+    'https://res.cloudinary.com/demo/image/upload/tea.jpg',
+  ]);
+  const imageSources = [...(p.images ?? [])]
+    .sort((a, b) => a.position - b.position)
+    .map((image) => image.url)
+    .filter((url) => url !== seededPlaceholder && !demoPlaceholders.has(url));
   return {
     slug: p.slug,
+    ...(imageSources.length ? { imageSrc: imageSources[0], imageSources } : {}),
     name: p.name,
     latin: p.latin || "",
     origin: p.originLabel || p.category?.name || "Sri Lanka",
     ...pal,
     rating: p.ratingAvg || 0,
-    reviews: p._count?.reviews ?? p.reviews?.length ?? 0,
+    reviews: p._count?.reviews ?? ("reviews" in p ? p.reviews?.length : 0) ?? 0,
     badge: BADGE_FROM_CERT(p),
     usd: headlinePrice(p, "intl"),
     lkr: headlinePrice(p, "local"),
@@ -115,6 +126,6 @@ export function toSpice(p: Product): Spice {
     productId: p.id,
     variants: p.variants,
     certifications: p.certifications ?? [],
-    reviewItems: p.reviews ?? [],
+    reviewItems: "reviews" in p ? p.reviews ?? [] : [],
   };
 }

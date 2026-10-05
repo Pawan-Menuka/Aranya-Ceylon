@@ -1,0 +1,18 @@
+import {beforeEach,describe,it,expect,vi} from 'vitest';
+import {catalogFilterSchema} from '@aranya/shared';
+const db=vi.hoisted(()=>({raw:vi.fn(),products:vi.fn(),ratings:vi.fn()}));
+vi.mock('../lib/prisma.js',()=>({prisma:{$queryRaw:db.raw,product:{findMany:db.products},review:{groupBy:db.ratings}}}));
+import {listProductCards,getCategorySummary,getPopularProductCards,lookupProductCards} from './catalog.service.js';
+beforeEach(()=>{vi.resetAllMocks();db.products.mockResolvedValue([{id:'a',name:'A'},{id:'b',name:'B'},{id:'c',name:'C'}]);db.ratings.mockResolvedValue([{productId:'a',_avg:{rating:4.87}}]);});
+describe('public card services',()=>{
+  it('ingredient lookup hydrates only matched unique names and preserves recipe order',async()=>{
+    db.raw.mockResolvedValueOnce([{id:'b',name:'Pepper'},{id:'a',name:'Cinnamon, ground'}]).mockResolvedValueOnce([]);
+    const result=await lookupProductCards(['Cinnamon, ground','Missing','Pepper','Cinnamon, ground'],'LOCAL');
+    expect(result.map(p=>p.id)).toEqual(['a','b']);
+    expect(db.products.mock.calls[0]![0].where.id.in).toEqual(['a','b']);
+  });
+  it('homepage spotlight bounds its ID query and uses the same market-safe card hydration',async()=>{db.products.mockResolvedValueOnce([{id:'b'},{id:'a'}]).mockResolvedValueOnce([{id:'a',name:'A'},{id:'b',name:'B'}]);db.raw.mockResolvedValueOnce([]);const result=await getPopularProductCards('LOCAL',true,4);expect(result.map(p=>p.id)).toEqual(['b','a']);expect(db.products.mock.calls[0]![0]).toMatchObject({take:4,select:{id:true},where:{featured:true,market:{in:['LOCAL','BOTH']}}});expect(db.products.mock.calls[1]![0].where.id.in).toEqual(['b','a']);});
+  it('hydrates only visible plus spotlight IDs, preserving ranked order and an opaque cursor',async()=>{db.raw.mockResolvedValueOnce([{id:'b',key:'10',priority:0,secondary:0},{id:'a',key:'20',priority:0,secondary:0},{id:'unseen',key:'30',priority:0,secondary:0}]).mockResolvedValueOnce([{total:625}]).mockResolvedValueOnce([{category:['Rare'],form:['Whole'],origin:['Hills'],flavour:['Warm']}]).mockResolvedValueOnce([{id:'c',key:'1',priority:1,secondary:0}]).mockResolvedValueOnce([{productId:'a',id:'img',url:'valid',position:1}]);const result=await listProductCards(catalogFilterSchema.parse({view:'cards',sort:'price-asc',limit:2}),'INTERNATIONAL');expect(result.items.map(p=>p.id)).toEqual(['b','a']);expect(result.total).toBe(625);expect(result.hasNextPage).toBe(true);expect(result.nextCursor).toBeTruthy();expect(db.products.mock.calls[0]![0].where.id.in).toEqual(['b','a','c']);expect(result.items[1]!.ratingAvg).toBe(4.9);expect(result.items[1]!.images).toHaveLength(1);expect(result.items[0]!.images).toEqual([]);});
+  it('an empty market returns global controls without hydration or a cursor',async()=>{db.raw.mockResolvedValueOnce([]).mockResolvedValueOnce([{total:0}]).mockResolvedValueOnce([{category:[],form:[],origin:[],flavour:[]}]).mockResolvedValueOnce([]);const result=await listProductCards(catalogFilterSchema.parse({view:'cards'}),'LOCAL');expect(result.items).toEqual([]);expect(result.nextCursor).toBeNull();expect(db.products).not.toHaveBeenCalled();expect(db.ratings).not.toHaveBeenCalled();});
+  it('category counts cover all rows while reused samples are hydrated once',async()=>{db.raw.mockResolvedValueOnce([{name:'Whole',count:620,ids:['a','b','c']},{name:'Rare',count:5,ids:['a']}]).mockResolvedValueOnce([{name:'Warm',count:625,id:'a'}]).mockResolvedValueOnce([]);const result=await getCategorySummary('LOCAL');expect(result.groups.map(g=>g.count)).toEqual([620,5]);expect(result.facets.flavour[0]!.count).toBe(625);expect(db.products).toHaveBeenCalledTimes(1);expect(db.products.mock.calls[0]![0].where.id.in).toEqual(['a','b','c']);});
+});

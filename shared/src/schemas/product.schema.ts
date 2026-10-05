@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+// One bounded recipe ingredient lookup; JSON preserves commas in names.
+export const productNameLookupSchema = z.object({
+    names: z.string().max(8000).transform((value, ctx) => {
+        try { return JSON.parse(value) as unknown; }
+        catch { ctx.addIssue({ code: 'custom', message: 'Invalid ingredient names' }); return z.NEVER; }
+    }).pipe(z.array(z.string().trim().min(1).max(200)).min(1).max(40)),
+});
+
 // A product variant on create. market/currency are optional (default BOTH/LKR
 // preserves prior behaviour) so the admin can author per-market variants.
 const variantShape = z.object({
@@ -67,12 +75,18 @@ export const updateProductSchema = z.object({
     originLabel: z.string().optional().nullable(),
     color: z.string().optional().nullable(),
     flavour: z.array(z.string().max(50)).max(20).optional(),
-    variants: z.array(variantShape.extend({ id: z.string().optional() }).superRefine(refineVariantMarket)).min(1).optional(),
+    variants: z.array(variantShape.extend({
+        id: z.string().optional(),
+        // The stock value the editor loaded for an existing variant. When
+        // present, the API applies `stock − stockBase` as a delta, so units
+        // reserved by orders while the form was open are not overwritten.
+        stockBase: z.number().int().min(0).optional(),
+    }).superRefine(refineVariantMarket)).min(1).optional(),
 });
 
 export const productFilterSchema = z.object({
     cursor: z.string().optional(),
-    limit: z.coerce.number().min(1).max(100).default(12),
+    limit: z.coerce.number().int().min(1).max(100).default(12),
     category: z.string().optional(),
     // z.coerce.boolean() treats ANY non-empty string as true, so ?featured=false
     // returned featured products (BUG-13). Parse the literal tokens instead.
@@ -96,3 +110,28 @@ export const productFilterSchema = z.object({
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
 export type ProductFilterInput = z.infer<typeof productFilterSchema>;
+
+// The compact catalogue is opt-in so detail and older clients retain their
+// original contract. Facet tokens are OR within a facet, AND across facets.
+const facetTokens = z.string().max(2000).optional().transform(value =>
+    [...new Set((value ?? '').split(',').map(token => token.trim()).filter(Boolean))].sort(),
+).refine(tokens => tokens.length <= 40 && tokens.every(token => token.length <= 100), 'Too many or oversized facet tokens');
+
+export const catalogFilterSchema = z.object({
+    view: z.literal('cards'),
+    limit: z.coerce.number().int().min(1).max(40).default(8),
+    cursor: z.string().max(2048).optional(),
+    sort: z.enum(['featured', 'best', 'price-asc', 'price-desc', 'rating', 'new']).default('featured'),
+    categoryName: facetTokens,
+    form: facetTokens,
+    origin: facetTokens,
+    flavour: facetTokens,
+    search: z.string().max(200).optional().transform(value => value?.trim() || undefined),
+});
+export type CatalogFilterInput = z.infer<typeof catalogFilterSchema>;
+
+// New display order for a product's images: every image id exactly once, lead image first.
+export const reorderProductImagesSchema = z.object({
+    imageIds: z.array(z.string().min(1).max(40)).min(1).max(50)
+        .refine((ids) => new Set(ids).size === ids.length, 'Each image can appear only once'),
+});

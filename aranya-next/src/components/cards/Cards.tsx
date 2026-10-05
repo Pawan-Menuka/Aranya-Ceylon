@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
+import { IntentLink as Link } from "../IntentLink";
 import type { Spice, Market } from "@/lib/types";
 import { SpicePhoto } from "../primitives/SpicePhoto";
 import { Stars } from "../primitives/Stars";
@@ -108,7 +108,7 @@ export function CardB({ spice, market = "intl" }: { spice: Spice; market?: Marke
   return (
     <div className="aranya" {...hp} style={{ width: "100%", background: "var(--surface)", borderRadius: 6, overflow: "hidden", boxShadow: h ? "var(--shadow-lg)" : "var(--shadow-sm)", transition: "box-shadow .22s, transform .22s", transform: h ? "translateY(-4px)" : "none" }}>
       <div style={{ position: "relative" }}>
-        <SpicePhoto spice={spice} ratio="4 / 5" label={false} />
+        <SpicePhoto spice={spice} ratio="4 / 5" label={false} sizes="(max-width: 1024px) calc(100vw - 80px), (max-width: 1280px) calc(33vw - 43px), 384px" />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,.18) 0%, transparent 26%, transparent 58%, rgba(0,0,0,.45) 100%)" }} />
         <div style={{ position: "absolute", top: 12, left: 12 }}><Badge kind={spice.badge} solid /></div>
         <div style={{ position: "absolute", top: 12, right: 12 }}><Wish /></div>
@@ -137,7 +137,7 @@ export function CardB({ spice, market = "intl" }: { spice: Spice; market?: Marke
 }
 
 // ============ CARD C-FINAL — brand-compliant: surface + 5px spice stripe ============
-export function CardCFinal({ spice, market = "intl" }: { spice: Spice; market?: Market }) {
+export function CardCFinal({ spice, market = "intl", sizes = "(max-width: 720px) calc(100vw - 120px), (max-width: 1024px) calc(33vw - 80px), (max-width: 1280px) calc(25vw - 76px), 244px" }: { spice: Spice; market?: Market; sizes?: string }) {
   const cart = useCart();
   const [h, hp] = useHover();
   const weights = spiceWeights(spice, market);
@@ -154,7 +154,7 @@ export function CardCFinal({ spice, market = "intl" }: { spice: Spice; market?: 
       <div style={{ position: "relative", padding: "20px 20px 6px" }}>
         <div style={{ position: "absolute", top: 16, right: 16, zIndex: 2 }}><Wish /></div>
         <Link href={pdHref(spice)} style={{ display: "block", borderRadius: 3, overflow: "hidden", boxShadow: "inset 0 0 0 1px rgba(0,0,0,.05)" }}>
-          <SpicePhoto spice={spice} ratio="1 / 1" label={false} />
+          <SpicePhoto spice={spice} ratio="1 / 1" label={false} sizes={sizes} />
         </Link>
         <div style={{ textAlign: "center", height: 22, marginTop: 10 }}>
           <Link href={pdHref(spice)} style={{ fontFamily: "var(--font-ui)", fontSize: 11.5, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--brand)", opacity: h ? 1 : 0, transition: "opacity .2s", display: "inline-flex", alignItems: "center", gap: 6 }}>

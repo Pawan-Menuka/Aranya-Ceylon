@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import { Prisma } from '@prisma/client';
 import type { Market } from '@prisma/client';
 import type { CreateProductInput, UpdateProductInput, ProductFilterInput } from '@aranya/shared';
+import { buildLegacyProductPageQuery } from './catalog-query.js';
 
 // ----------------------------------------------------------------
 // MARKET FILTER HELPER
@@ -106,7 +107,7 @@ function buildProductIncludes(market?: Market): Prisma.ProductInclude {
         category: true,
         variants: {
             ...(market ? { where: variantMarketFilter(market) } : {}),
-            orderBy: { weight: 'asc' },
+            orderBy: [{ weight: 'asc' }, { id: 'asc' }],
         },
         images: { orderBy: { position: 'asc' } },
         _count: { select: { reviews: true, orderItems: true } },
@@ -121,109 +122,17 @@ const adminProductIncludes = buildProductIncludes();
 // ----------------------------------------------------------------
 
 // --- List products with cursor pagination + filters ---
-// Upper bound for the two paths that order in application code (FTS ranking and
-// price sort). Both fetch the ordered set up to this cap and page by offset;
-// the storefront catalogue loads far fewer than this per page, so it only limits
-// how deep those two can paginate — an acceptable ceiling.
-const RANKED_SCAN_LIMIT = 500;
-
-export async function listProducts(
-    filters: ProductFilterInput,
-    market: Market,
-) {
-    const { cursor, limit, category, featured, minPrice, maxPrice, sort, search } = filters;
-
-    // Build dynamic where clause — market filter applied at DB level
-    const where: Prisma.ProductWhereInput = {
-        status: 'ACTIVE',
-        ...marketFilter(market),
-        ...(category && { category: { slug: category } }),
-        ...(featured !== undefined && { featured }),
-        // Price filters scoped to market-relevant variants only.
-        // Both bounds must be in a single `variants` key — two separate spreads would
-        // overwrite each other, dropping minPrice when both are present (object key collision).
-        ...((minPrice !== undefined || maxPrice !== undefined) && {
-            variants: {
-                some: {
-                    price: {
-                        ...(minPrice !== undefined && { gte: minPrice }),
-                        ...(maxPrice !== undefined && { lte: maxPrice }),
-                    },
-                    ...variantMarketFilter(market),
-                },
-            },
-        }),
-    };
-
-    // Full-text search via PostgreSQL tsvector — market filtered in SQL.
-    if (search) {
-        // Rank IDs (bounded), then page by the cursor's OFFSET into the ranked
-        // list. The cursor was previously ignored, so page 2 returned page 1
-        // again (REGRESSION-03); RANKED_SCAN_LIMIT caps how deep search paginates.
-        const ranked = await prisma.$queryRaw<{ id: string }[]>`
-            SELECT id FROM "Product"
-            WHERE status = 'ACTIVE'
-              AND market IN (${market}::"Market", 'BOTH'::"Market")
-              AND "searchVector" @@ plainto_tsquery('english', ${search})
-            ORDER BY ts_rank("searchVector", plainto_tsquery('english', ${search})) DESC
-            LIMIT ${RANKED_SCAN_LIMIT}
-        `;
-        const rankedIds = ranked.map((p) => p.id);
-        const startIdx = cursor ? rankedIds.indexOf(cursor) + 1 : 0; // stale cursor → restart
-        const pageIds = rankedIds.slice(startIdx, startIdx + limit + 1);
-        if (pageIds.length === 0) return [];
-
-        const products = await prisma.product.findMany({
-            where: { id: { in: pageIds } },
-            include: buildProductIncludes(market),
-        });
-        // Preserve the rank order — `id IN (...)` returns rows in arbitrary order,
-        // which discarded the ts_rank ranking entirely (BUG-12).
-        const byId = new Map(products.map((p) => [p.id, p]));
-        const ordered = pageIds.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => !!p);
-        return enrichProductsWithRatingAvg(ordered);
-    }
-
-    // Price sorting can't be expressed as a Prisma orderBy on a to-many relation
-    // (the old code sorted by variant COUNT — BUG-11). We sort in app, but over
-    // the WHOLE matching set (bounded) and page via the cursor's offset — the
-    // previous version sorted only the fetched page, so cross-page ordering was
-    // wrong (REGRESSION-02).
-    if (sort === 'price_asc' || sort === 'price_desc') {
-        const all = await prisma.product.findMany({
-            where,
-            take: RANKED_SCAN_LIMIT,
-            include: buildProductIncludes(market),
-        });
-        const dir = sort === 'price_asc' ? 1 : -1;
-        const wantCurrency = market === 'LOCAL' ? 'LKR' : 'USD';
-        const minPrice = (p: (typeof all)[number]) => {
-            const prices = p.variants
-                .filter((v) => v.currency === wantCurrency || v.market === 'BOTH')
-                .map((v) => Number(v.price));
-            return prices.length ? Math.min(...prices) : Number.POSITIVE_INFINITY;
-        };
-        all.sort((a, b) => dir * (minPrice(a) - minPrice(b)));
-        const startIdx = cursor ? all.findIndex((p) => p.id === cursor) + 1 : 0;
-        const page = all.slice(startIdx, startIdx + limit + 1);
-        return enrichProductsWithRatingAvg(page);
-    }
-
-    // Remaining sorts keep efficient DB-level cursor pagination.
-    const orderBy: Prisma.ProductOrderByWithRelationInput =
-        sort === 'bestselling' ? { orderItems: { _count: 'desc' } } : { createdAt: 'desc' };
-
-    const items = await prisma.product.findMany({
-        where,
-        orderBy,
-        take: limit + 1, // One extra to determine hasNextPage
-        ...(cursor && { cursor: { id: cursor }, skip: 1 }),
+export async function listProducts(filters: ProductFilterInput, market: Market) {
+    const ranked = await prisma.$queryRaw<Array<{ id: string }>>(buildLegacyProductPageQuery(filters, market));
+    if (!ranked.length) return [];
+    const products = await prisma.product.findMany({
+        where: { id: { in: ranked.map(row => row.id) }, status: 'ACTIVE', ...marketFilter(market) },
         include: buildProductIncludes(market),
     });
-
-    return enrichProductsWithRatingAvg(items);
+    const byId = new Map(products.map(product => [product.id, product]));
+    const ordered = ranked.flatMap(row => byId.has(row.id) ? [byId.get(row.id)!] : []);
+    return enrichProductsWithRatingAvg(ordered);
 }
-
 // --- Get single product by slug ---
 export async function getProductBySlug(slug: string, market: Market) {
     const product = await prisma.product.findFirst({
@@ -274,56 +183,16 @@ export async function getBestsellers(market: Market, limit = 8) {
     return enrichProductsWithRatingAvg(products);
 }
 
-// --- Related products (same category, exclude current) ---
-export async function getRelatedProducts(
-    productId: string,
-    categoryId: string,
-    market: Market,
-    limit = 6,
-) {
-    const products = await prisma.product.findMany({
-        where: {
-            categoryId,
-            id: { not: productId },
-            status: 'ACTIVE',
-            ...marketFilter(market),
-        },
-        include: buildProductIncludes(market),
-        take: limit,
-    });
-    return enrichProductsWithRatingAvg(products);
-}
-
-// --- Autocomplete search (pg_trgm fuzzy matching) ---
-export async function searchAutocomplete(
-    query: string,
-    market: Market,
-    limit = 5,
-) {
-    return prisma.$queryRaw<{ id: string; name: string; slug: string }[]>`
-        SELECT id, name, slug
-        FROM "Product"
-        WHERE status = 'ACTIVE'
-          AND market IN (${market}::"Market", 'BOTH'::"Market")
-          AND (
-            name % ${query}
-            OR "searchVector" @@ plainto_tsquery('english', ${query})
-          )
-        ORDER BY similarity(name, ${query}) DESC
-        LIMIT ${limit}
-    `;
-}
-
 // ----------------------------------------------------------------
 // ADMIN FUNCTIONS — no market filter, sees everything
 // ----------------------------------------------------------------
 
 // --- Create product (admin only) ---
-export async function createProduct(data: CreateProductInput) {
+export async function createProduct(data: CreateProductInput, tx: Prisma.TransactionClient = prisma) {
     const { variants, ...productData } = data;
     const color = productData.color || computeProductColor(productData.name, productData.slug);
 
-    const product = await prisma.product.create({
+    const product = await tx.product.create({
         data: {
             ...productData,
             color,
@@ -334,15 +203,23 @@ export async function createProduct(data: CreateProductInput) {
     return enrichProductWithRatingAvg(product);
 }
 
+// Thrown by updateProduct when an admin lowers a variant's stock by more than
+// is still unreserved — orders took units while the editor was open.
+export class StockConflictError extends Error {
+    constructor(public sku: string) {
+        super('STOCK_CHANGED');
+    }
+}
+
 // --- Update product (admin only) ---
 // Updates product fields and, when `variants` is supplied, reconciles them by
 // id within a transaction: rows with an `id` are updated, rows without are
 // created, and existing variants missing from the payload are deleted ONLY if
 // no order/cart item references them (kept otherwise to preserve order history).
-export async function updateProduct(id: string, data: UpdateProductInput) {
+export async function updateProduct(id: string, data: UpdateProductInput, tx?: Prisma.TransactionClient) {
     const { variants, ...fields } = data;
 
-    return prisma.$transaction(async (tx) => {
+    const work = async (tx: Prisma.TransactionClient) => {
         await tx.product.update({
             where: { id },
             data: {
@@ -392,7 +269,23 @@ export async function updateProduct(id: string, data: UpdateProductInput) {
                     currency: v.currency,
                 };
                 if (v.id && existingIds.has(v.id)) {
-                    await tx.variant.update({ where: { id: v.id }, data: fieldsForVariant });
+                    if (v.stockBase === undefined) {
+                        // Caller did not say what stock it started from: absolute write.
+                        await tx.variant.update({ where: { id: v.id }, data: fieldsForVariant });
+                        continue;
+                    }
+                    // Apply the admin's change as a delta against live stock.
+                    // Writing the form's absolute value would erase every unit
+                    // reserved by an order since the editor was opened — any
+                    // product edit, even a description fix, could oversell.
+                    const { stock, ...otherFields } = fieldsForVariant;
+                    const delta = stock - v.stockBase;
+                    const changed = await tx.variant.updateMany({
+                        // A reduction must still fit what is actually left.
+                        where: { id: v.id, ...(delta < 0 && { stock: { gte: -delta } }) },
+                        data: { ...otherFields, ...(delta !== 0 && { stock: { increment: delta } }) },
+                    });
+                    if (changed.count === 0) throw new StockConflictError(v.sku);
                 } else {
                     await tx.variant.create({ data: { productId: id, ...fieldsForVariant } });
                 }
@@ -401,7 +294,8 @@ export async function updateProduct(id: string, data: UpdateProductInput) {
 
         const product = await tx.product.findUniqueOrThrow({ where: { id }, include: adminProductIncludes });
         return enrichProductWithRatingAvg(product);
-    });
+    };
+    return tx ? work(tx) : prisma.$transaction(work);
 }
 
 // --- Soft delete (archive) product (admin only) ---
@@ -409,8 +303,8 @@ export async function updateProduct(id: string, data: UpdateProductInput) {
 // product's Cloudinary images — doing so left broken image URLs behind if the
 // product was later un-archived (BUG-24). Images are only removed on a true
 // hard delete or explicit image removal, never here.
-export async function archiveProduct(id: string) {
-    return prisma.product.update({
+export async function archiveProduct(id: string, tx: Prisma.TransactionClient = prisma) {
+    return tx.product.update({
         where: { id },
         data: { status: 'ARCHIVED' },
     });
@@ -424,4 +318,12 @@ export async function adminListProducts() {
         take: 500, // bound an otherwise unlimited load with variants+images (PERF-07)
     });
     return enrichProductsWithRatingAvg(products);
+}
+
+// Bounded admin page hydration preserves the existing inline editor contract.
+export async function getAdminProductsByIds(ids: string[]) {
+    if (!ids.length) return [];
+    return enrichProductsWithRatingAvg(await prisma.product.findMany({
+        where: { id: { in: ids } }, include: adminProductIncludes,
+    }));
 }

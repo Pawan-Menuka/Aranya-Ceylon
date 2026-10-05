@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { RECIPES } from "@/lib/recipes-data";
+import { useAdminPage } from "./useAdminPage";
+import { AdminPagination } from "./AdminPagination";
+import { RECIPES } from "@/lib/recipes-demo";
 import { AIcon, Pill, FlagRow } from "./AdminPrimitives";
 import {
   listAdminRecipes, getAdminRecipe, createRecipe, updateRecipe, deleteRecipe,
@@ -292,29 +294,30 @@ function RecipeEditor({ recipe, onClose, onSave, onDelete }: {
 export function AdminRecipes() {
   // Demo rows only in demo mode (BUG-20).
   const [rows, setRows] = React.useState<AdminRecipe[]>(() => DEMO_MODE ? staticRows() : []);
-  const [loadState, setLoadState] = React.useState<"loading" | "loaded" | "failed">("loading");
   const [tab, setTab] = React.useState("all");
   const [q, setQ] = React.useState("");
   const [edit, setEdit] = React.useState<Draft | null>(null);
   const [message, setMessage] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    listAdminRecipes().then(({ recipes }) => {
-      setRows(recipes ?? []); setLoadState("loaded"); // live responded — real data authoritative
-    }).catch(() => { setLoadState("failed"); });
-  }, []);
+  const filters = React.useMemo(() => ({ q: q.trim(), status: tab === "all" ? undefined : tab.toUpperCase() }), [q, tab]);
+  const loadPage = React.useCallback(async (cursor: string | undefined, signal: AbortSignal) => {
+    const response = await listAdminRecipes({ ...filters, cursor }, { signal });
+    return { ...response, items: response.recipes };
+  }, [filters]);
+  const page = useAdminPage(JSON.stringify(filters), loadPage, setRows);
+  const loadState = page.loadState;
 
-  const filtered = React.useMemo(() => rows.filter((r) => {
+  const filtered = React.useMemo(() => page.hasLiveData ? rows : DEMO_MODE ? rows.filter((r) => {
     if (tab !== "all" && r.status !== tab) return false;
     if (q && !r.title.toLowerCase().includes(q.toLowerCase())) return false;
     return true;
-  }), [rows, tab, q]);
+  }) : [], [rows, tab, q, page.hasLiveData]);
 
   const counts = React.useMemo(() => ({
-    all: rows.length,
-    PUBLISHED: rows.filter((r) => r.status === "PUBLISHED").length,
-    DRAFT: rows.filter((r) => r.status === "DRAFT").length,
-  }), [rows]);
+    all: page.hasLiveData || !DEMO_MODE ? (page.counts.all ?? 0) : rows.length,
+    PUBLISHED: page.hasLiveData || !DEMO_MODE ? (page.counts.PUBLISHED ?? 0) : rows.filter((r) => r.status === "PUBLISHED").length,
+    DRAFT: page.hasLiveData || !DEMO_MODE ? (page.counts.DRAFT ?? 0) : rows.filter((r) => r.status === "DRAFT").length,
+  }), [rows, page.hasLiveData, page.counts]);
 
   const openRecipe = async (recipe: AdminRecipe) => {
     setMessage(null);
@@ -361,6 +364,7 @@ export function AdminRecipes() {
         setRows((prev) => [recipe, ...prev.filter((r) => !r.id.startsWith("demo-"))]);
       }
       setEdit(null);
+      page.refresh(!id);
     } catch {
       setMessage("The recipe could not be saved. No local success state was applied.");
     }
@@ -402,11 +406,12 @@ export function AdminRecipes() {
         </div>
         <div className="ad-search" style={{ marginLeft: "auto", width: 240 }}>
           <AIcon name="search" size={15} stroke="var(--ad-faint)" />
-          <input placeholder="Search recipes…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input maxLength={200} placeholder="Search recipes…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
       </div>
 
       <RecipeTable rows={filtered} onOpen={(r) => { void openRecipe(r); }} />
+      <AdminPagination page={page} size={filtered.length} label="recipes" />
       {edit && (
         <RecipeEditor
           recipe={edit}

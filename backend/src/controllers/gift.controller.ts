@@ -40,17 +40,3 @@ export async function listGifts(req: Request, res: Response) {
 
     res.json({ gifts: await attachBackingProducts(gifts) });
 }
-
-export async function getGiftBySlug(req: Request, res: Response) {
-    const gift = await prisma.giftSet.findFirst({
-        where: { slug: req.params.slug, status: BlogStatus.PUBLISHED },
-    });
-
-    if (!gift) {
-        res.status(404).json({ error: 'Gift set not found' });
-        return;
-    }
-
-    const [enriched] = await attachBackingProducts([gift]);
-    res.json({ gift: enriched });
-}

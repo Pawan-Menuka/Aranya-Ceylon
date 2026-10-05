@@ -80,6 +80,16 @@ const store = vi.hoisted(() => {
                 Object.assign(row, data);
                 return row;
             },
+            updateMany: async ({ where, data }: { where: { slug: string }; data: Partial<ProductRow> }) => {
+                const rows = s.products.filter((p) => p.slug === where.slug);
+                rows.forEach((row) => Object.assign(row, data));
+                return { count: rows.length };
+            },
+            findUniqueOrThrow: async ({ where }: ById) => {
+                const row = s.products.find((p) => p.id === where.id);
+                if (!row) throw new Error('NOT_FOUND');
+                return { ...row, variants: s.variants.filter((v) => v.productId === row.id) };
+            },
         },
         variant: {
             update: async ({ where, data }: VariantUpdate) => {
@@ -117,7 +127,9 @@ vi.mock('../../lib/prisma.js', () => ({
 vi.mock('../../services/audit.service.js', () => ({ writeAuditLog: vi.fn(async () => {}) }));
 vi.mock('../../lib/revalidate.js', () => ({ revalidateFrontend: vi.fn(async () => {}) }));
 
-import { createGift, updateGift } from './gift.admin.controller.js';
+import { createGift, updateGift, deleteGift } from './gift.admin.controller.js';
+import { revalidateFrontend } from '../../lib/revalidate.js';
+import { writeAuditLog } from '../../services/audit.service.js';
 
 const resDouble = responseDouble;
 
@@ -158,6 +170,7 @@ describe('createGift — #3 backing product', () => {
         // 4 contents x 50g jar
         expect(lkr.weight).toBe(200);
         expect(usd.weight).toBe(200);
+        expect(revalidateFrontend).toHaveBeenCalledWith(['/gifts', '/search', '/categories']);
     });
 
     it('reuses an existing "Gift Sets" category instead of creating a duplicate', async () => {
@@ -180,6 +193,7 @@ describe('updateGift — #2 price sync', () => {
         const variants = store.s.variants.filter((v) => v.productId === product.id);
         expect(variants.find((v) => v.currency === 'USD')!.price).toBe(32);
         expect(variants.find((v) => v.currency === 'LKR')!.price).toBe(4800);
+        expect(revalidateFrontend).toHaveBeenLastCalledWith(['/gifts', '/search', '/categories']);
     });
 
     it('recomputes the backing weight when contents changes, even if price does not', async () => {
@@ -220,4 +234,62 @@ describe('updateGift — #2 price sync', () => {
         expect(res.statusCode).toBe(200); // does not throw / fail the request
         expect(store.s.products).toHaveLength(0);
     });
+
+    it('keeps the backing product name in step with a renamed gift set', async () => {
+        await createGift(requestDouble({ body: baseBody }), resDouble());
+        const giftId = store.s.giftSets[0]!.id;
+        await updateGift(requestDouble({ params: { id: giftId }, body: { name: 'The Ceylon Classic II' } }), resDouble());
+        expect(store.s.products[0]!.name).toBe('The Ceylon Classic II');
+    });
+});
+
+// Final audit #30: deleting a gift set left its DRAFT backing product behind —
+// still purchasable by id, and its slug blocked re-creating the gift set.
+describe('deleteGift — backing product', () => {
+    it('archives the backing product instead of leaving it on sale', async () => {
+        await createGift(requestDouble({ body: baseBody }), resDouble());
+        await deleteGift(requestDouble({ params: { id: store.s.giftSets[0]!.id } }), resDouble());
+
+        expect(store.s.giftSets).toHaveLength(0);
+        expect(store.s.products).toHaveLength(1);        // kept: orders may reference it
+        expect(store.s.products[0]!.status).toBe('ARCHIVED');
+    });
+
+    it('lets the same slug be created again, reviving the backing product', async () => {
+        await createGift(requestDouble({ body: baseBody }), resDouble());
+        await deleteGift(requestDouble({ params: { id: store.s.giftSets[0]!.id } }), resDouble());
+
+        const res = resDouble();
+        await createGift(requestDouble({ body: { ...baseBody, name: 'The Classic, returned', usd: 33 } }), res);
+
+        expect(res.statusCode).toBe(201);
+        expect(store.s.products).toHaveLength(1);         // revived, not duplicated
+        expect(store.s.products[0]!.status).toBe('DRAFT');
+        expect(store.s.products[0]!.name).toBe('The Classic, returned');
+        expect(store.s.variants.find((v) => v.currency === 'USD')!.price).toBe(33);
+    });
+});
+
+it('invalidates the published gift listing and search when deleting or unpublishing a gift', async () => {
+    await createGift(requestDouble({ body: baseBody }), resDouble());
+    const id = store.s.giftSets[0]!.id;
+    await updateGift(requestDouble({ params: { id }, body: { status: 'DRAFT' } }), resDouble());
+    expect(revalidateFrontend).toHaveBeenLastCalledWith(['/gifts', '/search', '/categories']);
+    await deleteGift(requestDouble({ params: { id } }), resDouble());
+    expect(revalidateFrontend).toHaveBeenLastCalledWith(['/gifts', '/search']);
+});
+
+it.each(['create', 'update', 'delete'])('invalidates committed gift %s changes despite audit failure, preserving the audit error', async operation => {
+    await createGift(requestDouble({ body: baseBody }), resDouble());
+    const id = store.s.giftSets[0]!.id;
+    vi.mocked(revalidateFrontend).mockClear();
+    const failure = new Error('audit unavailable');
+    vi.mocked(writeAuditLog).mockRejectedValueOnce(failure);
+    const work = operation === 'create'
+        ? createGift(requestDouble({ body: { ...baseBody, slug: 'new-gift' } }), resDouble())
+        : operation === 'update' ? updateGift(requestDouble({ params: { id }, body: { status: 'DRAFT' } }), resDouble())
+        : deleteGift(requestDouble({ params: { id } }), resDouble());
+    await expect(work).rejects.toBe(failure);
+    expect(revalidateFrontend).toHaveBeenCalledTimes(1);
+    expect(revalidateFrontend).toHaveBeenCalledWith(expect.arrayContaining(['/gifts', '/search']));
 });

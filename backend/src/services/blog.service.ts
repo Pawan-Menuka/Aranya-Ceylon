@@ -5,7 +5,7 @@ export async function listPublishedBlogs(limit = 10, cursor?: string) {
     try {
         return await prisma.blog.findMany({
             where: { status: 'PUBLISHED' },
-            orderBy: { publishedAt: 'desc' },
+            orderBy: [{ publishedAt: 'desc' }, { id: 'asc' }],
             take: limit + 1,
             ...(cursor && { cursor: { id: cursor }, skip: 1 }),
             select: {
@@ -40,16 +40,4 @@ export async function getBlogBySlug(slug: string) {
     }
 
     return blog;
-}
-
-export async function getRecentBlogs(limit = 3) {
-    return prisma.blog.findMany({
-        where: { status: 'PUBLISHED' },
-        orderBy: { publishedAt: 'desc' },
-        take: limit,
-        select: {
-            id: true, title: true, slug: true,
-            tags: true, publishedAt: true, seoDesc: true,
-        },
-    });
 }

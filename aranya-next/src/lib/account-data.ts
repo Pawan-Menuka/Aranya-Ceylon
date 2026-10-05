@@ -1,12 +1,14 @@
 import type { Market, Spice, Order } from "./types";
 import { paletteFor } from "./spice-data";
 import { formatOrderNumber } from "./order-number";
+import { DEMO_ACCOUNT_USER } from "./demo-user";
 
 // Account / order-tracking data (ported from account-data.js), typed. The demo
 // dataset powers the signed-in dashboard offline and as a fallback; live orders
 // arrive from GET /orders when authed (toAccountOrder maps them onto this shape).
 
 interface BaseSpice {
+  slug: string;
   name: string;
   latin: string;
   color: string;
@@ -19,19 +21,20 @@ interface BaseSpice {
 
 // small palette pulled from the catalogue (key → colour + base price)
 export const ACCOUNT_SPICES: Record<string, BaseSpice> = {
-  cinnamon: { name: "Ceylon Cinnamon Quills", latin: "Cinnamomum verum", color: "#B5651D", base: "#C2772E", deep: "#7E481A", surface: "#F3E7D4", usd: 14.5, lkr: 2150 },
-  cardamom: { name: "Green Cardamom Pods", latin: "Elettaria cardamomum", color: "#7C9A5A", base: "#93AE6A", deep: "#566F37", surface: "#EAEFDD", usd: 18.0, lkr: 2680 },
-  cloves: { name: "Whole Cloves", latin: "Syzygium aromaticum", color: "#6B4226", base: "#7A4A2A", deep: "#462914", surface: "#EBDDCD", usd: 11.25, lkr: 1670 },
-  turmeric: { name: "Ground Turmeric", latin: "Curcuma longa", color: "#D99A1C", base: "#E2A62B", deep: "#A8740F", surface: "#F6E9C9", usd: 8.5, lkr: 1260 },
-  pepper: { name: "Black Peppercorns", latin: "Piper nigrum", color: "#3C3A36", base: "#54504A", deep: "#26241F", surface: "#E6E2DA", usd: 9.9, lkr: 1470 },
-  nutmeg: { name: "Whole Nutmeg", latin: "Myristica fragrans", color: "#A9683C", base: "#B57441", deep: "#7A451F", surface: "#F0E2D2", usd: 16.75, lkr: 2490 },
-  curry: { name: "Ceylon Curry Powder", latin: "Roasted estate blend", color: "#9A5B22", base: "#AC6C2D", deep: "#6E3F16", surface: "#EFE2CE", usd: 13.75, lkr: 2040 },
+  cinnamon: { slug: "ceylon-cinnamon-quills", name: "Ceylon Cinnamon Quills", latin: "Cinnamomum verum", color: "#B5651D", base: "#C2772E", deep: "#7E481A", surface: "#F3E7D4", usd: 14.5, lkr: 2150 },
+  cardamom: { slug: "green-cardamom-pods", name: "Green Cardamom Pods", latin: "Elettaria cardamomum", color: "#7C9A5A", base: "#93AE6A", deep: "#566F37", surface: "#EAEFDD", usd: 18.0, lkr: 2680 },
+  cloves: { slug: "whole-cloves", name: "Whole Cloves", latin: "Syzygium aromaticum", color: "#6B4226", base: "#7A4A2A", deep: "#462914", surface: "#EBDDCD", usd: 11.25, lkr: 1670 },
+  turmeric: { slug: "ground-turmeric", name: "Ground Turmeric", latin: "Curcuma longa", color: "#D99A1C", base: "#E2A62B", deep: "#A8740F", surface: "#F6E9C9", usd: 8.5, lkr: 1260 },
+  pepper: { slug: "black-peppercorns", name: "Black Peppercorns", latin: "Piper nigrum", color: "#3C3A36", base: "#54504A", deep: "#26241F", surface: "#E6E2DA", usd: 9.9, lkr: 1470 },
+  nutmeg: { slug: "whole-nutmeg", name: "Whole Nutmeg", latin: "Myristica fragrans", color: "#A9683C", base: "#B57441", deep: "#7A451F", surface: "#F0E2D2", usd: 16.75, lkr: 2490 },
+  curry: { slug: "ceylon-curry-powder", name: "Ceylon Curry Powder", latin: "Roasted estate blend", color: "#9A5B22", base: "#AC6C2D", deep: "#6E3F16", surface: "#EFE2CE", usd: 13.75, lkr: 2040 },
 };
 
 const MULT: Record<string, number> = { "50g": 0.6, "100g": 1, "250g": 2.3 };
 
 export interface OrderLineItem {
   key: string;
+  slug?: string;
   name: string;
   latin: string;
   weight: string;
@@ -49,13 +52,13 @@ export interface OrderLineItem {
 function L(key: string, weight: string, form: string, qty: number): OrderLineItem {
   const s = ACCOUNT_SPICES[key];
   return {
-    key, name: s.name, latin: s.latin, weight, form, qty,
+    key, slug: s.slug, name: s.name, latin: s.latin, weight, form, qty,
     color: s.color, base: s.base, deep: s.deep, surface: s.surface,
     usd: s.usd * (MULT[weight] || 1), lkr: s.lkr * (MULT[weight] || 1),
   };
 }
 
-export interface OrderEvent { step: string; at: string; loc: string }
+interface OrderEvent { step: string; at: string; loc: string }
 export interface AccountAddress {
   id: string;
   label: string;
@@ -87,7 +90,7 @@ export interface AccountOrder {
   total?: number;
   currency?: "USD" | "LKR";
 }
-export interface AccountUser {
+interface AccountUser {
   first: string;
   name: string;
   initials: string;
@@ -105,7 +108,7 @@ export interface AccountData {
 }
 
 // canonical fulfilment steps (the tracking spine)
-export const AC_STEPS = [
+const AC_STEPS = [
   { key: "placed", label: "Order placed", note: "We received your order and payment." },
   { key: "packed", label: "Packed & sealed", note: "Fresh-milled and sealed at peak aroma within 24h." },
   { key: "shipped", label: "Dispatched", note: "Handed to the carrier from our Kandy facility." },
@@ -116,7 +119,7 @@ export const AC_STEPS = [
 const STATUS_INDEX: Record<string, number> = { processing: 1, in_transit: 3, out_for_delivery: 4, delivered: 5 };
 
 export const ACCOUNT: AccountData = {
-  user: { first: "Amara", name: "Amara Wijesinghe", initials: "AW", email: "amara.w@example.com", since: "March 2024", tier: "Harvest Club · Gold", points: 1840, pointsTo: 2000 },
+  user: DEMO_ACCOUNT_USER,
   addresses: [
     { id: "a1", label: "Home", market: "intl", name: "Amara Wijesinghe", lines: ["48 Marine Drive, Apt 9B", "Brooklyn, NY 11209"], country: "United States", phone: "+1 (917) 555 0142", isDefault: true },
     { id: "a2", label: "Office", market: "intl", name: "Amara Wijesinghe", lines: ["120 Hudson Street, Floor 5"], cityzip: "New York, NY 10013", country: "United States", phone: "+1 (212) 555 0190", isDefault: false },
@@ -208,11 +211,11 @@ export function acBuildTimeline(order: AccountOrder, statusOverride?: string): T
 }
 
 // Build a Spice (card view-model) from a wishlist/reorder key.
-export function spiceForKey(key: string): Spice | null {
+function spiceForKey(key: string): Spice | null {
   const s = ACCOUNT_SPICES[key];
   if (!s) return null;
   return {
-    slug: key,
+    slug: s.slug,
     name: s.name, latin: s.latin, origin: "Sri Lanka",
     color: s.color, base: s.base, deep: s.deep, surface: s.surface,
     rating: 4.8, reviews: 120, badge: "In Stock",
@@ -289,6 +292,7 @@ export function toAccountOrder(order: Order): AccountOrder {
       : undefined;
     return {
       key: `${order.id}-${idx}`,
+      slug,
       name: it.product?.name ?? "Spice",
       latin: "",
       weight: weightStr,

@@ -108,6 +108,12 @@ model User {
   verified           Boolean   @default(false)
   twoFactorEnabled   Boolean   @default(false)
   twoFactorSecret    String?   // Encrypted TOTP secret
+  // SHA-256 of each unused one-time recovery code (shown to the user once, at enrolment).
+  twoFactorRecoveryCodes String[] @default([])
+  // Time step of the last accepted TOTP code, so a code cannot be replayed within its window.
+  twoFactorLastStep  Int?
+  // Set by a SUPERADMIN; blocks sign-in and session renewal.
+  suspendedAt        DateTime?
   phone              String?
   newsletterOptIn    Boolean   @default(true)
   createdAt          DateTime  @default(now())
@@ -167,7 +173,6 @@ model Product {
   wishlistItems  WishlistItem[]
   cartItems      CartItem[]
 
-  @@index([slug])
   @@index([featured])
   // GIN index for FTS — added in raw migration (Step 2.6)
 }
@@ -205,6 +210,7 @@ model Variant {
 
   orderItems OrderItem[]
   cartItems  CartItem[]
+  @@index([stock, id])
 }
 
 // ============================================================
@@ -239,6 +245,7 @@ model Order {
   @@index([status])
   @@index([createdAt])
   @@index([couponId]) // FK — coupon usage joins would otherwise scan (PERF-02)
+  @@index([status, createdAt, id])
 }
 
 model OrderItem {
@@ -308,6 +315,8 @@ model Cart {
   abandonedEmailSentAt DateTime?
 
   items       CartItem[]
+  @@index([userId, expiresAt, id])
+  @@index([abandonedEmailSentAt, updatedAt, id])
 }
 
 model CartItem {
@@ -335,6 +344,10 @@ model Coupon {
   code           String       @unique
   discountType   DiscountType
   discountValue  Decimal      @db.Decimal(10, 2)
+  // Store the coupon is valid in. A FIXED_AMOUNT value is money, so it MUST
+  // name its currency — "500" is Rs 500 locally but $500 abroad. null means
+  // "any store" and is only honoured for PERCENTAGE coupons.
+  currency       Currency?
   usageLimit     Int?         // null = unlimited
   usageCount     Int          @default(0)
   expiresAt      DateTime?
@@ -384,6 +397,7 @@ model Token {
 
   // No @@index([tokenHash]) — @unique already creates an index used by lookups.
   @@index([userId, type])
+  @@index([expiresAt, id])
 }
 
 model AuditLog {
@@ -455,6 +469,7 @@ model Blog {
   updatedAt   DateTime   @updatedAt
 
   @@index([status, publishedAt])
+  @@index([status, scheduledAt, id])
 }
 
 model Recipe {
@@ -529,4 +544,80 @@ model Newsletter {
   source            String?  // e.g. 'homepage', 'checkout'
   createdAt         DateTime @default(now())
   // No @@index([email]) — @unique already creates an index used by lookups.
+}
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  DELIVERED
+  DEAD
+}
+
+// Encrypted frozen delivery payloads. No recipient/token/message in metadata.
+model OutboxMessage {
+  id               String       @id
+  kind             String
+  version          Int          @default(1)
+  dedupeKey        String       @unique
+  encryptedPayload String
+  status           OutboxStatus @default(PENDING)
+  attempts         Int          @default(0)
+  availableAt      DateTime     @default(dbgenerated("(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')"))
+  expiresAt        DateTime?
+  firstAttemptAt   DateTime?
+  leaseToken       String?
+  leaseExpiresAt   DateTime?
+  providerReceipt  String?
+  lastErrorCode    String?
+  createdAt        DateTime     @default(dbgenerated("(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')"))
+  deliveredAt      DateTime?
+
+  @@index([status, availableAt])
+  @@index([status, leaseExpiresAt])
+}
+
+// Database-clock ownership; fencing prevents an expired owner committing later.
+model JobLease {
+  name      String   @id
+  owner     String
+  fence     BigInt   @default(1)
+  expiresAt DateTime
+}
+
+// Rebuildable UTC-day aggregates. Dirty revisions advance in the same database
+// transaction as relevant order/item changes; readers require complete clean days.
+model DashboardRollupDay {
+  day           DateTime  @id @db.Date
+  revision      BigInt    @default(1)
+  builtRevision BigInt    @default(0)
+  builtAt       DateTime?
+}
+
+model DashboardDailyOrder {
+  day      DateTime    @db.Date
+  market   Market
+  currency Currency
+  status   OrderStatus
+  orders   Int
+  total    Decimal     @db.Decimal(38, 2)
+
+  @@id([day, market, currency, status])
+}
+
+model DashboardDailyProduct {
+  day       DateTime    @db.Date
+  productId String
+  market    Market
+  currency  Currency
+  status    OrderStatus
+  units     BigInt
+  revenue   Decimal     @db.Decimal(38, 2)
+
+  @@id([day, productId, market, currency, status])
+}
+
+model JobCheckpoint {
+  name String @id
+  cycle String
+  cursor String?
+  updatedAt DateTime @updatedAt
 }

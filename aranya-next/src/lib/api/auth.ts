@@ -1,4 +1,4 @@
-import { apiFetch, setAccessToken } from "./http";
+import { apiFetch, refreshSession, setAccessToken } from "./http";
 
 // Spec §6 — /auth. The refresh token is an HttpOnly cookie (handled by the BFF);
 // the access token comes back in the body and is held in memory only (never
@@ -58,24 +58,26 @@ export async function resetPassword(token: string, password: string): Promise<{ 
   return apiFetch("/auth/reset-password", { method: "POST", body: { token, password } });
 }
 
-export async function refresh(): Promise<boolean> {
-  try {
-    const data = await apiFetch<{ accessToken: string }>("/auth/refresh", { method: "POST" });
-    if (data.accessToken) {
-      setAccessToken(data.accessToken);
-      return true;
-    }
-  } catch {
-    /* no valid refresh cookie */
-  }
-  return false;
+// The API sets this readable marker alongside the HttpOnly refresh cookie and
+// clears them together. Without it this browser has no session to restore, so
+// the boot-time refresh is skipped: anonymous page loads no longer spend a
+// rate-limited POST /auth/refresh just to learn they are signed out.
+const SESSION_HINT_COOKIE = /(?:^|;\s*)aranya_session=/;
+function hasSessionHint(): boolean {
+  return typeof document !== "undefined" && SESSION_HINT_COOKIE.test(document.cookie);
 }
 
-export async function me(): Promise<AuthUser | null> {
+export async function refresh(): Promise<boolean> {
+  if (!hasSessionHint()) return false;
+  return refreshSession();
+}
+
+export async function me(options: { signal?: AbortSignal } = {}): Promise<AuthUser | null> {
   try {
-    const data = await apiFetch<{ user: AuthUser }>("/auth/me", { auth: true });
+    const data = await apiFetch<{ user: AuthUser }>("/auth/me", { auth: true, ...options });
     return data.user;
-  } catch {
+  } catch (error) {
+    if ((error as { status?: number }).status !== 401) throw error;
     return null;
   }
 }

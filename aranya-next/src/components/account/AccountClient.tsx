@@ -4,12 +4,13 @@ import * as React from "react";
 import { useAuth } from "../AuthContext";
 import { SignedOutGate } from "./SignedOutGate";
 import { AccountDashboard } from "./AccountDashboard";
+import { SessionRetry } from "../SessionRetry";
 
 // Switches between the gate and the dashboard based on the auth session. While
 // the silent-refresh probe runs on mount we hold a quiet placeholder so the
 // signed-in dashboard doesn't flash the gate on reload.
 export function AccountClient() {
-  const { user, loading } = useAuth();
+  const { user, loading, sessionError } = useAuth();
 
   if (loading) {
     return (
@@ -21,5 +22,6 @@ export function AccountClient() {
     );
   }
 
+  if (sessionError) return <SessionRetry />;
   return user ? <AccountDashboard /> : <SignedOutGate />;
 }

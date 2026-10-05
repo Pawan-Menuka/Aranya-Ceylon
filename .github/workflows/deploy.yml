@@ -5,9 +5,15 @@ on:
     branches: [main]
 
 jobs:
+  # Production is only touched after the full CI workflow (types, lint, unit
+  # and PostgreSQL integration tests, builds, browser checkout test) passes on
+  # this exact commit.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   deploy:
+    needs: ci
     runs-on: ubuntu-latest
-    needs: []
 
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}

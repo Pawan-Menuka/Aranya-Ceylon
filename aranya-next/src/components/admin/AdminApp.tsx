@@ -2,11 +2,12 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { AuthProvider, useAuth } from "../AuthContext";
+import { useAuth } from "../AuthContext";
 import { AdminShell } from "./AdminShell";
 import { AdminGate } from "./AdminGate";
 import { ADMIN } from "@/lib/admin-data";
 import { DEMO_MODE } from "@/lib/demo";
+import { SessionRetry } from "../SessionRetry";
 import { getDashboard, type DashboardData } from "@/lib/api/admin";
 
 // Only one of these seven sections is ever visible at a time (the hash
@@ -26,9 +27,9 @@ const AdminGifts = dynamic(() => import("./AdminGifts").then((m) => m.AdminGifts
 const AdminAudit = dynamic(() => import("./AdminAudit").then((m) => m.AdminAudit));
 
 // Aranya Ceylon — ADMIN app: role gate + hash router (ported from Admin.html).
-// Standalone full-screen shell (no storefront navbar/footer). Wrapped in its own
-// AuthProvider so it can detect a real ADMIN/SUPERADMIN session; offline it falls
-// back to a local demo session granted by the sign-in gate.
+// Standalone full-screen shell (no storefront navbar/footer). Reuses the root
+// session; offline it falls back to a local demo session granted by the gate.
+
 
 const VALID_ROUTES = ["dashboard", "orders", "products", "blog", "recipes", "gifts", "audit"];
 
@@ -45,7 +46,7 @@ function BootSplash() {
 }
 
 function AdminConsole() {
-  const { user, loading, signIn, signOut, demo } = useAuth();
+  const { user, loading, signIn, signOut, demo, sessionError } = useAuth();
 
   // local demo-admin session — set by the gate when there is no real admin
   // (offline / the storefront demo signs in as CUSTOMER, not ADMIN).
@@ -107,9 +108,13 @@ function AdminConsole() {
         setGateError("Your account doesn't have console access. Contact a SUPERADMIN.");
       }
       // If real ADMIN/SUPERADMIN: isRealAdmin will be true on the next render → authed
-    } catch {
-      // Bad credentials
-      setGateError("Invalid email or password.");
+    } catch (error) {
+      // Only a 401 means bad credentials. Rate limiting, an unverified email or
+      // a server error used to be reported as a wrong password too.
+      const status = (error as { status?: number })?.status;
+      setGateError(status === 401
+        ? "Invalid email or password."
+        : (error as Error)?.message || "Sign-in failed. Please try again.");
     }
   }, [signIn, signOut]);
 
@@ -120,6 +125,7 @@ function AdminConsole() {
   }, [signOut]);
 
   if (loading) return <BootSplash />;
+  if (sessionError) return <SessionRetry />;
   if (!authed) return <AdminGate onEnter={onEnter} error={gateError} />;
 
   const go = (r: string) => setRoute(r);
@@ -144,9 +150,5 @@ function AdminConsole() {
 }
 
 export function AdminApp() {
-  return (
-    <AuthProvider>
-      <AdminConsole />
-    </AuthProvider>
-  );
+  return <AdminConsole />;
 }

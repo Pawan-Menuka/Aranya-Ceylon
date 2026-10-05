@@ -1,8 +1,26 @@
-import { apiFetch, getAccessToken } from "./http";
+import { apiFetch, getAccessToken, type RequestOptions } from "./http";
+import { withRequestDeadline } from "./request-deadline";
 import type { Order, Product } from "../types";
 
 // Admin endpoints (ADMIN / SUPERADMIN role-gated). Mutations return their
 // canonical backend records; callers only apply success state after awaiting.
+
+export interface AdminListQuery {
+  q?: string; status?: string; category?: string; lowStock?: boolean;
+  filter?: string; event?: string; targetType?: string; actorId?: string;
+  cursor?: string; limit?: number;
+}
+export interface AdminPageMeta {
+  total: number; counts: Record<string, number>; nextCursor: string | null; hasNextPage: boolean;
+}
+export type AdminReadOptions = Pick<RequestOptions, "signal" | "timeoutMs">;
+function adminListQuery(params: AdminListQuery = {}): string {
+  const qs = new URLSearchParams({ view: "page", limit: String(params.limit ?? 20) });
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "" && value !== "all") qs.set(key, String(value));
+  }
+  return `?${qs.toString()}`;
+}
 
 // ---- dashboard ----
 export interface DashboardData {
@@ -47,7 +65,7 @@ export interface AdminOrderPatch {
   trackingNumber?: string;
 }
 
-export function listAdminOrders(params?: { status?: string; market?: string; q?: string; cursor?: string; limit?: number }): Promise<{ items: Order[]; nextCursor: string | null; total: number; counts: Record<string, number> }> {
+export function listAdminOrders(params?: { status?: string; market?: string; q?: string; cursor?: string; limit?: number }, options: AdminReadOptions = {}): Promise<{ items: Order[]; nextCursor: string | null; total: number; counts: Record<string, number> }> {
   const qs = new URLSearchParams();
   if (params?.status && params.status !== "all") qs.set("status", params.status);
   if (params?.market && params.market !== "all") qs.set("market", params.market);
@@ -55,7 +73,7 @@ export function listAdminOrders(params?: { status?: string; market?: string; q?:
   if (params?.cursor) qs.set("cursor", params.cursor);
   if (params?.limit) qs.set("limit", String(params.limit));
   const s = qs.toString();
-  return apiFetch(`/admin/orders${s ? `?${s}` : ""}`, { auth: true });
+  return apiFetch(`/admin/orders${s ? `?${s}` : ""}`, { auth: true, ...options });
 }
 
 export function updateOrderStatus(id: string, patch: AdminOrderPatch): Promise<{ order: Order }> {
@@ -84,11 +102,13 @@ export interface AdminProductInput {
     currency: string;
     market: string;
     stock?: number;
+    // Stock as loaded into the editor; the API then applies stock − stockBase.
+    stockBase?: number;
   }>;
 }
 
-export function listAdminProducts(): Promise<{ products: Product[] }> {
-  return apiFetch(`/admin/products`, { auth: true });
+export function listAdminProducts(params: AdminListQuery = {}, options: AdminReadOptions = {}): Promise<{ products: Product[] } & AdminPageMeta> {
+  return apiFetch(`/admin/products${adminListQuery(params)}`, { auth: true, ...options });
 }
 
 export function createAdminProduct(input: AdminProductInput): Promise<{ product: Product }> {
@@ -133,8 +153,8 @@ export interface AdminBlogInput {
   seoDesc?: string;
 }
 
-export function listAdminBlogs(): Promise<{ blogs: AdminBlogPost[] }> {
-  return apiFetch(`/admin/blogs`, { auth: true });
+export function listAdminBlogs(params: AdminListQuery = {}, options: AdminReadOptions = {}): Promise<{ blogs: AdminBlogPost[] } & AdminPageMeta> {
+  return apiFetch(`/admin/blogs${adminListQuery(params)}`, { auth: true, ...options });
 }
 
 export function getAdminBlog(id: string): Promise<{ blog: AdminBlogPost }> {
@@ -197,8 +217,8 @@ export interface AdminRecipeInput {
   status?: "DRAFT" | "PUBLISHED";
 }
 
-export function listAdminRecipes(): Promise<{ recipes: AdminRecipe[] }> {
-  return apiFetch(`/admin/recipes`, { auth: true });
+export function listAdminRecipes(params: AdminListQuery = {}, options: AdminReadOptions = {}): Promise<{ recipes: AdminRecipe[] } & AdminPageMeta> {
+  return apiFetch(`/admin/recipes${adminListQuery(params)}`, { auth: true, ...options });
 }
 
 export function getAdminRecipe(id: string): Promise<{ recipe: AdminRecipe }> {
@@ -257,8 +277,8 @@ export interface AdminGiftInput {
   status?: "DRAFT" | "PUBLISHED";
 }
 
-export function listAdminGifts(): Promise<{ gifts: AdminGiftSet[] }> {
-  return apiFetch(`/admin/gifts`, { auth: true });
+export function listAdminGifts(params: AdminListQuery = {}, options: AdminReadOptions = {}): Promise<{ gifts: AdminGiftSet[] } & AdminPageMeta> {
+  return apiFetch(`/admin/gifts${adminListQuery(params)}`, { auth: true, ...options });
 }
 
 export function getAdminOrder(id: string): Promise<{ order: Order }> {
@@ -296,18 +316,11 @@ export interface AuditEntry {
   actor?: { name: string; email: string; role: string } | null;
 }
 
-export async function listAuditLogs(params?: { limit?: number; cursor?: string }): Promise<{ logs: AuditEntry[]; nextCursor: string | null }> {
-  const qs = new URLSearchParams();
-  if (params?.limit) qs.set("limit", String(params.limit));
-  if (params?.cursor) qs.set("cursor", params.cursor);
-  const s = qs.toString();
-  // Backend returns { items, nextCursor }; the audit page consumes { logs }.
-  // Map here so the live audit trail renders instead of staying on demo data (BUG-14).
-  const res = await apiFetch<{ items: AuditEntry[]; nextCursor: string | null }>(
-    `/admin/audit-logs${s ? `?${s}` : ""}`,
-    { auth: true },
+export async function listAuditLogs(params: AdminListQuery = {}, options: AdminReadOptions = {}): Promise<{ logs: AuditEntry[] } & AdminPageMeta> {
+  const res = await apiFetch<{ items: AuditEntry[] } & AdminPageMeta>(
+    `/admin/audit-logs${adminListQuery(params)}`, { auth: true, ...options },
   );
-  return { logs: res.items ?? [], nextCursor: res.nextCursor ?? null };
+  return { ...res, logs: res.items };
 }
 
 // ---- categories ----
@@ -318,8 +331,8 @@ export interface Category {
   _count?: { products: number };
 }
 
-export function listCategories(): Promise<{ categories: Category[] }> {
-  return apiFetch(`/categories`, { auth: true });
+export function listCategories(options: AdminReadOptions = {}): Promise<{ categories: Category[] }> {
+  return apiFetch(`/categories`, { auth: true, ...options });
 }
 
 // ---- image upload (multipart — bypasses apiFetch's JSON body handling) ----
@@ -330,15 +343,18 @@ export async function uploadProductImage(
   const formData = new FormData();
   formData.append("images", file);
   const token = getAccessToken();
-  const res = await fetch(
-    `/api/products/${encodeURIComponent(productId)}/images`,
-    {
-      method: "POST",
-      body: formData,
-      credentials: "include",
-      headers: token ? { authorization: `Bearer ${token}` } : undefined,
-    },
-  );
-  if (!res.ok) throw new Error(`Image upload failed (${res.status})`);
-  return res.json();
+  return withRequestDeadline(120000, undefined, async (signal) => {
+    const res = await fetch(
+      `/api/products/${encodeURIComponent(productId)}/images`,
+      {
+        method: "POST",
+        signal,
+        body: formData,
+        credentials: "include",
+        headers: token ? { authorization: `Bearer ${token}` } : undefined,
+      },
+    );
+    if (!res.ok) throw new Error(`Image upload failed (${res.status})`);
+    return res.json();
+  });
 }
